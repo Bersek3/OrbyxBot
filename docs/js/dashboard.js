@@ -1500,16 +1500,16 @@ let isMqttConnected = false;
 function isStreamerLoggedIn() {
   const session = getUserSession();
   const twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '');
-  const kickChannel = (appConfig?.kick?.channel || '').toLowerCase().replace(/^#/, '');
+  const kickChannel = (appConfig?.kick?.channel || appConfig?.kick?.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').replace(/^#/, '');
   const hasTwitch = (appConfig?.twitch?.connected || Boolean(localStorage.getItem('orbibot_twitch_auth'))) && Boolean(twitchChannel);
-  const hasKick = (appConfig?.kick?.connected || Boolean(localStorage.getItem('orbibot_kick_auth'))) && Boolean(kickChannel);
+  const hasKick = (appConfig?.kick?.connected !== false || Boolean(localStorage.getItem('orbibot_kick_auth'))) && Boolean(kickChannel);
   const hasUserSession = Boolean(session && session.email);
   return hasTwitch || hasKick || hasUserSession;
 }
 
 function getActiveStreamerRoom() {
   const twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
-  const kickChannel = (appConfig?.kick?.channel || '').toLowerCase().replace(/^#/, '').trim();
+  const kickChannel = (appConfig?.kick?.channel || appConfig?.kick?.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
   const session = getUserSession();
   if (twitchChannel) return twitchChannel;
   if (kickChannel) return kickChannel;
@@ -2523,7 +2523,7 @@ function connectInBrowserKickBot(kickData) {
       }
     } catch (e) { }
 
-    const targetRoom = chatroomId || channel;
+    const targetRoom = chatroomId || kickData?.userId || channel;
     try {
       browserKickWs = new WebSocket(pusherUrl);
       browserKickWs.onopen = () => {
@@ -2531,8 +2531,13 @@ function connectInBrowserKickBot(kickData) {
           event: 'pusher:subscribe',
           data: { auth: '', channel: `chatrooms.${targetRoom}.v2` }
         }));
-        console.log(`🟢 [Dashboard] Conectado al chat de Kick @${channel}`);
+        browserKickWs.send(JSON.stringify({
+          event: 'pusher:subscribe',
+          data: { auth: '', channel: `channel.${targetRoom}` }
+        }));
+        console.log(`🟢 [Dashboard] Conectado al chat y eventos de Kick @${channel} (Room: ${targetRoom})`);
       };
+
       browserKickWs.onmessage = (ev) => {
         try {
           const pkt = JSON.parse(ev.data);
@@ -2540,19 +2545,223 @@ function connectInBrowserKickBot(kickData) {
             const msgData = typeof pkt.data === 'string' ? JSON.parse(pkt.data) : pkt.data;
             const sender = msgData.sender || {};
             const badges = sender.identity?.badges || [];
+            const username = sender.username || sender.slug || 'KickUser';
+            const color = sender.identity?.color || '#53fc18';
+            const message = msgData.content || '';
+
+            const isBroadcaster = badges.some(b => b.type === 'broadcaster') || (username.toLowerCase() === channel.toLowerCase());
+            const isMod = badges.some(b => b.type === 'moderator') || isBroadcaster;
+            const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'sub_gifter');
+            const isModOrBroadcaster = isMod || isBroadcaster;
+
             const chatData = {
               id: msgData.id || `kick-${Date.now()}`,
               platform: 'kick',
-              user: sender.username || sender.slug || 'KickUser',
-              color: sender.identity?.color || '#53fc18',
-              message: msgData.content || '',
-              isMod: badges.some(b => b.type === 'moderator' || b.type === 'broadcaster'),
-              isSub: badges.some(b => b.type === 'subscriber'),
+              user: username,
+              color,
+              message,
+              isMod,
+              isSub,
               badges,
-              emotes: null
+              emotes: null,
+              channel
             };
+
             appendChatMessage(chatData);
             broadcastEvent('chat_message', chatData);
+
+            const trimmed = message.trim();
+            const firstWord = trimmed.split(' ')[0].toLowerCase();
+            const currentCfg = JSON.parse(localStorage.getItem('orbibot_config') || '{}');
+
+            // 1. PROCESAMIENTO DE SONG REQUEST EN KICK
+            const srCfg = currentCfg.songRequest || appConfig?.songRequest || {};
+            const srPrefix = (srCfg.prefix || '!sr').toLowerCase();
+            if (srCfg.enabled !== false) {
+              if (firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
+                if (isModOrBroadcaster) {
+                  fetch('/api/sr/pause', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel, by: username })
+                  }).catch(() => {});
+                  if (typeof togglePausePlaySongRequest === 'function') {
+                    const state = currentSrState || getLocalSrState();
+                    if (state.isPlaying !== false) togglePausePlaySongRequest();
+                  }
+                }
+                return;
+              }
+
+              if (firstWord === '!srplay' || firstWord === '!srresume' || firstWord === '!srreanudar' || firstWord === '!reanudar' || firstWord === '!resume') {
+                if (isModOrBroadcaster) {
+                  fetch('/api/sr/resume', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel, by: username })
+                  }).catch(() => {});
+                  if (typeof togglePausePlaySongRequest === 'function') {
+                    const state = currentSrState || getLocalSrState();
+                    if (state.isPlaying === false) togglePausePlaySongRequest();
+                  }
+                }
+                return;
+              }
+
+              if (firstWord === '!skip' || firstWord === '!saltar') {
+                if (isModOrBroadcaster && typeof skipCurrentSong === 'function') {
+                  skipCurrentSong();
+                }
+                return;
+              }
+
+              if (trimmed.toLowerCase().startsWith(srPrefix)) {
+                const q = trimmed.slice(srPrefix.length).trim();
+                if (q) {
+                  fetch('/api/sr/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ query: q, requester: username, isMod: isModOrBroadcaster, isSub, channel })
+                  }).then(r => {
+                    if (!r.ok && typeof handleClientSongRequest === 'function') {
+                      handleClientSongRequest(q, username, false);
+                    }
+                  }).catch(() => {
+                    if (typeof handleClientSongRequest === 'function') {
+                      handleClientSongRequest(q, username, false);
+                    }
+                  });
+                  return;
+                }
+              }
+            }
+
+            // 2. PROCESAMIENTO DE TTS EN KICK
+            const ttsConfig = currentCfg.tts || appConfig?.tts || {};
+            if (ttsConfig.enabled !== false && ttsConfig.allowChatCommand !== false) {
+              const ttsCmd = (ttsConfig.chatCommand || '!tts').toLowerCase();
+              const commands = (typeof cachedTTSCommands !== 'undefined' && cachedTTSCommands.length) ? cachedTTSCommands : (appConfig?.ttsCommands || []);
+              const matchedVoiceCmd = commands.find(c => c.enabled !== false && c.command && c.command.toLowerCase() === firstWord);
+
+              if (firstWord === '!ttsdetener' || firstWord === '!ttsstop' || firstWord === '!ttspause') {
+                if (isModOrBroadcaster) {
+                  broadcastEvent('tts_control', { action: 'stop', channel });
+                  return;
+                }
+              }
+              if (firstWord === '!ttsreiniciar' || firstWord === '!ttsreset' || firstWord === '!ttsclear') {
+                if (isModOrBroadcaster) {
+                  broadcastEvent('tts_control', { action: 'reset', channel });
+                  return;
+                }
+              }
+              if (firstWord === '!ttsskip' || firstWord === '!ttssaltar') {
+                if (isModOrBroadcaster) {
+                  broadcastEvent('tts_control', { action: 'skip', channel });
+                  return;
+                }
+              }
+
+              if (trimmed.toLowerCase().startsWith(ttsCmd)) {
+                let ttsRaw = trimmed.slice(ttsCmd.length).trim();
+                if (ttsRaw) {
+                  let selectedVoice = ttsConfig.voice || 'es_mx_mia';
+                  const firstToken = ttsRaw.split(/\s+/)[0].toLowerCase().replace(/^[-@/]/, '').replace(/^voice:/, '');
+                  const aliasMap = {
+                    messi: 'es_ar_messi', maduro: 'es_ve_maduro', tiktok: 'es_tiktok', homero: 'es_mx_homero',
+                    dross: 'es_dross', badbunny: 'es_badbunny', rubius: 'es_rubius', farid: 'es_farid',
+                    westcol: 'es_westcol', cr7: 'es_cr7', goku: 'es_goku', maradona: 'es_maradona',
+                    xokas: 'es_xokas', illojuan: 'es_illojuan', auron: 'es_auronplay', peruano: 'es_peruano',
+                    closs: 'es_marianocloss', lacobra: 'es_lacobra', davo: 'es_davo', mia: 'es_mx_mia',
+                    miguel: 'es_us_miguel', brian: 'en_brian'
+                  };
+                  if (aliasMap[firstToken] || (typeof SE_VOICE_MAP !== 'undefined' && SE_VOICE_MAP[firstToken])) {
+                    selectedVoice = aliasMap[firstToken] || firstToken;
+                    ttsRaw = ttsRaw.slice(ttsRaw.indexOf(' ') + 1).trim();
+                  }
+                  if (ttsRaw) {
+                    const ttsAudioUrl = getTTSAudioUrl(ttsRaw, selectedVoice);
+                    const ttsData = {
+                      id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                      user: username,
+                      text: ttsRaw,
+                      voice: selectedVoice,
+                      volume: Number(ttsConfig.volume !== undefined ? ttsConfig.volume : 90) / 100,
+                      rate: Number(ttsConfig.rate || 1.0),
+                      pitch: Number(ttsConfig.pitch || 1.0),
+                      audioUrl: ttsAudioUrl,
+                      channel,
+                      platform: 'kick',
+                      timestamp: Date.now()
+                    };
+                    broadcastEvent('tts', ttsData);
+                    return;
+                  }
+                }
+              } else if (matchedVoiceCmd) {
+                const userBadges = { isMod, isSub, vip: badges.some(b => b.type === 'vip'), broadcaster: isBroadcaster };
+                const allowed = !matchedVoiceCmd.permissions || matchedVoiceCmd.permissions.includes('todos') ||
+                  (userBadges.broadcaster && matchedVoiceCmd.permissions.includes('broadcaster')) ||
+                  (userBadges.isMod && matchedVoiceCmd.permissions.includes('mod')) ||
+                  (userBadges.isSub && matchedVoiceCmd.permissions.includes('sub')) ||
+                  (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
+
+                if (allowed) {
+                  const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
+                  if (voiceText) {
+                    const selectedVoice = matchedVoiceCmd.voiceId || ttsConfig.voice || 'es_mx_mia';
+                    const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
+                    const ttsData = {
+                      id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                      user: username,
+                      text: voiceText,
+                      voice: selectedVoice,
+                      volume: Number(matchedVoiceCmd.volume !== undefined ? matchedVoiceCmd.volume : (ttsConfig.volume || 90)) / 100,
+                      rate: Number(matchedVoiceCmd.rate || ttsConfig.rate || 1.0),
+                      pitch: Number(matchedVoiceCmd.pitch || ttsConfig.pitch || 1.0),
+                      audioUrl: ttsAudioUrl,
+                      channel,
+                      platform: 'kick',
+                      timestamp: Date.now()
+                    };
+                    broadcastEvent('tts', ttsData);
+                    return;
+                  }
+                }
+              }
+            }
+          } else if (pkt.event === 'App\\Events\\SubscriptionEvent' || pkt.event === 'SubscriptionEvent') {
+            const subData = typeof pkt.data === 'string' ? JSON.parse(pkt.data) : pkt.data;
+            const user = subData.username || subData.user?.username || 'KickUser';
+            const months = subData.months || 1;
+            broadcastEvent('alert', {
+              type: 'kick_sub',
+              platform: 'kick',
+              user,
+              months,
+              message: `¡Nueva suscripción en Kick (${months} meses)!`
+            });
+          } else if (pkt.event === 'App\\Events\\GiftedSubscriptionsEvent' || pkt.event === 'GiftedSubscriptionsEvent') {
+            const giftData = typeof pkt.data === 'string' ? JSON.parse(pkt.data) : pkt.data;
+            const gifter = giftData.gifter_username || giftData.username || 'KickUser';
+            const count = Array.isArray(giftData.gifted_usernames) ? giftData.gifted_usernames.length : (giftData.count || 1);
+            broadcastEvent('alert', {
+              type: 'kick_gift',
+              platform: 'kick',
+              user: gifter,
+              amount: count,
+              isGift: true,
+              message: `¡${gifter} regaló ${count} suscripción(es) en Kick! 🎁`
+            });
+          } else if (pkt.event === 'App\\Events\\FollowersUpdated' || pkt.event === 'FollowersUpdated' || pkt.event === 'FollowEvent') {
+            const folData = typeof pkt.data === 'string' ? JSON.parse(pkt.data) : pkt.data;
+            const user = folData.username || folData.user?.username || 'Nuevo Seguidor';
+            broadcastEvent('alert', {
+              type: 'kick_follower',
+              platform: 'kick',
+              user,
+              message: '¡Nuevo seguidor en Kick!'
+            });
           }
         } catch (e) { }
       };

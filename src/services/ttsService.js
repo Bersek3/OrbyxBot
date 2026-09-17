@@ -22,6 +22,24 @@ class TTSService {
     }
   }
 
+  normalizeChannelKey(channelOrUser = 'default') {
+    const raw = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() || 'default';
+    if (raw === 'default') {
+      return storage.getStreamerId() || 'default';
+    }
+    try {
+      const config = storage.getConfig();
+      const twitchChan = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+      const kickChan = (config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+      const streamerId = (storage.getStreamerId() || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+
+      if ((twitchChan && raw === twitchChan) || (kickChan && raw === kickChan) || (streamerId && raw === streamerId)) {
+        return streamerId || twitchChan || kickChan || 'default';
+      }
+    } catch(e) {}
+    return raw;
+  }
+
   sanitizeText(text, config) {
     if (!text || typeof text !== 'string') return '';
     let cleaned = text.trim();
@@ -333,7 +351,7 @@ class TTSService {
       ? `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(cleanText)}&tl=es-ES&client=tw-ob`
       : primaryAudioUrl;
 
-    const cleanChannel = channel ? channel.toLowerCase().replace(/^#/, '').trim() : null;
+    const cleanChannel = this.normalizeChannelKey(channel);
     const ttsItem = {
       id: 'tts-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
       channel: cleanChannel,

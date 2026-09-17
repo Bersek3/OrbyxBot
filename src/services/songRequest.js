@@ -6,8 +6,26 @@ class SongRequestService {
     this.eventListeners = [];
   }
 
+  normalizeChannelKey(channelOrUser = 'default') {
+    const raw = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() || 'default';
+    if (raw === 'default') {
+      return storage.getStreamerId() || 'default';
+    }
+    try {
+      const config = storage.getConfig();
+      const twitchChan = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+      const kickChan = (config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+      const streamerId = (storage.getStreamerId() || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+
+      if ((twitchChan && raw === twitchChan) || (kickChan && raw === kickChan) || (streamerId && raw === streamerId)) {
+        return streamerId || twitchChan || kickChan || 'default';
+      }
+    } catch(e) {}
+    return raw;
+  }
+
   getSession(channelOrUser = 'default') {
-    const key = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').trim() || 'default';
+    const key = this.normalizeChannelKey(channelOrUser);
     if (!this.sessions.has(key)) {
       this.sessions.set(key, {
         queue: [],
@@ -25,7 +43,7 @@ class SongRequestService {
   }
 
   emitUpdate(action, data, channelOrUser = 'default') {
-    const key = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').trim() || 'default';
+    const key = this.normalizeChannelKey(channelOrUser);
     const state = this.getState(key);
     for (const listener of this.eventListeners) {
       try {
@@ -37,9 +55,10 @@ class SongRequestService {
   }
 
   getState(channelOrUser = 'default') {
-    const session = this.getSession(channelOrUser);
+    const key = this.normalizeChannelKey(channelOrUser);
+    const session = this.getSession(key);
     return {
-      channel: (channelOrUser || 'default').toLowerCase().replace(/^#/, '').trim() || 'default',
+      channel: key,
       currentSong: session.currentSong,
       queue: session.queue,
       history: session.history.slice(-10),

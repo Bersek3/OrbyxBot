@@ -497,30 +497,33 @@
       }
     } catch(e) {}
 
+    const urlParams = new URLSearchParams(window.location.search);
+    const channel = (urlParams.get('channel') || urlParams.get('kick') || urlParams.get('streamer') || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+    const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
+    const myStreamerKey = channel || '';
+    const myToken = token || '';
+    const linkedChannels = new Set([myStreamerKey]);
+
     fetch('/api/config')
       .then(r => r.json())
       .then(cfg => {
         if (cfg?.tts && cfg.tts.enabled !== undefined) {
           ttsEnabled = cfg.tts.enabled !== false;
         }
+        if (cfg?.twitch?.channel) linkedChannels.add(cfg.twitch.channel.toLowerCase().replace(/^#/, ''));
+        if (cfg?.kick?.channel || cfg?.kick?.username) linkedChannels.add((cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, ''));
       })
       .catch(() => {});
-
-    const urlParams = new URLSearchParams(window.location.search);
-    const channel = (urlParams.get('channel') || '').toLowerCase().replace(/^#/, '');
-    const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
-    const myStreamerKey = channel || '';
-    const myToken = token || '';
 
     function handleIncomingMessage(msg) {
       if (!msg) return;
 
       // Room / Channel Verification: descartar TTS de otros canales
       if (myStreamerKey || myToken) {
-        const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').trim();
+        const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
         const targetToken = (msg.token || msg.data?.token || '').trim();
         if (myStreamerKey) {
-          if (targetRoom && targetRoom !== 'default' && targetRoom !== myStreamerKey && targetRoom !== myToken) {
+          if (targetRoom && targetRoom !== 'default' && targetRoom !== myStreamerKey && targetRoom !== myToken && !linkedChannels.has(targetRoom)) {
             return;
           }
           if (targetRoom === 'default' && myStreamerKey !== 'default') {

@@ -215,17 +215,26 @@
 
     const myStreamerKey = channel || '';
     const myToken = token || '';
+    const linkedChannels = new Set([myStreamerKey]);
+
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(cfg => {
+        if (cfg?.twitch?.channel) linkedChannels.add(cfg.twitch.channel.toLowerCase().replace(/^#/, ''));
+        if (cfg?.kick?.channel || cfg?.kick?.username) linkedChannels.add((cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, ''));
+      })
+      .catch(() => {});
 
     function handleIncomingMessage(msg) {
       if (!msg) return;
 
       // Validación estricta de aislamiento: descartar eventos de otros streamers
       if (myStreamerKey || myToken) {
-        const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').trim();
+        const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
         const targetToken = (msg.token || msg.data?.token || '').trim();
 
         if (myStreamerKey) {
-          if (targetRoom && targetRoom !== 'default' && targetRoom !== myStreamerKey && targetRoom !== myToken) {
+          if (targetRoom && targetRoom !== 'default' && targetRoom !== myStreamerKey && targetRoom !== myToken && !linkedChannels.has(targetRoom)) {
             return;
           }
           if (targetRoom === 'default' && myStreamerKey !== 'default') {

@@ -198,19 +198,28 @@ wss.on('connection', (ws, req) => {
 });
 
 function broadcast(event, data, targetRoom) {
-  const cleanTarget = targetRoom ? targetRoom.toLowerCase().replace(/^#/, '').trim() : null;
+  const cleanTarget = targetRoom ? targetRoom.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() : null;
   const token = data?.token || null;
+  const config = storage.getConfig();
+  const twitchChan = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+  const kickChan = (config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+  const streamerId = (storage.getStreamerId() || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+
   const payload = JSON.stringify({ event, data, room: cleanTarget || 'default', token, timestamp: Date.now() });
   for (const client of clients) {
     if (client.readyState === 1) { // OPEN
       if (cleanTarget && cleanTarget !== 'default') {
         // Broadcast con destinatario específico: SOLO enviar a clientes asignados a ese streamer / sala / token
-        const clientRoom = client.room ? client.room.toLowerCase().replace(/^#/, '').trim() : '';
+        const clientRoom = client.room ? client.room.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() : '';
         const clientToken = client.token ? client.token.trim() : '';
         const matchRoom = clientRoom && (clientRoom === cleanTarget || (token && clientRoom === token));
         const matchToken = token && clientToken && clientToken === token;
+        const streamerMatch = (
+          (cleanTarget === twitchChan || cleanTarget === kickChan || cleanTarget === streamerId) &&
+          (clientRoom === twitchChan || clientRoom === kickChan || clientRoom === streamerId)
+        );
 
-        if (matchRoom || matchToken) {
+        if (matchRoom || matchToken || streamerMatch) {
           client.send(payload);
         }
       } else {
