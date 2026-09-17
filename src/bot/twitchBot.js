@@ -488,7 +488,7 @@ class TwitchBot {
             if (voiceText) {
               ttsService.processRequest({
                 user: username,
-                text: `${matchedVoiceCmd.command} ${voiceText}`,
+                text: voiceText,
                 source: 'chat',
                 voiceOverride: matchedVoiceCmd.voiceId,
                 channel: channel ? channel.toLowerCase().replace(/^#/, '') : null,

@@ -475,13 +475,20 @@
         return true;
       }
 
-      const contentKey = 'content_' + user + '_' + text;
-      if (user && text && recentTtsMap.has(contentKey)) {
+      // Normalizar texto eliminando cualquier comando inicial (!messi, !homero, etc.) y signos para detectar duplicados
+      const normalizedText = text
+        .replace(/^[!/][a-zA-Z0-9_-]+\s+/, '')
+        .replace(/[^\p{L}\p{N}\s]/gu, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      const contentKey = 'content_' + user + '_' + (normalizedText || text);
+      if (user && (normalizedText || text) && recentTtsMap.has(contentKey)) {
         return true;
       }
 
       if (rawId) recentTtsMap.set('id_' + rawId, now);
-      if (user && text) recentTtsMap.set(contentKey, now);
+      if (user && (normalizedText || text)) recentTtsMap.set(contentKey, now);
 
       return false;
     }

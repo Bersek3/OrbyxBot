@@ -1694,6 +1694,10 @@ function connectWebSocket() {
       socket.onopen = () => {
         console.log('Connected to OrbyxBot Server WebSocket (Room: ' + room + ')');
         socket.send(JSON.stringify({ action: 'join', room, channel: room, token }));
+        if (browserKickWs) {
+          try { browserKickWs.close(); } catch (e) { }
+          browserKickWs = null;
+        }
       };
 
       socket.onmessage = (event) => {
@@ -2506,9 +2510,17 @@ function connectInBrowserKickBot(kickData) {
   const channel = (kickData?.channel || kickData?.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').trim();
   if (!channel) return;
 
+  const isGitHubPages = location.hostname.endsWith('github.io');
+  const isBackendRunning = !isGitHubPages && socket && socket.readyState === 1;
+
   if (browserKickWs) {
     try { browserKickWs.close(); } catch (e) { }
     browserKickWs = null;
+  }
+
+  // Si el backend de Node está activo, el servidor ya maneja Kick con kickBot.js para evitar doble ejecución
+  if (isBackendRunning) {
+    return;
   }
 
   const pusherUrl = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false';
@@ -2539,6 +2551,11 @@ function connectInBrowserKickBot(kickData) {
       };
 
       browserKickWs.onmessage = (ev) => {
+        if (socket && socket.readyState === 1) {
+          try { browserKickWs.close(); } catch(e) {}
+          browserKickWs = null;
+          return;
+        }
         try {
           const pkt = JSON.parse(ev.data);
           if (pkt.event === 'App\\Events\\ChatMessageEvent' || pkt.event === 'ChatMessageEvent') {

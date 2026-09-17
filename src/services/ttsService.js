@@ -308,6 +308,22 @@ class TTSService {
       return { success: false, reason: 'Texto vacío o inválido' };
     }
 
+    // Strip leading voice command token if present (e.g. "!messi Hola" -> "Hola")
+    const commands = storage.getTtsCommands() || [];
+    const firstWord = rawText.split(/\s+/)[0].toLowerCase();
+    const matchedLeadingCmd = commands.find(c => c.command && (c.command.toLowerCase() === firstWord || c.command.toLowerCase() === `!${firstWord}`));
+    if (matchedLeadingCmd) {
+      if (!voiceOverride) {
+        voiceOverride = matchedLeadingCmd.voiceId;
+      }
+      const spaceIdx = rawText.indexOf(' ');
+      rawText = spaceIdx !== -1 ? rawText.slice(spaceIdx + 1).trim() : '';
+    }
+
+    if (!rawText) {
+      return { success: false, reason: 'Texto vacío después de procesar comando' };
+    }
+
     let selectedVoice = voiceOverride ? this.normalizeVoice(voiceOverride) : (this.normalizeVoice(config.voice) || 'es_mx_mia');
 
     // 1. Detección y procesamiento Multi-Voz en chat (solo si no se especificó un voiceOverride directo)
@@ -319,7 +335,10 @@ class TTSService {
       }
     }
 
-    const cleanText = this.sanitizeText(rawText, config);
+    const cleanText = (multiSegments.length > 0)
+      ? multiSegments.map(s => this.sanitizeText(s.text, config)).filter(Boolean).join(' ')
+      : this.sanitizeText(rawText, config);
+
     if (!cleanText || cleanText.length < 2) {
       return { success: false, reason: 'Texto vacío o inválido tras sanitización' };
     }
