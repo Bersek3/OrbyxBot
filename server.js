@@ -271,6 +271,10 @@ app.get('/api/status', (req, res) => {
       status: twitchBot.status,
       message: twitchBot.statusMessage
     },
+    kickBot: {
+      status: kickBot.status,
+      message: kickBot.statusMessage
+    },
     songRequest: songRequest.getState(channel),
     config: storage.getConfig(),
     activeClients: clients.size,
@@ -305,7 +309,7 @@ app.get('/api/config', (req, res) => {
 app.post('/api/config', (req, res) => {
   const updated = storage.saveConfig(req.body);
   if (req.body.kick) {
-    if (req.body.kick.connected && req.body.kick.channel) {
+    if (req.body.kick.connected !== false && (req.body.kick.channel || req.body.kick.username)) {
       kickBot.connect().catch(e => console.warn('KickBot connect warning:', e.message));
     } else if (req.body.kick.connected === false) {
       kickBot.disconnect();
@@ -323,7 +327,7 @@ app.post('/api/config/widget-token/regenerate', (req, res) => {
   res.json({ success: true, widgetToken: newToken, config: cfg });
 });
 
-// Bot Control
+// Bot Control (Twitch)
 app.post('/api/bot/connect', async (req, res) => {
   const result = await twitchBot.connect();
   res.json(result);
@@ -333,6 +337,21 @@ app.post('/api/bot/disconnect', async (req, res) => {
   const result = await twitchBot.disconnect();
   storage.saveConfig({
     twitch: { connected: false }
+  });
+  broadcast('config_updated', storage.getConfig());
+  res.json(result);
+});
+
+// Bot Control (Kick)
+app.post('/api/bot/kick/connect', async (req, res) => {
+  const result = await kickBot.connect();
+  res.json(result);
+});
+
+app.post('/api/bot/kick/disconnect', async (req, res) => {
+  const result = kickBot.disconnect();
+  storage.saveConfig({
+    kick: { connected: false }
   });
   broadcast('config_updated', storage.getConfig());
   res.json(result);

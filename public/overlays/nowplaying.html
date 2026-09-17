@@ -193,7 +193,7 @@
     }
 
     const urlParams = new URLSearchParams(window.location.search);
-    const channel = (urlParams.get('channel') || '').toLowerCase().replace(/^#/, '');
+    const channel = (urlParams.get('channel') || urlParams.get('kick') || urlParams.get('streamer') || '').toLowerCase().replace(/^#/, '').replace(/^@/, '');
     const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
     const songStorageKey = channel ? ('orbibot_current_song_' + channel) : 'orbibot_current_song';
 

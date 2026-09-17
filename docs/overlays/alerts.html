@@ -159,8 +159,13 @@
     }
 
     function showAlert(alertData) {
-      const type = alertData.type || 'follower';
-      const cfg = (alertsConfig && alertsConfig[type]) ? alertsConfig[type] : {};
+      let type = alertData.type || 'follower';
+      if (alertData.platform === 'kick' && alertsConfig[`kick_${type}`] && alertsConfig[`kick_${type}`].enabled !== false) {
+        type = `kick_${type}`;
+      } else if (type === 'kicks' && alertsConfig.bits && !alertsConfig.kicks) {
+        type = 'bits';
+      }
+      const cfg = (alertsConfig && alertsConfig[type]) ? alertsConfig[type] : (alertsConfig[alertData.type] || {});
 
       if (cfg.enabled === false) {
         isShowingAlert = false;

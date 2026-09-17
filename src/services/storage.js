@@ -596,8 +596,10 @@ class StorageService {
     if (this._streamerId) return this._streamerId;
     try {
       const cfg = readJSON('config.json', DEFAULT_CONFIG);
-      const channel = (cfg.twitch && cfg.twitch.channel) ? cfg.twitch.channel.toLowerCase().replace(/^#/, '').trim() : '';
-      return channel || 'default';
+      const twitchChan = (cfg.twitch && cfg.twitch.channel) ? cfg.twitch.channel.toLowerCase().replace(/^#/, '').trim() : '';
+      if (twitchChan) return twitchChan;
+      const kickChan = (cfg.kick && (cfg.kick.channel || cfg.kick.username)) ? (cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, '').trim() : '';
+      return kickChan || 'default';
     } catch (e) {
       return 'default';
     }

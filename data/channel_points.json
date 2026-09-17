@@ -1,11 +1,12 @@
 [
   {
-    "id": "reward_messi_test",
-    "rewardId": "uuid-messi-123",
-    "rewardName": "Saludo de Messi",
+    "id": "reward-1789441511698",
+    "rewardId": "3c3fbdab-bf7d-45ff-9c99-5126d46b5f89",
+    "rewardName": "SONIDO CAMPANA",
     "action": "tts",
-    "voiceId": "es_ar_messi",
-    "customMessage": "¡{user} ha canjeado un saludo! Qué mirás bobo, andá pa allá.",
+    "voiceId": "es_cr7",
+    "customMessage": "TOME AGUA SEÑORA.",
+    "soundUrl": null,
     "enabled": true
   }
 ]
