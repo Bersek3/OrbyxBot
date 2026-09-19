@@ -18,8 +18,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupAutoSaveListeners();
   populateWidgetUrls();
   await checkAdminStatus();
-  const savedSupportStreamer = sessionStorage.getItem('orbibot_support_streamer_id');
-  const savedSupportName = sessionStorage.getItem('orbibot_support_streamer_name');
+  const savedSupportStreamer = getSupportModeId();
+  const savedSupportName = getSupportModeName();
   if (savedSupportStreamer && isUserSuperAdmin) {
     await enterStreamerSupportMode(savedSupportStreamer, savedSupportName || savedSupportStreamer);
   } else {
@@ -95,6 +95,45 @@ function getFreshDefaultConfig() {
     goals: []
   };
 }
+
+// ================= SUPPORT MODE STORAGE HELPERS =================
+// Usa TANTO sessionStorage (tab-level) COMO localStorage (backup persistente)
+// para que el modo soporte sobreviva F5, sessionStorage.clear(), etc.
+function getSupportModeId() {
+  try {
+    return sessionStorage.getItem('orbibot_support_streamer_id') ||
+           localStorage.getItem('orbibot_support_mode_id') || null;
+  } catch(e) { return null; }
+}
+function getSupportModeName() {
+  try {
+    return sessionStorage.getItem('orbibot_support_streamer_name') ||
+           localStorage.getItem('orbibot_support_mode_name') || null;
+  } catch(e) { return null; }
+}
+function saveSupportModeToStorage(streamerId, displayName) {
+  try {
+    sessionStorage.setItem('orbibot_support_streamer_id', streamerId);
+    sessionStorage.setItem('orbibot_support_streamer_name', displayName || streamerId);
+    localStorage.setItem('orbibot_support_mode_id', streamerId);
+    localStorage.setItem('orbibot_support_mode_name', displayName || streamerId);
+  } catch(e) {}
+}
+function clearSupportModeStorage() {
+  try {
+    sessionStorage.removeItem('orbibot_support_streamer_id');
+    sessionStorage.removeItem('orbibot_support_streamer_name');
+    localStorage.removeItem('orbibot_support_mode_id');
+    localStorage.removeItem('orbibot_support_mode_name');
+  } catch(e) {}
+}
+// Entra en modo soporte y recarga la página para un inicio limpio
+function enterSupportModeAndReload(streamerId, displayName) {
+  if (!streamerId) return;
+  saveSupportModeToStorage(streamerId, displayName || streamerId);
+  window.location.reload();
+}
+window.enterSupportModeAndReload = enterSupportModeAndReload;
 
 function clearAllUserLocalData() {
   // 1. Desconectar bots e instancias activas
@@ -244,7 +283,7 @@ async function saveToAllSupabaseScopes(key, value) {
 }
 
 async function loadUserDataFromSupabase(userIdentifier) {
-  if (adminTargetStreamerId || sessionStorage.getItem('orbibot_support_streamer_id')) {
+  if (adminTargetStreamerId || getSupportModeId()) {
     console.log(`🛡️ [loadUserDataFromSupabase] Modo Asistencia activo. Omitiendo sobreescritura.`);
     return;
   }
@@ -552,10 +591,16 @@ function initSupabaseAuth() {
           setUserSession(userObj);
           closeAuthModal();
 
-          // Si el modo soporte está activo o hay una sesión de asistencia guardada en sessionStorage, NO sobreescribir con la cuenta del admin
-          if (adminTargetStreamerId || sessionStorage.getItem('orbibot_support_streamer_id')) {
+          // Si el modo soporte está activo o hay una sesión de asistencia guardada, NO sobreescribir con la cuenta del admin
+          if (adminTargetStreamerId || getSupportModeId()) {
             console.log('🛡️ [Auth Event] Modo Asistencia activo. Manteniendo sesión del streamer asistido.');
             await checkAdminStatus();
+            // Re-entrar al modo soporte si aún no está activo (p.ej., INITIAL_SESSION llega antes que DOMContentLoaded)
+            if (!adminTargetStreamerId) {
+              const _sid = getSupportModeId();
+              const _sname = getSupportModeName();
+              if (_sid && isUserSuperAdmin) await enterStreamerSupportMode(_sid, _sname || _sid);
+            }
             return;
           }
 
@@ -609,8 +654,8 @@ function initSupabaseAuth() {
           setUserSession(userObj);
           await checkAdminStatus();
 
-          const savedSupportStreamer = sessionStorage.getItem('orbibot_support_streamer_id');
-          const savedSupportName = sessionStorage.getItem('orbibot_support_streamer_name');
+          const savedSupportStreamer = getSupportModeId();
+          const savedSupportName = getSupportModeName();
           if (savedSupportStreamer && isUserSuperAdmin) {
             await enterStreamerSupportMode(savedSupportStreamer, savedSupportName || savedSupportStreamer);
             return;
@@ -10000,7 +10045,7 @@ function renderAdminStreamersList(streamers) {
                 <td>${channelsStr}</td>
                 <td style="font-size: 12px; color: #94a3b8;">${dateStr}</td>
                 <td style="text-align: right;">
-                  <button class="btn btn-sm" onclick="enterStreamerSupportMode('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(124,58,237,0.35);">
+                  <button class="btn btn-sm" onclick="enterSupportModeAndReload('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(124,58,237,0.35);">
                     <i class="fas fa-tools"></i> Asistir / Ver Config
                   </button>
                 </td>
@@ -10280,11 +10325,9 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   updateWidgetUrls();
   if (typeof initWidgetCustomization === 'function') initWidgetCustomization();
 
-  // Guardar sesión de soporte en sessionStorage para persistencia ante cambio de pestañas o recargas
-  try {
-    sessionStorage.setItem('orbibot_support_streamer_id', streamerId);
-    sessionStorage.setItem('orbibot_support_streamer_name', displayName || streamerId);
-  } catch (e) { }
+  // Guardar sesión de soporte en sessionStorage + localStorage para máxima persistencia
+  // (localStorage sobrevive a sessionStorage.clear() y a aperturas de nuevas pestañas)
+  saveSupportModeToStorage(streamerId, displayName || streamerId);
 
   // Re-suscribir WebSocket y MQTT a la sala del streamer asistido
   const targetRoom = getActiveStreamerRoom();
@@ -10384,10 +10427,7 @@ async function saveAdminSupportChanges() {
 function exitAdminSupportMode() {
   if (!adminTargetStreamerId) return;
 
-  try {
-    sessionStorage.removeItem('orbibot_support_streamer_id');
-    sessionStorage.removeItem('orbibot_support_streamer_name');
-  } catch (e) { }
+  clearSupportModeStorage();
 
   if (adminOriginalConfig) {
     appConfig = adminOriginalConfig;
