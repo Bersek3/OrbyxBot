@@ -6,7 +6,8 @@
   <meta http-equiv="Pragma" content="no-cache">
   <meta http-equiv="Expires" content="0">
   <title>OBS TTS Audio Player</title>
-  <link rel="stylesheet" href="../css/overlays.css">
+  <script src="../js/tmi.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tmi.js/dist/tmi.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
   <style>
     .tts-indicator {
@@ -656,7 +657,96 @@
       }
     }
 
+    const TTS_ALIAS_MAP = {
+      messi: 'es_ar_messi', lionel_messi: 'es_ar_messi', leo_messi: 'es_ar_messi',
+      maduro: 'es_ve_maduro', nicolas_maduro: 'es_ve_maduro',
+      tiktok: 'es_tiktok', voz_tiktok: 'es_tiktok',
+      homero: 'es_mx_homero', homero_simpson: 'es_mx_homero', homer: 'es_mx_homero',
+      dross: 'es_dross', drossrotzank: 'es_dross',
+      badbunny: 'es_badbunny', bad_bunny: 'es_badbunny', benito: 'es_badbunny',
+      rubius: 'es_rubius', elrubius: 'es_rubius', el_rubius: 'es_rubius',
+      farid: 'es_farid', farid_dieck: 'es_farid',
+      westcol: 'es_westcol',
+      cr7: 'es_cr7', cristiano: 'es_cr7', cristiano_ronaldo: 'es_cr7', ronaldo: 'es_cr7', bicho: 'es_cr7', siuuu: 'es_cr7',
+      goku: 'es_goku', goku_latino: 'es_goku',
+      maradona: 'es_maradona', diego_maradona: 'es_maradona',
+      xokas: 'es_xokas', elxokas: 'es_xokas', el_xokas: 'es_xokas',
+      illojuan: 'es_illojuan', illo_juan: 'es_illojuan', juan: 'es_illojuan',
+      auron: 'es_auronplay', auronplay: 'es_auronplay',
+      peruano: 'es_peruano',
+      closs: 'es_marianocloss', marianocloss: 'es_marianocloss', mariano_closs: 'es_marianocloss',
+      lacobra: 'es_lacobra', la_cobra: 'es_lacobra', cobra: 'es_lacobra',
+      davo: 'es_davo', davoxeneize: 'es_davo', davo_xeneize: 'es_davo',
+      mia: 'es_mx_mia', miguel: 'es_us_miguel', lupe: 'es_us_lupe', penelope: 'es_us_penelope',
+      enrique: 'es_es_enrique', conchita: 'es_es_conchita', lucia: 'es_es_lucia',
+      brian: 'en_brian', emma: 'en_emma', joey: 'en_joey', matthew: 'en_matthew'
+    };
+
+    function initTwitchChatIRC(targetChan, retries = 0) {
+      if (!targetChan) return;
+      if (window.tmi && window.tmi.Client) {
+        try {
+          console.log(`🟢 [TTS Overlay] Conectando a Twitch IRC #${targetChan}...`);
+          const tmiClient = new window.tmi.Client({
+            options: { debug: false },
+            connection: { reconnect: true, secure: true },
+            channels: [targetChan]
+          });
+          tmiClient.connect().then(() => {
+            console.log(`✅ [TTS Overlay] Conectado exitosamente a Twitch IRC #${targetChan}`);
+          }).catch(err => {
+            console.warn(`⚠️ [TTS Overlay] Error conectando a Twitch IRC #${targetChan}:`, err);
+          });
+
+          tmiClient.on('message', (ch, tags, message, self) => {
+            const username = tags['display-name'] || tags.username || 'Espectador';
+            const trimmed = (message || '').trim();
+            if (!trimmed) return;
+
+            const firstWord = trimmed.split(' ')[0].toLowerCase();
+            let matchedVoice = null;
+
+            if (firstWord.startsWith('!')) {
+              const cmdToken = firstWord.slice(1);
+              if (cmdToken === 'tts') {
+                matchedVoice = 'es_mx_mia';
+              } else if (TTS_ALIAS_MAP[cmdToken]) {
+                matchedVoice = TTS_ALIAS_MAP[cmdToken];
+              }
+            }
+
+            if (matchedVoice) {
+              const voiceText = trimmed.slice(firstWord.length).trim();
+              if (voiceText) {
+                console.log(`🎙️ [TTS Overlay] Comando TTS recibido de @${username} (#${ch}): '!${firstWord.slice(1)} ${voiceText}'`);
+                const audioUrl = `/api/tts?text=${encodeURIComponent(voiceText)}&voice=${encodeURIComponent(matchedVoice)}`;
+                const ttsData = {
+                  id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                  user: username,
+                  text: voiceText,
+                  voice: matchedVoice,
+                  audioUrl: audioUrl,
+                  channel: ch
+                };
+                handleIncomingMessage({ event: 'tts', data: ttsData });
+              }
+            }
+          });
+        } catch(e) {
+          console.error(`⚠️ [TTS Overlay] Error al inicializar tmi.js:`, e);
+        }
+      } else if (retries < 25) {
+        setTimeout(() => initTwitchChatIRC(targetChan, retries + 1), 200);
+      } else {
+        console.warn(`⚠️ [TTS Overlay] window.tmi no estuvo disponible tras múltiples reintentos.`);
+      }
+    }
+
     function connectChannels() {
+      if (myStreamerKey) {
+        initTwitchChatIRC(myStreamerKey);
+      }
+
       // 1. Local WebSocket con reconexión automática en segundo plano
       let wsInstance = null;
       let wsReconnectTimeout = null;
@@ -666,6 +756,7 @@
         try {
           wsInstance = new WebSocket(url);
           wsInstance.onopen = () => {
+            console.log(`🟢 [TTS Overlay] Conectado a Servidor WebSocket local (${url})`);
             if (myStreamerKey || myToken) {
               wsInstance.send(JSON.stringify({
                 action: 'join',
@@ -678,7 +769,10 @@
           wsInstance.onmessage = (event) => {
             try { handleIncomingMessage(JSON.parse(event.data)); } catch(e) {}
           };
-          wsInstance.onerror = () => scheduleWsReconnect(url);
+          wsInstance.onerror = (err) => {
+            console.warn(`⚠️ [TTS Overlay] Error en WebSocket local:`, err);
+            scheduleWsReconnect(url);
+          };
           wsInstance.onclose = () => scheduleWsReconnect(url);
         } catch(e) {
           scheduleWsReconnect(url);
@@ -712,12 +806,13 @@
         if (typeof Paho === 'undefined') return;
         if (mqttReconnectTimeout) clearTimeout(mqttReconnectTimeout);
 
-        if (!channel) return;
+        const targetChan = myStreamerKey || channel;
+        if (!targetChan) return;
         const clientId = 'orbi_tts_' + Math.random().toString(36).substring(2, 9);
         try {
           mqttClient = new Paho.MQTT.Client('broker.emqx.io', 8084, clientId);
           mqttClient.onConnectionLost = (responseObject) => {
-            console.warn('MQTT Connection lost, reconnecting in 3.5s...', responseObject);
+            console.warn('⚠️ [TTS Overlay] Conexión MQTT perdida, reconectando...', responseObject);
             scheduleMqttReconnect();
           };
           mqttClient.onMessageArrived = (message) => {
@@ -731,14 +826,15 @@
             timeout: 6,
             keepAliveInterval: 30,
             onSuccess: () => {
+              console.log(`🟢 [TTS Overlay] Conectado exitosamente a Relé MQTT de la Nube (Canal: ${targetChan})`);
               if (token) {
-                mqttClient.subscribe(`orbibot/${channel}_${token}/events`);
+                mqttClient.subscribe(`orbibot/${targetChan}_${token}/events`);
               } else {
-                mqttClient.subscribe(`orbibot/${channel}/events`);
+                mqttClient.subscribe(`orbibot/${targetChan}/events`);
               }
             },
             onFailure: (e) => {
-              console.warn('MQTT connect failed, retrying in 4s...', e);
+              console.warn('⚠️ [TTS Overlay] Error al conectar a MQTT:', e);
               scheduleMqttReconnect();
             }
           });
