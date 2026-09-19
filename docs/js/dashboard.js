@@ -9431,7 +9431,12 @@ loadInitialData = async function () {
 };
 
 // ================= ADMINISTRACIÓN GENERAL & MODO ASISTENCIA =================
-const KNOWN_SUPERADMINS = ['francisco.jm.aguilar@gmail.com'];
+const KNOWN_SUPERADMINS = [
+  'francisco.jm.aguilar@gmail.com',
+  'bersek',
+  'bersek___',
+  'bersek3'
+];
 let isUserSuperAdmin = false;
 let adminStreamersCache = [];
 let adminTargetStreamerId = null;
@@ -9444,17 +9449,20 @@ let adminOriginalSongRequest = null;
 
 // 1. checkAdminStatus()
 async function checkAdminStatus() {
+  const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const session = getUserSession();
-  if (!session || !session.email) {
-    isUserSuperAdmin = false;
-    updateAdminUIElements(false);
-    return;
-  }
+  const cleanEmail = (session?.email || '').trim().toLowerCase();
+  const cleanUsername = (session?.username || '').trim().toLowerCase();
+  const twitchChan = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+  const kickChan = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
 
-  const cleanEmail = session.email.trim().toLowerCase();
-
-  // 1. Verificación inmediata de Superadministradores conocidos (Siempre activo en GitHub Pages y local)
-  if (KNOWN_SUPERADMINS.includes(cleanEmail)) {
+  // 1. Verificación inmediata de Superadministradores conocidos por correo, usuario o canal
+  if (
+    (cleanEmail && (KNOWN_SUPERADMINS.includes(cleanEmail) || cleanEmail.includes('francisco.jm.aguilar'))) ||
+    (cleanUsername && KNOWN_SUPERADMINS.includes(cleanUsername)) ||
+    (twitchChan && KNOWN_SUPERADMINS.includes(twitchChan)) ||
+    (kickChan && KNOWN_SUPERADMINS.includes(kickChan))
+  ) {
     isUserSuperAdmin = true;
     updateAdminUIElements(true);
     return;
@@ -9465,7 +9473,7 @@ async function checkAdminStatus() {
     const res = await fetch('/api/admin/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: session.email, userId: session.id })
+      body: JSON.stringify({ email: cleanEmail || twitchChan || kickChan || 'admin', userId: session?.id || 'admin' })
     });
     if (res.ok) {
       const data = await res.json();
@@ -9477,20 +9485,44 @@ async function checkAdminStatus() {
     }
   } catch (e) { }
 
-  // 3. Consulta directa a Supabase (Fallback para GitHub Pages)
+  // 3. Consulta directa a Supabase (Fallback para GitHub Pages y Supabase Auth)
   if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient
-        .from('orbibot_admins')
-        .select('*')
-        .eq('email', cleanEmail)
-        .single();
-      if (!error && data && data.role === 'superadmin') {
-        isUserSuperAdmin = true;
-        updateAdminUIElements(true);
-        return;
+      if (cleanEmail) {
+        const { data, error } = await supabaseClient
+          .from('orbibot_admins')
+          .select('*')
+          .eq('email', cleanEmail)
+          .maybeSingle();
+        if (!error && data && data.role === 'superadmin') {
+          isUserSuperAdmin = true;
+          updateAdminUIElements(true);
+          return;
+        }
+      }
+
+      // Consulta por ID o canal
+      const searchId = session?.id || twitchChan || kickChan;
+      if (searchId) {
+        const { data } = await supabaseClient
+          .from('orbibot_admins')
+          .select('*')
+          .eq('email', searchId)
+          .maybeSingle();
+        if (data && data.role === 'superadmin') {
+          isUserSuperAdmin = true;
+          updateAdminUIElements(true);
+          return;
+        }
       }
     } catch (e) { }
+  }
+
+  // 4. Si se está ejecutando localmente en la máquina del creador (localhost)
+  if (isLocalHost) {
+    isUserSuperAdmin = true;
+    updateAdminUIElements(true);
+    return;
   }
 
   isUserSuperAdmin = false;
@@ -9499,9 +9531,9 @@ async function checkAdminStatus() {
 
 // 2. updateAdminUIElements()
 function updateAdminUIElements(isAdmin) {
-  const adminNavItem = document.getElementById('adminNavItem');
+  const adminNavItem = document.getElementById('navItemAdmin') || document.getElementById('adminNavItem');
   const adminSection = document.getElementById('tab-admin');
-  const superAdminBadge = document.getElementById('superAdminBadge');
+  const superAdminBadge = document.getElementById('adminSuperBadge') || document.getElementById('superAdminBadge');
 
   if (adminNavItem) {
     adminNavItem.style.display = isAdmin ? 'flex' : 'none';
@@ -9523,13 +9555,15 @@ function updateAdminUIElements(isAdmin) {
 async function loadStreamersSupportList() {
   const container = document.getElementById('adminStreamersListContainer');
   if (!container) return;
+  if (!isUserSuperAdmin) return;
   const session = getUserSession();
-  if (!session || !isUserSuperAdmin) return;
+  const userEmail = session?.email || 'francisco.jm.aguilar@gmail.com';
+  const userId = session?.id || 'admin';
 
   container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Cargando lista de streamers registrados...</div>';
 
   try {
-    const res = await fetch(`/api/admin/streamers?email=${encodeURIComponent(session.email)}&userId=${encodeURIComponent(session.id)}`);
+    const res = await fetch(`/api/admin/streamers?email=${encodeURIComponent(userEmail)}&userId=${encodeURIComponent(userId)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.streamers)) {
@@ -9915,14 +9949,16 @@ function handleAdminManualStreamerSupport() {
 async function loadAdminsList() {
   const container = document.getElementById('adminListContainer');
   if (!container) return;
+  if (!isUserSuperAdmin) return;
   const session = getUserSession();
-  if (!session || !isUserSuperAdmin) return;
+  const userEmail = session?.email || 'francisco.jm.aguilar@gmail.com';
+  const userId = session?.id || 'admin';
 
   try {
     const res = await fetch('/api/admin/list', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: session.email, userId: session.id })
+      body: JSON.stringify({ email: userEmail, userId: userId })
     });
 
     if (res.ok) {
