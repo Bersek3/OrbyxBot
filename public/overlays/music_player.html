@@ -10,6 +10,8 @@
   <title>Song Request Audio Player - OBS Overlay | OrbyxBot</title>
   <!-- Paho MQTT client para sincronización en la nube -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+  <!-- Twitch IRC Chat Client (TMI.js) -->
+  <script src="../js/tmi.min.js"></script>
   <style>
     * {
       box-sizing: border-box;
@@ -198,10 +200,20 @@
       }, { passive: true });
     });
 
+    function extractCleanVideoId(idOrUrl) {
+      if (!idOrUrl) return null;
+      const str = idOrUrl.toString().trim();
+      const match = str.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+      if (match && match[1]) return match[1];
+      if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str;
+      return null;
+    }
+
     // Inicializar YouTube IFrame Player con soporte completo para OBS Mixer
     window.onYouTubeIframeAPIReady = function () {
       unlockAudio();
-      const initVideoId = pendingVideoId || (currentSongData && currentSongData.videoId) || undefined;
+      const rawVid = pendingVideoId || (currentSongData && currentSongData.videoId);
+      const initVideoId = extractCleanVideoId(rawVid);
       const validOrigin = (window.location.origin && window.location.origin !== 'null' && !window.location.origin.startsWith('file')) ? window.location.origin : 'https://www.youtube.com';
       const playerConfig = {
         height: '200',
@@ -215,13 +227,13 @@
           playsinline: 1,
           enablejsapi: 1,
           iv_load_policy: 3,
-          origin: validOrigin,
-          widget_referrer: window.location.href
+          origin: validOrigin
         },
         events: {
           onReady: (event) => {
             ytApiReady = true;
             statusText.innerText = 'Audio Player Conectado';
+            console.log('✅ [Music Player Overlay] Reproductor de YouTube inicializado.');
             try {
               event.target.unMute();
               event.target.setVolume(100);
@@ -275,8 +287,8 @@
             }
           },
           onError: (event) => {
-            console.warn('YouTube Audio Player error:', event.data);
-            if (currentSongData && (event.data === 100 || event.data === 101 || event.data === 150)) {
+            console.warn('⚠️ [Music Player Overlay] YouTube Audio Player error:', event.data);
+            if (currentSongData && (event.data === 2 || event.data === 100 || event.data === 101 || event.data === 150)) {
               statusText.innerText = 'Video no reproducible en stream - Saltando...';
               setTimeout(() => {
                 notifySongEnded();
@@ -290,16 +302,26 @@
         playerConfig.videoId = initVideoId;
       }
 
-      ytPlayer = new YT.Player('ytPlayer', playerConfig);
+      try {
+        ytPlayer = new YT.Player('ytPlayer', playerConfig);
+      } catch (err) {
+        console.error('Error creando YT.Player:', err);
+      }
     };
 
     function playYouTubeVideo(videoId) {
       if (!videoId) return;
+      const cleanId = extractCleanVideoId(videoId);
+      if (!cleanId) {
+        console.warn('⚠️ [Music Player Overlay] ID de video inválido:', videoId);
+        return;
+      }
       unlockAudio();
       if (ytPlayer && ytApiReady && ytPlayer.loadVideoById) {
         try {
+          console.log(`▶️ [Music Player Overlay] Cargando video: ${cleanId}`);
           ytPlayer.loadVideoById({
-            videoId: videoId,
+            videoId: cleanId,
             startSeconds: 0,
             suggestedQuality: 'small'
           });
@@ -310,7 +332,7 @@
           console.error('Error al reproducir en YT:', e);
         }
       } else {
-        pendingVideoId = videoId;
+        pendingVideoId = cleanId;
       }
     }
 
@@ -466,8 +488,128 @@
       }
     }
 
+    function initTwitchChatIRC(targetChan, retries = 0) {
+      if (!targetChan) return;
+      if (window.tmi && window.tmi.Client) {
+        try {
+          console.log(`🟢 [Music Player Overlay] Conectando a Twitch IRC #${targetChan}...`);
+          const tmiClient = new window.tmi.Client({
+            options: { debug: false },
+            connection: { reconnect: true, secure: true },
+            channels: [targetChan]
+          });
+          tmiClient.connect().then(() => {
+            console.log(`✅ [Music Player Overlay] Conectado exitosamente a Twitch IRC #${targetChan}`);
+          }).catch(err => {
+            console.warn(`⚠️ [Music Player Overlay] Error conectando a Twitch IRC #${targetChan}:`, err);
+          });
+
+          tmiClient.on('message', async (ch, tags, message, self) => {
+            const username = tags['display-name'] || tags.username || 'Espectador';
+            const trimmed = (message || '').trim();
+            if (!trimmed) return;
+
+            const words = trimmed.split(/\s+/);
+            const firstWord = words[0].toLowerCase();
+
+            // 1. Comando Song Request: !sr o !songrequest
+            if (firstWord === '!sr' || firstWord === '!songrequest') {
+              const songQuery = trimmed.slice(firstWord.length).trim();
+              if (!songQuery) return;
+
+              console.log(`🎵 [Music Player Overlay] Song Request recibido de @${username} (#${ch}): '!${firstWord.slice(1)} ${songQuery}'`);
+
+              try {
+                const addRes = await fetch('/api/sr/add', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    query: songQuery,
+                    requester: username,
+                    channel: targetChan,
+                    token: myToken
+                  })
+                });
+                if (addRes.ok) {
+                  const resData = await addRes.json();
+                  console.log(`✅ [Music Player Overlay] Canción procesada para #${targetChan}:`, resData);
+                  if (resData.song && (!currentSongData || !currentSongData.videoId)) {
+                    updateSongDisplay(resData.song);
+                  } else if (resData.state?.currentSong && (!currentSongData || !currentSongData.videoId)) {
+                    updateSongDisplay(resData.state.currentSong);
+                  }
+                }
+              } catch (e) {
+                console.warn(`⚠️ [Music Player Overlay] Error en /api/sr/add:`, e);
+              }
+              return;
+            }
+
+            // 2. Comando !skip o !saltar
+            if (firstWord === '!skip' || firstWord === '!saltar') {
+              console.log(`⏭️ [Music Player Overlay] Comando !skip recibido de @${username} (#${ch})`);
+              try {
+                const skipRes = await fetch('/api/sr/skip', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ channel: targetChan, token: myToken })
+                });
+                if (skipRes.ok) {
+                  const skipData = await skipRes.json();
+                  console.log(`✅ [Music Player Overlay] Canción saltada:`, skipData);
+                  if (skipData.state?.currentSong) {
+                    updateSongDisplay(skipData.state.currentSong);
+                  } else if (skipData.currentSong) {
+                    updateSongDisplay(skipData.currentSong);
+                  } else if (skipData.action === 'skip' && !skipData.data?.current) {
+                    updateSongDisplay(null);
+                  }
+                }
+              } catch(e) {}
+              return;
+            }
+
+            // 3. Comando !pause o !pausa o !srpause
+            if (firstWord === '!pause' || firstWord === '!pausa' || firstWord === '!srpause') {
+              console.log(`⏸️ [Music Player Overlay] Comando !pause recibido de @${username} (#${ch})`);
+              pauseYouTubeVideo();
+              fetch('/api/sr/pause', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel: targetChan, token: myToken })
+              }).catch(() => {});
+              return;
+            }
+
+            // 4. Comando !resume o !play o !srplay o !srresume
+            if (firstWord === '!resume' || firstWord === '!play' || firstWord === '!srplay' || firstWord === '!srresume') {
+              console.log(`▶️ [Music Player Overlay] Comando !resume recibido de @${username} (#${ch})`);
+              resumeYouTubeVideo();
+              fetch('/api/sr/play', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel: targetChan, token: myToken })
+              }).catch(() => {});
+              return;
+            }
+          });
+        } catch(e) {
+          console.error(`⚠️ [Music Player Overlay] Error inicializando tmi.js:`, e);
+        }
+      } else if (retries < 25) {
+        setTimeout(() => initTwitchChatIRC(targetChan, retries + 1), 200);
+      } else {
+        console.warn(`⚠️ [Music Player Overlay] window.tmi no estuvo disponible tras múltiples reintentos.`);
+      }
+    }
+
     // Conexiones de Red y Tiempo Real con Reconexión Automática
     function connectChannels() {
+      // 0. Conexión directa a Twitch IRC para captura de comandos de chat
+      if (myStreamerKey) {
+        initTwitchChatIRC(myStreamerKey);
+      }
+
       // 1. Local WebSocket con reconexión automática en segundo plano
       let wsInstance = null;
       let wsReconnectTimeout = null;
@@ -477,6 +619,7 @@
         try {
           wsInstance = new WebSocket(url);
           wsInstance.onopen = () => {
+            console.log(`🟢 [Music Player Overlay] Conectado a Servidor WebSocket local (${url})`);
             if (channel) {
               wsInstance.send(JSON.stringify({ action: 'join', channel, room: channel }));
             }
@@ -539,6 +682,7 @@
                 }
                 statusDot.style.background = 'var(--neon-green)';
                 statusText.innerText = 'Audio Player Conectado';
+                console.log(`🟢 [Music Player Overlay] Conectado exitosamente a Relé MQTT de la Nube (Canal: ${channel})`);
               },
               onFailure: (e) => {
                 console.warn('MQTT connect failed, retrying in 4s...', e);
