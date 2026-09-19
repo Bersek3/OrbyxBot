@@ -365,8 +365,8 @@ async function loadUserDataFromSupabase(userIdentifier) {
       localStorage.removeItem('orbibot_twitch_auth');
       localStorage.removeItem('orbibot_kick_auth');
       localStorage.removeItem('orbibot_kick_channel');
-      localStorage.removeItem('orbibot_custom_sounds');
-      localStorage.removeItem('orbibot_custom_images');
+      localStorage.setItem('orbibot_custom_sounds', '[]');
+      localStorage.setItem('orbibot_custom_images', '[]');
       localStorage.removeItem('orbibot_sr_state');
       localStorage.removeItem('orbibot_current_song');
       localStorage.removeItem('orbibot_song_history');
@@ -7087,24 +7087,9 @@ async function syncTwitchRewardsUI() {
     let userId = twitchCfg.userId;
     let clientId = twitchCfg.clientId || 'yw1vr664ichms8an2x5lhji58v7ozk';
 
-    // 1. Intentar obtener a través del backend
-    try {
-      const targetStreamer = adminTargetStreamerId || '';
-      const qs = targetStreamer ? `?streamerId=${encodeURIComponent(targetStreamer)}` : '';
-      const res = await fetch(`/api/rewards/twitch${qs}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && Array.isArray(data.rewards)) {
-          twRewards = data.rewards;
-        }
-      } else if (res.status === 403) {
-        showToast('ℹ️ El canal de Twitch debe tener estado de Afiliado o Partner para usar Puntos de Canal.', 'warn');
-        return;
-      }
-    } catch (e) { }
-
-    // 2. Si no hubo backend o estamos en frontend directo, consultar Twitch Helix
-    if (twRewards.length === 0 && cleanToken) {
+    // 1. Si tenemos el token de Twitch en el cliente, consultar DIRECTAMENTE a Helix con ese token
+    // Esto garantiza que siempre se obtengan las recompensas de la cuenta vinculada al usuario activo
+    if (cleanToken) {
       if (!userId) {
         try {
           const valRes = await fetch('https://id.twitch.tv/oauth2/validate', {
@@ -7140,6 +7125,27 @@ async function syncTwitchRewardsUI() {
           }
         } catch (e) { }
       }
+    }
+
+    // 2. Si no se obtuvieron por frontend directo, recurrir al backend especificando el streamerId
+    if (twRewards.length === 0) {
+      try {
+        const session = getUserSession();
+        const myChannel = adminTargetStreamerId || (twitchCfg.channel || twitchCfg.login || twitchCfg.displayName || session?.email || '').toLowerCase().replace(/^#/, '').trim();
+        const qs = myChannel ? `?streamerId=${encodeURIComponent(myChannel)}` : '';
+        const res = await fetch(`/api/rewards/twitch${qs}`, {
+          headers: myChannel ? { 'x-streamer-id': myChannel } : {}
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success && Array.isArray(data.rewards)) {
+            twRewards = data.rewards;
+          }
+        } else if (res.status === 403) {
+          showToast('ℹ️ El canal de Twitch debe tener estado de Afiliado o Partner para usar Puntos de Canal.', 'warn');
+          return;
+        }
+      } catch (e) { }
     }
 
     populateTwitchRewardsDropdown(twRewards);
