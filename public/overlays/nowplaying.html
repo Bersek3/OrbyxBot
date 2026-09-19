@@ -80,15 +80,20 @@
     function unlockAudio() {
       if (!audioCtx) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (AudioContextClass) audioCtx = new AudioContextClass();
+        if (AudioContextClass) {
+          try { audioCtx = new AudioContextClass(); } catch(e) {}
+        }
       }
       if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume().catch(() => {});
       }
     }
 
-    document.addEventListener('DOMContentLoaded', unlockAudio);
-    window.addEventListener('load', unlockAudio);
+    ['click', 'touchstart', 'keydown', 'pointerdown'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        unlockAudio();
+      }, { passive: true });
+    });
 
     window.onYouTubeIframeAPIReady = function() {
       if (!enableAudio) return;

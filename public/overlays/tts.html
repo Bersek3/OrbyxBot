@@ -41,9 +41,38 @@
       border-radius: 2px;
       animation: eqBounce 0.8s infinite ease-in-out;
     }
+    .audio-unlock-banner {
+      display: none;
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: linear-gradient(135deg, rgba(124, 58, 237, 0.95), rgba(219, 39, 119, 0.95));
+      color: #fff;
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-size: 13px;
+      font-weight: 700;
+      padding: 8px 18px;
+      border-radius: 999px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+      cursor: pointer;
+      z-index: 99999;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid rgba(255,255,255,0.35);
+      user-select: none;
+      transition: transform 0.2s ease, opacity 0.2s ease;
+    }
+    .audio-unlock-banner:hover {
+      transform: translateX(-50%) scale(1.04);
+    }
   </style>
 </head>
 <body>
+  <div id="audioUnlockBanner" class="audio-unlock-banner" onclick="unlockAudio()">
+    <span>🔊 Haz clic aquí para activar el audio del TTS</span>
+  </div>
+
   <div id="ttsIndicator" class="tts-indicator">
     <div class="tts-wave">
       <div class="tts-wave-bar" style="animation-delay: 0.1s"></div>
@@ -191,20 +220,46 @@
     ];
 
     let audioCtx = null;
-    function getAudioContext() {
+    let userHasInteracted = false;
+    let pendingAutoplayRetry = null;
+
+    function unlockAudio() {
+      userHasInteracted = true;
+      const banner = document.getElementById('audioUnlockBanner');
+      if (banner) banner.style.display = 'none';
+
       if (!audioCtx) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (AudioContextClass) audioCtx = new AudioContextClass();
+        if (AudioContextClass) {
+          try { audioCtx = new AudioContextClass(); } catch(e) {}
+        }
       }
       if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume().catch(() => {});
       }
-      return audioCtx;
+      if ('speechSynthesis' in window) {
+        try { window.speechSynthesis.resume(); } catch(e) {}
+      }
+      if (typeof pendingAutoplayRetry === 'function') {
+        const retryFn = pendingAutoplayRetry;
+        pendingAutoplayRetry = null;
+        retryFn();
+      }
     }
 
-    document.addEventListener('DOMContentLoaded', () => { getAudioContext(); });
-    window.addEventListener('load', () => { getAudioContext(); });
-    document.body.addEventListener('click', () => { getAudioContext(); });
+    // Escuchar interacción del usuario para habilitar audio en navegadores estándar
+    ['click', 'touchstart', 'keydown', 'pointerdown'].forEach(evt => {
+      window.addEventListener(evt, unlockAudio, { passive: true });
+    });
+
+    function showAudioUnlockPrompt(retryFn) {
+      if (userHasInteracted) return;
+      pendingAutoplayRetry = retryFn;
+      const banner = document.getElementById('audioUnlockBanner');
+      if (banner) {
+        banner.style.display = 'flex';
+      }
+    }
 
     /**
      * Detiene de inmediato cualquier reproducción de audio o síntesis activa
@@ -244,7 +299,6 @@
       const cleanKey = (voiceKey || '').toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
       const profile = VOICE_PROFILES[cleanKey] || VOICE_PROFILES[voiceKey] || VOICE_PROFILES['es_mx_mia'];
       const targetLang = (profile.lang || 'es-ES').split('-')[0].toLowerCase();
-      const ctx = getAudioContext();
 
       const seVoiceMap = {
         es_mx_mia: 'Mia', mia: 'Mia',
@@ -282,13 +336,6 @@
       audio.volume = Math.max(0, Math.min(1, volume));
       currentActiveAudio = audio;
 
-      if (ctx) {
-        try {
-          const source = ctx.createMediaElementSource(audio);
-          source.connect(ctx.destination);
-        } catch (e) {}
-      }
-
       let isFinished = false;
       function done() {
         if (isFinished) return;
@@ -306,11 +353,16 @@
 
       const playPromise = audio.play();
       if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          if (ctx && ctx.resume) {
-            ctx.resume().then(() => {
+        playPromise.then(() => {
+          userHasInteracted = true;
+          const banner = document.getElementById('audioUnlockBanner');
+          if (banner) banner.style.display = 'none';
+        }).catch((err) => {
+          if (err && err.name === 'NotAllowedError') {
+            console.warn('[TTS Overlay] Autoplay bloqueado por el navegador. Requiere interacción del usuario en la pestaña.');
+            showAudioUnlockPrompt(() => {
               audio.play().catch(() => fallbackSpeechSynth());
-            }).catch(() => fallbackSpeechSynth());
+            });
           } else {
             fallbackSpeechSynth();
           }
@@ -421,19 +473,11 @@
 
         if (isFish && segAudioUrl) {
           stopCurrentAudio();
-          const ctx = getAudioContext();
           const directAudio = new Audio();
           directAudio.crossOrigin = 'anonymous';
           directAudio.src = segAudioUrl;
           directAudio.volume = item.volume !== undefined ? item.volume : 0.9;
           currentActiveAudio = directAudio;
-
-          if (ctx) {
-            try {
-              const source = ctx.createMediaElementSource(directAudio);
-              source.connect(ctx.destination);
-            } catch (e) {}
-          }
 
           directAudio.onended = () => {
             if (currentActiveAudio === directAudio) currentActiveAudio = null;
@@ -455,11 +499,16 @@
 
           const playPromise = directAudio.play();
           if (playPromise !== undefined) {
-            playPromise.catch(() => {
-              if (ctx && ctx.resume) {
-                ctx.resume().then(() => {
+            playPromise.then(() => {
+              userHasInteracted = true;
+              const banner = document.getElementById('audioUnlockBanner');
+              if (banner) banner.style.display = 'none';
+            }).catch((err) => {
+              if (err && err.name === 'NotAllowedError') {
+                console.warn('[TTS Overlay] Autoplay bloqueado por el navegador en audio directo.');
+                showAudioUnlockPrompt(() => {
                   directAudio.play().catch(() => runFallback());
-                }).catch(() => runFallback());
+                });
               } else {
                 runFallback();
               }

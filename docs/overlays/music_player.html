@@ -174,25 +174,28 @@
     function unlockAudio() {
       if (!audioCtx) {
         const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-        if (AudioContextClass) audioCtx = new AudioContextClass();
+        if (AudioContextClass) {
+          try { audioCtx = new AudioContextClass(); } catch(e) {}
+        }
       }
       if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume().catch(() => {});
       }
     }
 
-    document.addEventListener('DOMContentLoaded', unlockAudio);
-    window.addEventListener('load', unlockAudio);
-
-    // Desbloqueo de audio al hacer clic en cualquier parte (política de navegadores y OBS)
-    document.body.addEventListener('click', () => {
-      unlockAudio();
-      if (ytPlayer) {
-        if (ytPlayer.unMute) ytPlayer.unMute();
-        if (ytPlayer.setVolume) ytPlayer.setVolume(100);
-        if (ytPlayer.playVideo) ytPlayer.playVideo();
-      }
-      if (autoplayBanner) autoplayBanner.style.display = 'none';
+    // Desbloqueo de audio al interactuar con la página (política de navegadores y OBS)
+    ['click', 'touchstart', 'keydown', 'pointerdown'].forEach(evt => {
+      window.addEventListener(evt, () => {
+        unlockAudio();
+        if (ytPlayer) {
+          try {
+            if (ytPlayer.unMute) ytPlayer.unMute();
+            if (ytPlayer.setVolume) ytPlayer.setVolume(100);
+            if (ytPlayer.playVideo) ytPlayer.playVideo();
+          } catch(e) {}
+        }
+        if (autoplayBanner) autoplayBanner.style.display = 'none';
+      }, { passive: true });
     });
 
     // Inicializar YouTube IFrame Player con soporte completo para OBS Mixer
