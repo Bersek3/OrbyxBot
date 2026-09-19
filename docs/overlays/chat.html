@@ -11,6 +11,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Anton&family=Bangers&family=Bebas+Neue&family=Chakra+Petch:wght@400;700&family=Cinzel:wght@700&family=Creepster&family=Fredoka:wght@500;700&family=Inter:wght@400;700&family=Luckiest+Guy&family=Montserrat:wght@500;700;900&family=Orbitron:wght@600;900&family=Outfit:wght@400;600;800&family=Permanent+Marker&family=Poppins:wght@400;600;800&family=Press+Start+2P&family=Righteous&family=Roboto:wght@400;700&family=Rubik:wght@500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../css/overlays.css">
   <script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
+  <script>if (!window.tmi) document.write('<script src="https://unpkg.com/tmi.js@1.8.5/dist/tmi.min.js"><\/script>');</script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
 </head>
 <body>
@@ -378,16 +379,20 @@
       if (myTarget || myToken) {
         const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').trim();
         const targetToken = (msg.token || msg.data?.token || '').trim();
-        if (myTarget) {
-          if (targetRoom && targetRoom !== 'default' && targetRoom !== channel && targetRoom !== kickChannel && targetRoom !== myToken) {
+        const isExactMatch = targetRoom && (targetRoom === channel || targetRoom === kickChannel);
+
+        if (!isExactMatch) {
+          if (myTarget) {
+            if (targetRoom && targetRoom !== 'default' && targetRoom !== channel && targetRoom !== kickChannel && targetRoom !== myToken) {
+              return;
+            }
+            if (targetRoom === 'default' && myTarget !== 'default') {
+              return;
+            }
+          }
+          if (myToken && targetToken && targetToken !== myToken) {
             return;
           }
-          if (targetRoom === 'default' && myTarget !== 'default') {
-            return;
-          }
-        }
-        if (myToken && targetToken && targetToken !== myToken) {
-          return;
         }
       }
 
@@ -400,29 +405,20 @@
       }
     }
 
-    function connectChannels() {
-
-      if (channel) {
-        activeTwitchChannel = channel;
-        loadChannelBadges(channel);
-      }
-      if (kickChannel) {
-        activeKickChannel = kickChannel;
-      }
-
-      // 1. Direct Twitch IRC
-      if (channel && window.tmi) {
+    function initTwitchChatIRC(targetChan, retries = 0) {
+      if (!targetChan) return;
+      if (window.tmi && window.tmi.Client) {
         try {
-          console.log(`🟢 [Chat Overlay] Conectando a Twitch IRC #${channel}...`);
+          console.log(`🟢 [Chat Overlay] Conectando a Twitch IRC #${targetChan}...`);
           const tmiClient = new window.tmi.Client({
             options: { debug: false },
             connection: { reconnect: true, secure: true },
-            channels: [channel]
+            channels: [targetChan]
           });
           tmiClient.connect().then(() => {
-            console.log(`✅ [Chat Overlay] Conectado exitosamente a Twitch IRC #${channel}`);
+            console.log(`✅ [Chat Overlay] Conectado exitosamente a Twitch IRC #${targetChan}`);
           }).catch(err => {
-            console.warn(`⚠️ [Chat Overlay] Error conectando a Twitch IRC #${channel}:`, err);
+            console.warn(`⚠️ [Chat Overlay] Error conectando a Twitch IRC #${targetChan}:`, err);
           });
 
           tmiClient.on('message', (ch, tags, message, self) => {
@@ -446,7 +442,25 @@
               roomId: tags['room-id'] || null
             });
           });
-        } catch(e) {}
+        } catch(e) {
+          console.error(`⚠️ [Chat Overlay] Error al inicializar tmi.js:`, e);
+        }
+      } else if (retries < 25) {
+        setTimeout(() => initTwitchChatIRC(targetChan, retries + 1), 200);
+      } else {
+        console.warn(`⚠️ [Chat Overlay] window.tmi no estuvo disponible tras múltiples reintentos.`);
+      }
+    }
+
+    function connectChannels() {
+
+      if (channel) {
+        activeTwitchChannel = channel;
+        loadChannelBadges(channel);
+        initTwitchChatIRC(channel);
+      }
+      if (kickChannel) {
+        activeKickChannel = kickChannel;
       }
 
       // 2. Direct Kick Pusher WebSocket
