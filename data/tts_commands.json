@@ -7,7 +7,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1,
     "pitch": 1
@@ -20,7 +20,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1,
     "pitch": 1
@@ -33,7 +33,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1,
     "pitch": 1
@@ -46,7 +46,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1,
     "pitch": 1
@@ -72,7 +72,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1,
     "pitch": 1
@@ -124,7 +124,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1,
     "pitch": 1
@@ -137,7 +137,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1,
     "pitch": 1
@@ -163,7 +163,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 0.98,
     "pitch": 0.78
@@ -202,7 +202,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 0.95,
     "pitch": 0.75
@@ -228,7 +228,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 0.95,
     "pitch": 0.72
@@ -241,7 +241,7 @@
     "permissions": [
       "todos"
     ],
-    "enabled": true,
+    "enabled": false,
     "volume": 90,
     "rate": 1.05,
     "pitch": 1.2

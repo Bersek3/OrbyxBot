@@ -38,7 +38,7 @@ DROP POLICY IF EXISTS "Permitir gestion de admins" ON public.orbibot_admins;
 CREATE POLICY "Permitir gestion de admins" ON public.orbibot_admins
     FOR ALL USING (true);
 
--- ✅ Para añadirte como Administrador General manualmente en Supabase:
--- INSERT INTO public.orbibot_admins (email, role, notes) 
--- VALUES ('tu_correo@gmail.com', 'superadmin', 'Admin Principal')
--- ON CONFLICT (email) DO NOTHING;
+-- ✅ Administrador General inicial
+INSERT INTO public.orbibot_admins (email, role, notes) 
+VALUES ('francisco.jm.aguilar@gmail.com', 'superadmin', 'Administrador Principal y Creador')
+ON CONFLICT (email) DO NOTHING;

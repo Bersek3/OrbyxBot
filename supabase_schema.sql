@@ -84,4 +84,10 @@ DROP POLICY IF EXISTS "Permitir gestion de admins" ON public.orbibot_admins;
 CREATE POLICY "Permitir gestion de admins" ON public.orbibot_admins
     FOR ALL USING (true);
 
+-- ✅ Administrador General inicial
+INSERT INTO public.orbibot_admins (email, role, notes) 
+VALUES ('francisco.jm.aguilar@gmail.com', 'superadmin', 'Administrador Principal y Creador')
+ON CONFLICT (email) DO NOTHING;
+
 -- ¡Listo! Tu base de datos multi-tenant y de administradores de OrbiBot está configurada.
+
