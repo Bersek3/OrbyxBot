@@ -336,8 +336,20 @@ class TwitchBot {
       const isSrEnabled = config.songRequest && config.songRequest.enabled !== false;
       const srPrefix = (config.songRequest?.prefix || '!sr').toLowerCase();
 
-      // Comandos de moderación para pausar Song Request (!parar, !stop, !srpausa, !srpause, !pausa, !pause)
-      if (firstWord === '!parar' || firstWord === '!stop' || firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
+      // Comandos de moderación para detener y quitar canción por completo (!parar, !stop, !srparar, !srstop)
+      if (firstWord === '!parar' || firstWord === '!stop' || firstWord === '!srparar' || firstWord === '!srstop') {
+        if (!isSrEnabled) return;
+        if (isModOrBroadcaster) {
+          const res = songRequest.stopSong(channel, username);
+          this.sendMessage(channel, res.message);
+        } else {
+          this.sendMessage(channel, `@${username}, solo moderadores y el streamer pueden detener la música.`);
+        }
+        return;
+      }
+
+      // Comandos de moderación para pausar Song Request (!srpausa, !srpause, !pausa, !pause)
+      if (firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
         if (!isSrEnabled) return;
         if (isModOrBroadcaster) {
           const res = songRequest.pauseSong(channel, username);

@@ -333,6 +333,27 @@ class SongRequestService {
     this.emitUpdate('play', song, cleanChan);
   }
 
+  stopSong(channelOrUser = 'default', byUser = 'Streamer') {
+    const cleanChan = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').trim() || 'default';
+    const session = this.getSession(cleanChan);
+
+    if (!session.currentSong) {
+      return { success: false, message: 'No hay ninguna canción reproduciéndose actualmente.' };
+    }
+
+    const stoppedSong = session.currentSong;
+    session.history.push(stoppedSong);
+    session.currentSong = null;
+    session.isPlaying = false;
+    session.skipVotes.clear();
+    this.emitUpdate('stop', { stopped: stoppedSong, by: byUser }, cleanChan);
+    return {
+      success: true,
+      message: `🛑 Canción detenida y quitada por @${byUser}: ${stoppedSong.title}`,
+      stopped: stoppedSong
+    };
+  }
+
   pauseSong(channelOrUser = 'default', byUser = 'Streamer') {
     const cleanChan = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').trim() || 'default';
     const session = this.getSession(cleanChan);

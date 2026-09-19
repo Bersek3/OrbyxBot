@@ -569,8 +569,26 @@
               return;
             }
 
-            // 3. Comando !parar, !stop, !pause, !pausa o !srpause
-            if (firstWord === '!parar' || firstWord === '!stop' || firstWord === '!pause' || firstWord === '!pausa' || firstWord === '!srpause') {
+            // 3. Comando !parar, !stop, !srparar o !srstop (detener y quitar canción por completo)
+            if (firstWord === '!parar' || firstWord === '!stop' || firstWord === '!srparar' || firstWord === '!srstop') {
+              const isBroadcaster = Boolean(tags.badges?.broadcaster === '1' || (tags.username || '').toLowerCase() === targetChan.replace(/^#/, '').toLowerCase());
+              const isMod = Boolean(tags.mod || tags['user-type'] === 'mod' || isBroadcaster);
+              if (!isMod) {
+                console.log(`⚠️ [Music Player Overlay] @${username} intentó detener la canción pero no es mod ni streamer.`);
+                return;
+              }
+              console.log(`🛑 [Music Player Overlay] Comando ${firstWord} recibido de @${username} (#${ch})`);
+              updateSongDisplay(null);
+              fetch('/api/sr/stop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel: targetChan, token: myToken, by: username })
+              }).catch(() => {});
+              return;
+            }
+
+            // 4. Comando !pause, !pausa, !srpausa o !srpause (pausar)
+            if (firstWord === '!pause' || firstWord === '!pausa' || firstWord === '!srpausa' || firstWord === '!srpause') {
               const isBroadcaster = Boolean(tags.badges?.broadcaster === '1' || (tags.username || '').toLowerCase() === targetChan.replace(/^#/, '').toLowerCase());
               const isMod = Boolean(tags.mod || tags['user-type'] === 'mod' || isBroadcaster);
               if (!isMod) {

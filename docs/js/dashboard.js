@@ -1978,6 +1978,8 @@ function handleSocketMessage(msg) {
       if (ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
     } else if (data.action === 'resume') {
       if (ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
+    } else if (data.action === 'stop') {
+      if (ytPlayer && ytPlayer.stopVideo) ytPlayer.stopVideo();
     }
   } else if (event === 'sr_play' || event === 'sr_resume') {
     if (data && data.videoId) {
@@ -1988,6 +1990,10 @@ function handleSocketMessage(msg) {
   } else if (event === 'sr_pause') {
     if (ytPlayer && ytPlayer.pauseVideo) {
       ytPlayer.pauseVideo();
+    }
+  } else if (event === 'sr_stop') {
+    if (ytPlayer && ytPlayer.stopVideo) {
+      ytPlayer.stopVideo();
     }
   } else if (event === 'alert') {
     const alertType = data.type ? data.type.toUpperCase().replace('_', ' ') : 'EVENTO';

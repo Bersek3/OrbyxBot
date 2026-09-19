@@ -250,6 +250,8 @@ songRequest.onUpdate((payload) => {
     broadcast('sr_resume', payload, room);
   } else if (payload.action === 'play') {
     broadcast('sr_play', payload, room);
+  } else if (payload.action === 'stop') {
+    broadcast('sr_stop', payload, room);
   }
 });
 
@@ -1152,6 +1154,13 @@ app.post('/api/sr/add', async (req, res) => {
 app.post('/api/sr/skip', (req, res) => {
   const target = req.body.channel || req.body.streamer || req.query.channel || req.headers['x-streamer-id'] || 'default';
   const result = songRequest.skip(target, 'Streamer', true);
+  res.json(result);
+});
+
+app.post('/api/sr/stop', (req, res) => {
+  const target = req.body.channel || req.body.streamer || req.query.channel || req.headers['x-streamer-id'] || 'default';
+  const byUser = req.body.by || req.body.requester || 'Streamer';
+  const result = songRequest.stopSong(target, byUser);
   res.json(result);
 });
 
