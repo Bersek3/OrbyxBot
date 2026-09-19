@@ -343,8 +343,8 @@ class KickBot {
         const isSrEnabled = config.songRequest && config.songRequest.enabled !== false;
         const srPrefix = (config.songRequest?.prefix || '!sr').toLowerCase();
 
-        // Comandos de moderación para pausar Song Request (!srpausa, !srpause, !pausa, !pause)
-        if (firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
+        // Comandos de moderación para pausar Song Request (!parar, !stop, !srpausa, !srpause, !pausa, !pause)
+        if (firstWord === '!parar' || firstWord === '!stop' || firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
           if (!isSrEnabled) return;
           if (isModOrBroadcaster) {
             const res = songRequest.pauseSong(this.currentChannel, username);
