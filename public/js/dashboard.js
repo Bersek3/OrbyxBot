@@ -3128,8 +3128,6 @@ function bindConfigToUI(cfg) {
     }
     if (document.getElementById('cfgTtsMaxLength')) document.getElementById('cfgTtsMaxLength').value = cfg.tts.maxLength || 250;
     if (document.getElementById('cfgTtsBannedWords')) document.getElementById('cfgTtsBannedWords').value = (cfg.tts.bannedWords || []).join(', ');
-    if (document.getElementById('cfgTtsAllowCommand')) document.getElementById('cfgTtsAllowCommand').checked = cfg.tts.allowChatCommand !== false;
-    if (document.getElementById('cfgTtsCommand')) document.getElementById('cfgTtsCommand').value = cfg.tts.chatCommand || '!tts';
     if (document.getElementById('cfgTtsMinBits')) document.getElementById('cfgTtsMinBits').value = cfg.tts.minBits !== undefined ? cfg.tts.minBits : 50;
     if (document.getElementById('cfgTtsFishApiKey')) {
       document.getElementById('cfgTtsFishApiKey').value = cfg.tts.fishApiKey || 'sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI';
@@ -7897,8 +7895,8 @@ async function saveAllConfig(showNotification = true) {
       pitch: Number(document.getElementById('cfgTtsPitch')?.value ?? (appConfig?.tts?.pitch ?? 1)),
       maxLength: Number(document.getElementById('cfgTtsMaxLength')?.value ?? (appConfig?.tts?.maxLength ?? 250)),
       bannedWords,
-      allowChatCommand: document.getElementById('cfgTtsAllowCommand') ? Boolean(document.getElementById('cfgTtsAllowCommand')?.checked) : (appConfig?.tts?.allowChatCommand !== false),
-      chatCommand: document.getElementById('cfgTtsCommand')?.value.trim() || appConfig?.tts?.chatCommand || '!tts',
+      allowChatCommand: appConfig?.tts?.allowChatCommand !== false,
+      chatCommand: appConfig?.tts?.chatCommand || '!tts',
       minBits: Number(document.getElementById('cfgTtsMinBits')?.value ?? (appConfig?.tts?.minBits ?? 50)),
       fishApiKey: document.getElementById('cfgTtsFishApiKey')?.value?.trim() || appConfig?.tts?.fishApiKey || 'sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI'
     }
