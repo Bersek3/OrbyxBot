@@ -294,7 +294,7 @@ class TTSService {
     }
 
     // Verification for chat commands
-    if (source === 'chat' && !config.allowChatCommand) {
+    if (source === 'chat' && config.allowChatCommand === false && !voiceOverride) {
       return { success: false, reason: 'El comando de chat para TTS está desactivado' };
     }
 

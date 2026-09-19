@@ -457,7 +457,7 @@ class KickBot {
 
         // Procesar Comandos TTS en Kick (Genérico !tts o de Voces IA ej: !messi, !homero, !dross, !rubius, !cr7, etc.)
         const ttsConfig = config.tts || {};
-        if (ttsConfig.enabled && ttsConfig.allowChatCommand) {
+        if (ttsConfig.enabled !== false) {
           const ttsCmd = (ttsConfig.chatCommand || '!tts').toLowerCase();
           const ttsVoiceCommands = storage.getTtsCommands() || [];
           let matchedVoiceCmd = ttsVoiceCommands.find(c => c.enabled && c.command && c.command.toLowerCase() === firstWord);
@@ -486,19 +486,7 @@ class KickBot {
             broadcaster: isBroadcaster
           };
 
-          if (trimmed.toLowerCase().startsWith(ttsCmd)) {
-            const ttsText = trimmed.slice(ttsCmd.length).trim();
-            if (ttsText) {
-              ttsService.processRequest({
-                user: username,
-                text: ttsText,
-                source: 'chat',
-                channel: this.currentChannel,
-                userBadges
-              });
-              return;
-            }
-          } else if (matchedVoiceCmd && ttsService.hasPermission(matchedVoiceCmd, userBadges)) {
+          if (matchedVoiceCmd && ttsService.hasPermission(matchedVoiceCmd, userBadges)) {
             const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
             if (voiceText) {
               ttsService.processRequest({
@@ -506,6 +494,18 @@ class KickBot {
                 text: voiceText,
                 source: 'chat',
                 voiceOverride: matchedVoiceCmd.voiceId,
+                channel: this.currentChannel,
+                userBadges
+              });
+              return;
+            }
+          } else if (ttsConfig.allowChatCommand !== false && trimmed.toLowerCase().startsWith(ttsCmd)) {
+            const ttsText = trimmed.slice(ttsCmd.length).trim();
+            if (ttsText) {
+              ttsService.processRequest({
+                user: username,
+                text: ttsText,
+                source: 'chat',
                 channel: this.currentChannel,
                 userBadges
               });

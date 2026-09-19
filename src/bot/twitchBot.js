@@ -474,25 +474,8 @@ class TwitchBot {
         }
       }
 
-      if (ttsConfig.enabled && ttsConfig.allowChatCommand) {
-        if (trimmed.toLowerCase().startsWith(ttsCmd)) {
-          const ttsText = trimmed.slice(ttsCmd.length).trim();
-          if (ttsText) {
-            ttsService.processRequest({
-              user: username,
-              text: ttsText,
-              source: 'chat',
-              channel: channel ? channel.toLowerCase().replace(/^#/, '') : null,
-              userBadges: {
-                isMod,
-                isSub,
-                vip: Boolean(tags.vip || tags.badges?.vip),
-                broadcaster: tags.badges?.broadcaster === '1'
-              }
-            });
-            return;
-          }
-        } else if (matchedVoiceCmd) {
+      if (ttsConfig.enabled !== false) {
+        if (matchedVoiceCmd) {
           // Permisos de rol para comando de voz
           const userBadges = {
             isMod,
@@ -513,6 +496,23 @@ class TwitchBot {
               });
               return;
             }
+          }
+        } else if (ttsConfig.allowChatCommand !== false && trimmed.toLowerCase().startsWith(ttsCmd)) {
+          const ttsText = trimmed.slice(ttsCmd.length).trim();
+          if (ttsText) {
+            ttsService.processRequest({
+              user: username,
+              text: ttsText,
+              source: 'chat',
+              channel: channel ? channel.toLowerCase().replace(/^#/, '') : null,
+              userBadges: {
+                isMod,
+                isSub,
+                vip: Boolean(tags.vip || tags.badges?.vip),
+                broadcaster: tags.badges?.broadcaster === '1'
+              }
+            });
+            return;
           }
         }
       }

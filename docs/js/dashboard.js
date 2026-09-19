@@ -1767,6 +1767,11 @@ function broadcastEvent(event, data) {
       socket.send(JSON.stringify(payload));
     } catch (e) { }
   }
+
+  // 5. Procesar inmediatamente en la ventana actual del dashboard
+  try {
+    handleSocketMessage(payload);
+  } catch (e) { }
 }
 
 function connectWebSocket() {
@@ -2248,14 +2253,14 @@ function connectInBrowserTwitchBot(twitchData) {
 
       // Procesamiento de comandos TTS desde el chat de Twitch en cliente de navegador
       try {
-        const currentCfg = JSON.parse(localStorage.getItem('orbibot_config') || '{}');
+        const currentCfg = (typeof appConfig !== 'undefined' && appConfig) ? appConfig : JSON.parse(localStorage.getItem('orbibot_config') || '{}');
         const ttsCfg = currentCfg.tts || {};
         const isBroadcaster = Boolean(tags.badges?.broadcaster === '1' || tags.username === channel.toLowerCase());
         const isModOrBroadcaster = isMod || isBroadcaster;
         const firstWord = message.trim().split(' ')[0].toLowerCase();
         const trimmed = message.trim();
 
-        if (ttsCfg.enabled !== false && ttsCfg.allowChatCommand !== false) {
+        if (ttsCfg.enabled !== false) {
           const ttsCmd = (ttsCfg.chatCommand || '!tts').toLowerCase();
           const matchedVoiceCmd = findVoiceCommandOrAlias(firstWord);
 
@@ -2278,7 +2283,38 @@ function connectInBrowserTwitchBot(twitchData) {
             }
           }
 
-          if (trimmed.toLowerCase().startsWith(ttsCmd)) {
+          if (matchedVoiceCmd) {
+            const userBadges = { isMod, isSub, vip: Boolean(tags.badges?.vip), broadcaster: isBroadcaster };
+            const allowed = !matchedVoiceCmd.permissions || matchedVoiceCmd.permissions.includes('todos') ||
+              (userBadges.broadcaster && matchedVoiceCmd.permissions.includes('broadcaster')) ||
+              (userBadges.isMod && matchedVoiceCmd.permissions.includes('mod')) ||
+              (userBadges.isSub && matchedVoiceCmd.permissions.includes('sub')) ||
+              (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
+
+            if (allowed) {
+              const voiceText = trimmed.slice(firstWord.length).trim();
+              if (voiceText) {
+                const selectedVoice = matchedVoiceCmd.voiceId || ttsCfg.voice || 'es_mx_mia';
+                const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
+                const ttsData = {
+                  id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                  user: username,
+                  text: voiceText,
+                  voice: selectedVoice,
+                  voiceName: matchedVoiceCmd.name || (VOICE_PROFILES[selectedVoice]?.name || selectedVoice),
+                  volume: Number(matchedVoiceCmd.volume !== undefined ? matchedVoiceCmd.volume : (ttsCfg.volume || 90)) / 100,
+                  rate: Number(matchedVoiceCmd.rate || ttsCfg.rate || 1.0),
+                  pitch: Number(matchedVoiceCmd.pitch || ttsCfg.pitch || 1.0),
+                  audioUrl: ttsAudioUrl,
+                  channel,
+                  platform: 'twitch',
+                  timestamp: Date.now()
+                };
+                broadcastEvent('tts', ttsData);
+                return;
+              }
+            }
+          } else if (ttsCfg.allowChatCommand !== false && trimmed.toLowerCase().startsWith(ttsCmd)) {
             let ttsRaw = trimmed.slice(ttsCmd.length).trim();
             if (ttsRaw) {
               let selectedVoice = ttsCfg.voice || 'es_mx_mia';
@@ -2302,39 +2338,10 @@ function connectInBrowserTwitchBot(twitchData) {
                   user: username,
                   text: ttsRaw,
                   voice: selectedVoice,
+                  voiceName: VOICE_PROFILES[selectedVoice]?.name || selectedVoice,
                   volume: Number(ttsCfg.volume !== undefined ? ttsCfg.volume : 90) / 100,
                   rate: Number(ttsCfg.rate || 1.0),
                   pitch: Number(ttsCfg.pitch || 1.0),
-                  audioUrl: ttsAudioUrl,
-                  channel,
-                  platform: 'twitch',
-                  timestamp: Date.now()
-                };
-                broadcastEvent('tts', ttsData);
-                return;
-              }
-            }
-          } else if (matchedVoiceCmd) {
-            const userBadges = { isMod, isSub, vip: Boolean(tags.badges?.vip), broadcaster: isBroadcaster };
-            const allowed = !matchedVoiceCmd.permissions || matchedVoiceCmd.permissions.includes('todos') ||
-              (userBadges.broadcaster && matchedVoiceCmd.permissions.includes('broadcaster')) ||
-              (userBadges.isMod && matchedVoiceCmd.permissions.includes('mod')) ||
-              (userBadges.isSub && matchedVoiceCmd.permissions.includes('sub')) ||
-              (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
-
-            if (allowed) {
-              const voiceText = trimmed.slice(firstWord.length).trim();
-              if (voiceText) {
-                const selectedVoice = matchedVoiceCmd.voiceId || ttsCfg.voice || 'es_mx_mia';
-                const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
-                const ttsData = {
-                  id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-                  user: username,
-                  text: voiceText,
-                  voice: selectedVoice,
-                  volume: Number(matchedVoiceCmd.volume !== undefined ? matchedVoiceCmd.volume : (ttsCfg.volume || 90)) / 100,
-                  rate: Number(matchedVoiceCmd.rate || ttsCfg.rate || 1.0),
-                  pitch: Number(matchedVoiceCmd.pitch || ttsCfg.pitch || 1.0),
                   audioUrl: ttsAudioUrl,
                   channel,
                   platform: 'twitch',
@@ -2360,7 +2367,7 @@ function connectInBrowserTwitchBot(twitchData) {
                 body: JSON.stringify({ channel, by: username })
               }).catch(() => {});
               if (typeof togglePausePlaySongRequest === 'function') {
-                const state = currentSrState || getLocalSrState();
+                const state = getLocalSrState();
                 if (state.isPlaying !== false) togglePausePlaySongRequest();
               }
             }
@@ -2375,7 +2382,7 @@ function connectInBrowserTwitchBot(twitchData) {
                 body: JSON.stringify({ channel, by: username })
               }).catch(() => {});
               if (typeof togglePausePlaySongRequest === 'function') {
-                const state = currentSrState || getLocalSrState();
+                const state = getLocalSrState();
                 if (state.isPlaying === false) togglePausePlaySongRequest();
               }
             }
@@ -2392,23 +2399,28 @@ function connectInBrowserTwitchBot(twitchData) {
           if (message.trim().toLowerCase().startsWith(srPrefix)) {
             const q = message.trim().slice(srPrefix.length).trim();
             if (q) {
+              let handledLocally = false;
               fetch('/api/sr/add', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ query: q, requester: username, isMod: isModOrBroadcaster, isSub, channel })
               }).then(r => {
-                if (!r.ok && typeof handleClientSongRequest === 'function') {
+                if (!r.ok && typeof handleClientSongRequest === 'function' && !handledLocally) {
+                  handledLocally = true;
                   handleClientSongRequest(q, username, false);
                 }
               }).catch(() => {
-                if (typeof handleClientSongRequest === 'function') {
+                if (typeof handleClientSongRequest === 'function' && !handledLocally) {
+                  handledLocally = true;
                   handleClientSongRequest(q, username, false);
                 }
               });
             }
           }
         }
-      } catch (e) { }
+      } catch (e) {
+        console.warn('Error processing Twitch chat command in browser:', e);
+      }
     });
 
     // Capturar canjes de Puntos de Canal sin texto vía raw_message / USERNOTICE
@@ -2718,7 +2730,7 @@ async function handleBrowserChannelPointRedemption(customRewardId, username, mes
 let browserKickWs = null;
 
 function connectInBrowserKickBot(kickData) {
-  const channel = (kickData?.channel || kickData?.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').trim();
+  const channel = (kickData?.channel || kickData?.username || (!adminTargetStreamerId ? localStorage.getItem('orbibot_kick_channel') : '') || '').toLowerCase().replace(/^@/, '').trim();
   if (!channel) return;
 
   const isGitHubPages = location.hostname.endsWith('github.io');
@@ -2729,8 +2741,8 @@ function connectInBrowserKickBot(kickData) {
     browserKickWs = null;
   }
 
-  // Si el backend de Node está activo, el servidor ya maneja Kick con kickBot.js para evitar doble ejecución
-  if (isBackendRunning) {
+  // Si el backend de Node está activo y NO estamos en modo asistencia, el servidor ya maneja Kick con kickBot.js para evitar doble ejecución
+  if (isBackendRunning && !adminTargetStreamerId) {
     return;
   }
 
@@ -2768,7 +2780,7 @@ function connectInBrowserKickBot(kickData) {
       };
 
       browserKickWs.onmessage = (ev) => {
-        if (socket && socket.readyState === 1) {
+        if (socket && socket.readyState === 1 && !adminTargetStreamerId) {
           try { browserKickWs.close(); } catch(e) {}
           browserKickWs = null;
           return;
@@ -2806,10 +2818,10 @@ function connectInBrowserKickBot(kickData) {
 
             const trimmed = message.trim();
             const firstWord = trimmed.split(' ')[0].toLowerCase();
-            const currentCfg = JSON.parse(localStorage.getItem('orbibot_config') || '{}');
+            const currentCfg = (typeof appConfig !== 'undefined' && appConfig) ? appConfig : JSON.parse(localStorage.getItem('orbibot_config') || '{}');
 
             // 1. PROCESAMIENTO DE SONG REQUEST EN KICK
-            const srCfg = currentCfg.songRequest || appConfig?.songRequest || {};
+            const srCfg = currentCfg.songRequest || {};
             const srPrefix = (srCfg.prefix || '!sr').toLowerCase();
             if (srCfg.enabled !== false) {
               if (firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
@@ -2820,7 +2832,7 @@ function connectInBrowserKickBot(kickData) {
                     body: JSON.stringify({ channel, by: username })
                   }).catch(() => {});
                   if (typeof togglePausePlaySongRequest === 'function') {
-                    const state = currentSrState || getLocalSrState();
+                    const state = getLocalSrState();
                     if (state.isPlaying !== false) togglePausePlaySongRequest();
                   }
                 }
@@ -2835,7 +2847,7 @@ function connectInBrowserKickBot(kickData) {
                     body: JSON.stringify({ channel, by: username })
                   }).catch(() => {});
                   if (typeof togglePausePlaySongRequest === 'function') {
-                    const state = currentSrState || getLocalSrState();
+                    const state = getLocalSrState();
                     if (state.isPlaying === false) togglePausePlaySongRequest();
                   }
                 }
@@ -2852,16 +2864,19 @@ function connectInBrowserKickBot(kickData) {
               if (trimmed.toLowerCase().startsWith(srPrefix)) {
                 const q = trimmed.slice(srPrefix.length).trim();
                 if (q) {
+                  let handledLocally = false;
                   fetch('/api/sr/add', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ query: q, requester: username, isMod: isModOrBroadcaster, isSub, channel })
                   }).then(r => {
-                    if (!r.ok && typeof handleClientSongRequest === 'function') {
+                    if (!r.ok && typeof handleClientSongRequest === 'function' && !handledLocally) {
+                      handledLocally = true;
                       handleClientSongRequest(q, username, false);
                     }
                   }).catch(() => {
-                    if (typeof handleClientSongRequest === 'function') {
+                    if (typeof handleClientSongRequest === 'function' && !handledLocally) {
+                      handledLocally = true;
                       handleClientSongRequest(q, username, false);
                     }
                   });
@@ -2871,8 +2886,8 @@ function connectInBrowserKickBot(kickData) {
             }
 
             // 2. PROCESAMIENTO DE TTS EN KICK
-            const ttsConfig = currentCfg.tts || appConfig?.tts || {};
-            if (ttsConfig.enabled !== false && ttsConfig.allowChatCommand !== false) {
+            const ttsConfig = currentCfg.tts || {};
+            if (ttsConfig.enabled !== false) {
               const ttsCmd = (ttsConfig.chatCommand || '!tts').toLowerCase();
               const matchedVoiceCmd = findVoiceCommandOrAlias(firstWord);
 
@@ -2895,7 +2910,38 @@ function connectInBrowserKickBot(kickData) {
                 }
               }
 
-              if (trimmed.toLowerCase().startsWith(ttsCmd)) {
+              if (matchedVoiceCmd) {
+                const userBadges = { isMod, isSub, vip: badges.some(b => b.type === 'vip'), broadcaster: isBroadcaster };
+                const allowed = !matchedVoiceCmd.permissions || matchedVoiceCmd.permissions.includes('todos') ||
+                  (userBadges.broadcaster && matchedVoiceCmd.permissions.includes('broadcaster')) ||
+                  (userBadges.isMod && matchedVoiceCmd.permissions.includes('mod')) ||
+                  (userBadges.isSub && matchedVoiceCmd.permissions.includes('sub')) ||
+                  (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
+
+                if (allowed) {
+                  const voiceText = trimmed.slice(firstWord.length).trim();
+                  if (voiceText) {
+                    const selectedVoice = matchedVoiceCmd.voiceId || ttsConfig.voice || 'es_mx_mia';
+                    const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
+                    const ttsData = {
+                      id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                      user: username,
+                      text: voiceText,
+                      voice: selectedVoice,
+                      voiceName: matchedVoiceCmd.name || (VOICE_PROFILES[selectedVoice]?.name || selectedVoice),
+                      volume: Number(matchedVoiceCmd.volume !== undefined ? matchedVoiceCmd.volume : (ttsConfig.volume || 90)) / 100,
+                      rate: Number(matchedVoiceCmd.rate || ttsConfig.rate || 1.0),
+                      pitch: Number(matchedVoiceCmd.pitch || ttsConfig.pitch || 1.0),
+                      audioUrl: ttsAudioUrl,
+                      channel,
+                      platform: 'kick',
+                      timestamp: Date.now()
+                    };
+                    broadcastEvent('tts', ttsData);
+                    return;
+                  }
+                }
+              } else if (ttsConfig.allowChatCommand !== false && trimmed.toLowerCase().startsWith(ttsCmd)) {
                 let ttsRaw = trimmed.slice(ttsCmd.length).trim();
                 if (ttsRaw) {
                   let selectedVoice = ttsConfig.voice || 'es_mx_mia';
@@ -2919,39 +2965,10 @@ function connectInBrowserKickBot(kickData) {
                       user: username,
                       text: ttsRaw,
                       voice: selectedVoice,
+                      voiceName: VOICE_PROFILES[selectedVoice]?.name || selectedVoice,
                       volume: Number(ttsConfig.volume !== undefined ? ttsConfig.volume : 90) / 100,
                       rate: Number(ttsConfig.rate || 1.0),
                       pitch: Number(ttsConfig.pitch || 1.0),
-                      audioUrl: ttsAudioUrl,
-                      channel,
-                      platform: 'kick',
-                      timestamp: Date.now()
-                    };
-                    broadcastEvent('tts', ttsData);
-                    return;
-                  }
-                }
-              } else if (matchedVoiceCmd) {
-                const userBadges = { isMod, isSub, vip: badges.some(b => b.type === 'vip'), broadcaster: isBroadcaster };
-                const allowed = !matchedVoiceCmd.permissions || matchedVoiceCmd.permissions.includes('todos') ||
-                  (userBadges.broadcaster && matchedVoiceCmd.permissions.includes('broadcaster')) ||
-                  (userBadges.isMod && matchedVoiceCmd.permissions.includes('mod')) ||
-                  (userBadges.isSub && matchedVoiceCmd.permissions.includes('sub')) ||
-                  (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
-
-                if (allowed) {
-                  const voiceText = trimmed.slice(firstWord.length).trim();
-                  if (voiceText) {
-                    const selectedVoice = matchedVoiceCmd.voiceId || ttsConfig.voice || 'es_mx_mia';
-                    const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
-                    const ttsData = {
-                      id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-                      user: username,
-                      text: voiceText,
-                      voice: selectedVoice,
-                      volume: Number(matchedVoiceCmd.volume !== undefined ? matchedVoiceCmd.volume : (ttsConfig.volume || 90)) / 100,
-                      rate: Number(matchedVoiceCmd.rate || ttsConfig.rate || 1.0),
-                      pitch: Number(matchedVoiceCmd.pitch || ttsConfig.pitch || 1.0),
                       audioUrl: ttsAudioUrl,
                       channel,
                       platform: 'kick',
@@ -3573,6 +3590,9 @@ let currentSrState = {
 };
 
 function getLocalSrState() {
+  if (adminTargetStreamerId && currentSrState) {
+    return currentSrState;
+  }
   try {
     const saved = localStorage.getItem('orbibot_sr_state');
     if (saved) return JSON.parse(saved);
@@ -3582,9 +3602,11 @@ function getLocalSrState() {
 
 function saveLocalSrState(state, syncCloud = true) {
   currentSrState = state;
-  try {
-    localStorage.setItem('orbibot_sr_state', JSON.stringify(state));
-  } catch(e) {}
+  if (!adminTargetStreamerId) {
+    try {
+      localStorage.setItem('orbibot_sr_state', JSON.stringify(state));
+    } catch(e) {}
+  }
   if (syncCloud) {
     saveToAllSupabaseScopes('sr_state', state).catch(() => {});
   }
@@ -10078,6 +10100,14 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     loadTTSQueue();
   }
 
+  // Conectar bots de chat en navegador al canal del streamer asistido
+  if (appConfig?.twitch && (appConfig.twitch.channel || appConfig.twitch.login || streamerId)) {
+    connectInBrowserTwitchBot(appConfig.twitch);
+  }
+  if (appConfig?.kick && (appConfig.kick.channel || appConfig.kick.username || streamerId)) {
+    connectInBrowserKickBot(appConfig.kick);
+  }
+
   switchTab('tab-dashboard');
   showToast(`✅ Modo Asistencia Activo para @${displayName || streamerId}. Viendo el panel y widgets exactamente como el streamer.`, 'success');
 }
@@ -10186,6 +10216,20 @@ function exitAdminSupportMode() {
   }
   if (typeof loadTTSQueue === 'function') {
     loadTTSQueue();
+  }
+
+  // Restaurar conexión de chat a canales originales del superadmin
+  if (appConfig?.twitch && (appConfig.twitch.channel || appConfig.twitch.login)) {
+    connectInBrowserTwitchBot(appConfig.twitch);
+  } else if (browserTmiClient) {
+    try { browserTmiClient.disconnect(); } catch (e) { }
+    browserTmiClient = null;
+  }
+  if (appConfig?.kick && (appConfig.kick.channel || appConfig.kick.username)) {
+    connectInBrowserKickBot(appConfig.kick);
+  } else if (browserKickWs) {
+    try { browserKickWs.close(); } catch (e) { }
+    browserKickWs = null;
   }
 
   bindConfigToUI(appConfig);
