@@ -455,10 +455,10 @@ app.post('/api/admin/streamer/:streamerId', async (req, res) => {
 });
 
 // Listar administradores registrados
-app.get('/api/admin/list', async (req, res) => {
+app.all('/api/admin/list', async (req, res) => {
   try {
     const admins = await storage.getAdmins();
-    res.json({ success: true, admins });
+    res.json({ success: true, count: admins.length, admins });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }

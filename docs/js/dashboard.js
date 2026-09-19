@@ -10370,7 +10370,8 @@ function handleTtsGlobalChatToggle(enabled) {
 
 // Export admin and TTS master functions to window
 window.checkAdminStatus = checkAdminStatus;
-window.loadAdminStreamersList = loadAdminStreamersList;
+window.loadStreamersSupportList = loadStreamersSupportList;
+window.loadAdminStreamersList = loadStreamersSupportList;
 window.renderAdminStreamersList = renderAdminStreamersList;
 window.filterAdminStreamersList = filterAdminStreamersList;
 window.enterStreamerSupportMode = enterStreamerSupportMode;
@@ -10382,6 +10383,11 @@ window.renderAdminsList = renderAdminsList;
 window.handleAddNewAdmin = handleAddNewAdmin;
 window.handleRemoveAdmin = handleRemoveAdmin;
 window.handleTtsGlobalChatToggle = handleTtsGlobalChatToggle;
+
+// Alias de compatibilidad
+function loadAdminStreamersList(force) {
+  return loadStreamersSupportList();
+}
 
 
 
