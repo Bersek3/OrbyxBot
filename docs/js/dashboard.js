@@ -5946,7 +5946,10 @@ async function loadTTSQueue(showFeedback = false) {
   if (!container) return;
 
   try {
-    const res = await fetch('/api/tts/queue');
+    const room = getActiveStreamerRoom();
+    const token = getEffectiveWidgetToken();
+    const qs = room && room !== 'default' ? `?channel=${encodeURIComponent(room)}&token=${encodeURIComponent(token || '')}` : '';
+    const res = await fetch(`/api/tts/queue${qs}`);
     if (res.ok) {
       const data = await res.json();
       cachedTTSQueue.queue = Array.isArray(data.queue) ? data.queue : [];
@@ -6844,14 +6847,16 @@ async function syncTwitchRewardsUI() {
 
     // 1. Intentar obtener a través del backend
     try {
-      const res = await fetch('/api/rewards/twitch');
+      const targetStreamer = adminTargetStreamerId || '';
+      const qs = targetStreamer ? `?streamerId=${encodeURIComponent(targetStreamer)}` : '';
+      const res = await fetch(`/api/rewards/twitch${qs}`);
       if (res.ok) {
         const data = await res.json();
         if (data.success && Array.isArray(data.rewards)) {
           twRewards = data.rewards;
         }
       } else if (res.status === 403) {
-        showToast('ℹ️ Tu canal de Twitch debe tener estado de Afiliado o Partner para usar Puntos de Canal.', 'warn');
+        showToast('ℹ️ El canal de Twitch debe tener estado de Afiliado o Partner para usar Puntos de Canal.', 'warn');
         return;
       }
     } catch (e) { }
@@ -6869,7 +6874,9 @@ async function syncTwitchRewardsUI() {
             clientId = valData.client_id || clientId;
             twitchCfg.userId = userId;
             twitchCfg.clientId = clientId;
-            localStorage.setItem('orbibot_twitch_auth', JSON.stringify(twitchCfg));
+            if (!adminTargetStreamerId) {
+              localStorage.setItem('orbibot_twitch_auth', JSON.stringify(twitchCfg));
+            }
           }
         } catch (e) { }
       }
@@ -6897,12 +6904,14 @@ async function syncTwitchRewardsUI() {
 
     if (twRewards.length > 0) {
       // Sincronizar automáticamente IDs de las recompensas ya configuradas
-      let localRewards = [];
-      try {
-        localRewards = await fetch('/api/rewards').then(r => r.json()).catch(() => []);
-      } catch (e) { }
-      if (!Array.isArray(localRewards) || localRewards.length === 0) {
-        localRewards = JSON.parse(localStorage.getItem('orbibot_rewards') || '[]');
+      let localRewards = (typeof cachedRewards !== 'undefined' && Array.isArray(cachedRewards) && cachedRewards.length > 0) ? cachedRewards : [];
+      if (!adminTargetStreamerId && localRewards.length === 0) {
+        try {
+          localRewards = await fetch('/api/rewards').then(r => r.json()).catch(() => []);
+        } catch (e) { }
+        if (!Array.isArray(localRewards) || localRewards.length === 0) {
+          localRewards = JSON.parse(localStorage.getItem('orbibot_rewards') || '[]');
+        }
       }
 
       let updated = false;
@@ -6914,16 +6923,21 @@ async function syncTwitchRewardsUI() {
         }
       });
 
-      if (updated) {
-        try {
-          await fetch('/api/rewards', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(localRewards)
-          });
-        } catch (e) { }
-        localStorage.setItem('orbibot_rewards', JSON.stringify(localRewards));
+      if (updated || adminTargetStreamerId) {
+        cachedRewards = localRewards;
         renderRewards(localRewards);
+        if (adminTargetStreamerId) {
+          saveAdminSupportChanges();
+        } else {
+          try {
+            await fetch('/api/rewards', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(localRewards)
+            });
+          } catch (e) { }
+          localStorage.setItem('orbibot_rewards', JSON.stringify(localRewards));
+        }
       }
 
       showToast(`¡${twRewards.length} recompensas de Twitch encontradas y listas para seleccionar!`, 'success');
@@ -10053,6 +10067,19 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   updateWidgetUrls();
   if (typeof initWidgetCustomization === 'function') initWidgetCustomization();
 
+  // Re-suscribir WebSocket y MQTT a la sala del streamer asistido
+  const targetRoom = getActiveStreamerRoom();
+  const effectiveToken = getEffectiveWidgetToken();
+  if (socket && socket.readyState === 1) {
+    socket.send(JSON.stringify({ action: 'join', room: targetRoom, channel: targetRoom, token: effectiveToken }));
+  }
+  if (typeof initDashboardMqtt === 'function') {
+    initDashboardMqtt();
+  }
+  if (typeof loadTTSQueue === 'function') {
+    loadTTSQueue();
+  }
+
   switchTab('tab-dashboard');
   showToast(`✅ Modo Asistencia Activo para @${displayName || streamerId}. Viendo el panel y widgets exactamente como el streamer.`, 'success');
 }
@@ -10140,11 +10167,32 @@ function exitAdminSupportMode() {
     if (typeof renderTTSCommands === 'function') renderTTSCommands(cachedTTSCommands);
     adminOriginalTTS = null;
   }
+  if (typeof adminOriginalSongRequest !== 'undefined' && adminOriginalSongRequest && typeof updateSongRequestUI === 'function') {
+    updateSongRequestUI(adminOriginalSongRequest, false);
+    adminOriginalSongRequest = null;
+  }
 
   adminTargetStreamerId = null;
 
   const banner = document.getElementById('adminSupportModeBanner');
   if (banner) banner.style.display = 'none';
+
+  // Re-suscribir WebSocket y MQTT a la sala original del Superadmin
+  const originalRoom = getActiveStreamerRoom();
+  const originalToken = getEffectiveWidgetToken();
+  if (socket && socket.readyState === 1) {
+    socket.send(JSON.stringify({ action: 'join', room: originalRoom, channel: originalRoom, token: originalToken }));
+  }
+  if (typeof initDashboardMqtt === 'function') {
+    initDashboardMqtt();
+  }
+  if (typeof loadTTSQueue === 'function') {
+    loadTTSQueue();
+  }
+
+  bindConfigToUI(appConfig);
+  updatePlatformLinkingUI();
+  updateWidgetUrls();
 
   switchTab('tab-admin');
   showToast('Has salido del Modo Asistencia. Volviste a tu panel de Administrador.', 'info');

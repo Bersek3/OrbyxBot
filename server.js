@@ -1063,10 +1063,17 @@ app.post('/api/rewards/delete', (req, res) => {
 // Fetch Twitch Channel Points Custom Rewards from Twitch Helix
 app.get('/api/rewards/twitch', async (req, res) => {
   try {
-    const config = storage.getConfig();
+    let config = storage.getConfig();
+    const streamerId = req.query.streamerId || req.query.channel || req.headers['x-streamer-id'];
+    if (streamerId) {
+      const full = await storage.getStreamerFullConfig(streamerId);
+      if (full && full.config) {
+        config = full.config;
+      }
+    }
     const twitchCfg = config.twitch || {};
     if (!twitchCfg.oauthToken) {
-      return res.status(400).json({ success: false, message: 'Twitch no está autenticado.' });
+      return res.status(400).json({ success: false, message: 'Twitch no está autenticado para este streamer.' });
     }
 
     const cleanToken = twitchCfg.oauthToken.replace(/^oauth:/i, '').trim();
@@ -1083,7 +1090,11 @@ app.get('/api/rewards/twitch', async (req, res) => {
           const valData = await valRes.json();
           userId = valData.user_id;
           clientId = valData.client_id || clientId;
-          storage.saveConfig({ twitch: { ...twitchCfg, userId, clientId } });
+          if (streamerId) {
+            await storage.saveStreamerFullConfig(streamerId, { config: { ...config, twitch: { ...twitchCfg, userId, clientId } } });
+          } else {
+            storage.saveConfig({ twitch: { ...twitchCfg, userId, clientId } });
+          }
         }
       } catch (e) { }
     }
