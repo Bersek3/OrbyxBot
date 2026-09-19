@@ -505,6 +505,8 @@
 
     // Deduplicación robusta de eventos TTS para prevenir que se añadan dos veces a la cola
     const recentTtsMap = new Map();
+    const playedTtsIds = new Set();
+
     function isDuplicateTts(msg) {
       if (!msg) return true;
       const data = msg.data || msg;
@@ -513,9 +515,21 @@
       const rawId = msg.id || data.id || '';
       const now = Date.now();
 
-      // Limpiar entradas antiguas mayores a 12 segundos
+      // Descartar mensajes viejos (más de 25 segundos) procedentes de reconexión o re-lectura de localStorage
+      const msgTimestamp = data.timestamp || msg.timestamp;
+      if (msgTimestamp && (now - Number(msgTimestamp)) > 25000) {
+        console.log('[TTS Overlay] Mensaje ignorado por antigüedad (>25s):', text.substring(0, 30));
+        return true;
+      }
+
+      // Si el ID ya fue reproducido en esta sesión, descartar
+      if (rawId && playedTtsIds.has(rawId)) {
+        return true;
+      }
+
+      // Limpiar entradas antiguas mayores a 60 segundos
       for (const [key, ts] of recentTtsMap.entries()) {
-        if (now - ts > 12000) recentTtsMap.delete(key);
+        if (now - ts > 60000) recentTtsMap.delete(key);
       }
 
       if (rawId && recentTtsMap.has('id_' + rawId)) {
@@ -534,7 +548,10 @@
         return true;
       }
 
-      if (rawId) recentTtsMap.set('id_' + rawId, now);
+      if (rawId) {
+        recentTtsMap.set('id_' + rawId, now);
+        playedTtsIds.add(rawId);
+      }
       if (user && (normalizedText || text)) recentTtsMap.set(contentKey, now);
 
       return false;
@@ -673,6 +690,11 @@
           });
 
           tmiClient.on('message', (ch, tags, message, self) => {
+            // Si el WebSocket local está activo, el backend de OrbiBot ya procesa y emite el TTS con permisos y cola centralizada.
+            if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+              return;
+            }
+
             const username = tags['display-name'] || tags.username || 'Espectador';
             const trimmed = (message || '').trim();
             if (!trimmed) return;
@@ -700,7 +722,8 @@
                   text: voiceText,
                   voice: matchedVoice,
                   audioUrl: audioUrl,
-                  channel: ch
+                  channel: ch,
+                  timestamp: Date.now()
                 };
                 handleIncomingMessage({ event: 'tts', data: ttsData });
               }
@@ -716,15 +739,15 @@
       }
     }
 
+    let wsInstance = null;
+    let wsReconnectTimeout = null;
+
     function connectChannels() {
       if (myStreamerKey) {
         initTwitchChatIRC(myStreamerKey);
       }
 
       // 1. Local WebSocket con reconexión automática en segundo plano
-      let wsInstance = null;
-      let wsReconnectTimeout = null;
-
       function connectLocalWs(url) {
         if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
         try {
