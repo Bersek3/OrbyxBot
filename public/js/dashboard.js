@@ -7065,12 +7065,23 @@ async function syncTwitchRewardsUI() {
   try {
     let twRewards = [];
     const config = appConfig || JSON.parse(localStorage.getItem('orbibot_config') || '{}');
-    const twitchCfg = config.twitch || {};
+    let twitchCfg = config.twitch || {};
+
+    // Si NO estamos en modo soporte, verificar además orbibot_twitch_auth guardado del admin
+    if (!adminTargetStreamerId) {
+      try {
+        const storedAuth = JSON.parse(localStorage.getItem('orbibot_twitch_auth') || '{}');
+        if (storedAuth && (storedAuth.oauthToken || storedAuth.userId)) {
+          twitchCfg = { ...twitchCfg, ...storedAuth };
+        }
+      } catch (e) {}
+    }
 
     if (!twitchCfg.oauthToken) {
       showToast('⚠️ Primero vincula tu cuenta de Twitch en el Panel General.', 'warn');
       return;
     }
+
 
     const cleanToken = twitchCfg.oauthToken.replace(/^oauth:/i, '').trim();
     let userId = twitchCfg.userId;
@@ -10662,93 +10673,28 @@ async function saveAdminSupportChanges() {
 
 // 7. exitAdminSupportMode()
 function exitAdminSupportMode() {
-  if (!adminTargetStreamerId) return;
-
   clearSupportModeStorage();
-
-  if (adminOriginalConfig) {
-    appConfig = adminOriginalConfig;
-    adminOriginalConfig = null;
-  }
-  if (adminOriginalCommands !== null) {
-    cachedCommands = adminOriginalCommands;
-    if (typeof renderCommands === 'function') renderCommands(cachedCommands);
-    adminOriginalCommands = null;
-  }
-  if (typeof adminOriginalRewards !== 'undefined' && adminOriginalRewards) {
-    cachedRewards = adminOriginalRewards;
-    if (typeof renderRewards === 'function') renderRewards(cachedRewards);
-    adminOriginalRewards = null;
-  }
-  if (typeof adminOriginalTTS !== 'undefined' && adminOriginalTTS) {
-    cachedTTSCommands = adminOriginalTTS;
-    if (typeof renderTTSCommands === 'function') renderTTSCommands(cachedTTSCommands);
-    adminOriginalTTS = null;
-  }
-  if (typeof adminOriginalSongRequest !== 'undefined' && adminOriginalSongRequest && typeof updateSongRequestUI === 'function') {
-    updateSongRequestUI(adminOriginalSongRequest, false);
-    adminOriginalSongRequest = null;
-  }
-
   adminTargetStreamerId = null;
+  adminOriginalConfig = null;
+  adminOriginalCommands = null;
+  adminOriginalRewards = null;
+  adminOriginalTTS = null;
+  adminOriginalSongRequest = null;
+  adminOriginalGoals = null;
 
   const banner = document.getElementById('adminSupportModeBanner');
   if (banner) banner.style.display = 'none';
 
-  // Re-suscribir WebSocket y MQTT a la sala original del Superadmin
-  const originalRoom = getActiveStreamerRoom();
-  const originalToken = getEffectiveWidgetToken();
-  if (socket && socket.readyState === 1) {
-    socket.send(JSON.stringify({ action: 'join', room: originalRoom, channel: originalRoom, token: originalToken }));
-  }
-  if (typeof initDashboardMqtt === 'function') {
-    initDashboardMqtt();
-  }
-  if (typeof loadTTSQueue === 'function') {
-    loadTTSQueue();
-  }
+  // Recarga limpia para restaurar al 100% la cuenta y credenciales personales del administrador
+  try {
+    sessionStorage.setItem('orbibot_current_tab', 'tab-admin');
+    localStorage.setItem('orbibot_current_tab', 'tab-admin');
+  } catch (e) {}
 
-  // Limpiar chat en vivo al volver al canal del admin
-  const adminChan = (appConfig?.twitch?.channel || '').replace(/^#/, '');
-  const liveChatEl = document.getElementById('liveChatMessages');
-  if (liveChatEl) {
-    liveChatEl.innerHTML = adminChan
-      ? `<div class="chat-msg-row" style="color: var(--cyan-accent);"><em>🟢 Conectado al chat de #${adminChan}. Esperando mensajes...</em></div>`
-      : `<div class="chat-msg-row" style="color: var(--text-muted);"><em>Conecta tu canal de Twitch para ver los mensajes del chat en tiempo real.</em></div>`;
-  }
-  const chatNoticeEl = document.getElementById('chatStatusNotice');
-  if (chatNoticeEl) {
-    chatNoticeEl.innerText = adminChan ? `🟢 En línea (#${adminChan})` : 'Esperando mensajes...';
-  }
-
-  // Desconectar EventSub previo
-  if (browserEventSubWs) {
-    try { browserEventSubWs.close(); } catch (e) { }
-    browserEventSubWs = null;
-    activeBrowserEventSubUserId = null;
-  }
-
-  // Restaurar conexión de chat a canales originales del superadmin
-  if (appConfig?.twitch && (appConfig.twitch.channel || appConfig.twitch.login)) {
-    connectInBrowserTwitchBot(appConfig.twitch);
-  } else if (browserTmiClient) {
-    try { browserTmiClient.disconnect(); } catch (e) { }
-    browserTmiClient = null;
-  }
-  if (appConfig?.kick && (appConfig.kick.channel || appConfig.kick.username)) {
-    connectInBrowserKickBot(appConfig.kick);
-  } else if (browserKickWs) {
-    try { browserKickWs.close(); } catch (e) { }
-    browserKickWs = null;
-  }
-
-  bindConfigToUI(appConfig);
-  updatePlatformLinkingUI();
-  updateWidgetUrls();
-
-  switchTab('tab-admin');
-  showToast('Has salido del Modo Asistencia. Volviste a tu panel de Administrador.', 'info');
+  window.location.href = window.location.pathname + '#tab-admin';
+  window.location.reload();
 }
+
 
 // 8. handleAdminManualStreamerSupport()
 function handleAdminManualStreamerSupport() {
