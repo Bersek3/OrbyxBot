@@ -413,7 +413,6 @@
           tmiClient.connect().catch(console.error);
 
           tmiClient.on('message', (ch, tags, message, self) => {
-            if (self) return;
             const username = tags['display-name'] || tags.username;
             const isMod = tags.mod || tags.badges?.broadcaster === '1';
             const isSub = tags.subscriber || tags.badges?.subscriber !== undefined;
