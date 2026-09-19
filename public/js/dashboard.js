@@ -2219,8 +2219,11 @@ function connectInBrowserTwitchBot(twitchData) {
   if (!rawChannel && twitchData.displayName && !twitchData.displayName.includes('@')) {
     rawChannel = twitchData.displayName;
   }
-  const channel = (rawChannel || '').toLowerCase().replace(/^#/, '').trim();
-  if (!channel || channel.includes('@') || !/^[a-z0-9_]+$/.test(channel)) {
+  // Eliminar paréntesis, corchetes y espacios extra (ej. "plantasi (plantasi)" -> "plantasi")
+  rawChannel = (rawChannel || '').replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').trim();
+  const channel = rawChannel.toLowerCase().replace(/[^a-z0-9_]/g, '').trim();
+
+  if (!channel || !/^[a-z0-9_]+$/.test(channel)) {
     console.warn(`⚠️ [Dashboard Twitch IRC] Canal de Twitch no es válido para conexión IRC ("${rawChannel || 'vacío'}").`);
     updateBotStatusUI({ status: 'disconnected' });
     return;
@@ -10141,8 +10144,11 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     }
   }
 
-  // Asegurar que las plataformas de chat en el panel estén activas
+  // Asegurar que las plataformas de chat en el panel estén activas y los nombres de canal estén limpios
   targetCfg.chatPlatforms = { twitch: true, kick: true };
+  if (targetCfg.twitch && targetCfg.twitch.channel) {
+    targetCfg.twitch.channel = targetCfg.twitch.channel.replace(/\([^)]*\)/g, '').replace(/\[[^\]]*\]/g, '').replace(/[^a-zA-Z0-9_]/g, '').trim();
+  }
 
   // Respaldar estado original del Superadmin
   if (!adminOriginalConfig) {
