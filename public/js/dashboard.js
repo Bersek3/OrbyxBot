@@ -2211,9 +2211,6 @@ function connectInBrowserTwitchBot(twitchData) {
         // Procesamiento de comandos de Song Request desde el chat en cliente de navegador
         const srCfg = currentCfg.songRequest || {};
         const srPrefix = (srCfg.prefix || '!sr').toLowerCase();
-        const firstWord = message.trim().split(' ')[0].toLowerCase();
-        const isBroadcaster = Boolean(tags.badges?.broadcaster === '1' || tags.username === channel.toLowerCase());
-        const isModOrBroadcaster = isMod || isBroadcaster;
 
         if (srCfg.enabled !== false) {
           if (firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
