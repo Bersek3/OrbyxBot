@@ -455,12 +455,29 @@ class KickBot {
           }
         }
 
-        // Procesar Comandos TTS en Kick (Genérico !tts o de Voces IA ej: !messi, !homero, !dross, !rubius)
+        // Procesar Comandos TTS en Kick (Genérico !tts o de Voces IA ej: !messi, !homero, !dross, !rubius, !cr7, etc.)
         const ttsConfig = config.tts || {};
         if (ttsConfig.enabled && ttsConfig.allowChatCommand) {
           const ttsCmd = (ttsConfig.chatCommand || '!tts').toLowerCase();
           const ttsVoiceCommands = storage.getTtsCommands() || [];
-          const matchedVoiceCmd = ttsVoiceCommands.find(c => c.enabled && c.command && c.command.toLowerCase() === firstWord);
+          let matchedVoiceCmd = ttsVoiceCommands.find(c => c.enabled && c.command && c.command.toLowerCase() === firstWord);
+          if (!matchedVoiceCmd && firstWord.startsWith('!')) {
+            const token = firstWord.slice(1);
+            const resolvedVoice = ttsService.normalizeVoice(token, null);
+            if (resolvedVoice && resolvedVoice !== 'es_mx_mia') {
+              matchedVoiceCmd = {
+                id: 'tts_cmd_' + token,
+                voiceId: resolvedVoice,
+                name: token,
+                command: firstWord,
+                permissions: ['todos'],
+                enabled: true,
+                volume: 90,
+                rate: 1.0,
+                pitch: 1.0
+              };
+            }
+          }
 
           const userBadges = {
             isMod,

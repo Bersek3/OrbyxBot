@@ -236,7 +236,7 @@
     }
 
     /**
-     * Reproduce audio vía Google TTS / Web Speech API garantizando invocación única de callback onEnd
+     * Reproduce audio vía StreamElements TTS / Google TTS / Web Speech API garantizando invocación única de callback onEnd
      */
     function playTTSAudio(text, voiceKey, volume = 0.9, onEnd = null) {
       stopCurrentAudio();
@@ -246,11 +246,34 @@
       const targetLang = (profile.lang || 'es-ES').split('-')[0].toLowerCase();
       const ctx = getAudioContext();
 
+      const seVoiceMap = {
+        es_mx_mia: 'Mia', mia: 'Mia',
+        es_us_miguel: 'Miguel', miguel: 'Miguel',
+        es_us_penelope: 'Penelope', penelope: 'Penelope',
+        es_es_enrique: 'Enrique', enrique: 'Enrique',
+        es_es_conchita: 'Conchita', conchita: 'Conchita',
+        es_es_lucia: 'Lucia', lucia: 'Lucia',
+        en_brian: 'Brian', brian: 'Brian',
+        en_emma: 'Emma', emma: 'Emma',
+        en_joey: 'Joey', joey: 'Joey',
+        en_matthew: 'Matthew', matthew: 'Matthew',
+        en_kendra: 'Kendra', kendra: 'Kendra',
+        en_justin: 'Justin', justin: 'Justin',
+        en_russell: 'Russell', russell: 'Russell',
+        pt_cristiano: 'Cristiano', cristiano: 'Cristiano',
+        fr_mathieu: 'Mathieu', mathieu: 'Mathieu',
+        it_giorgio: 'Giorgio', giorgio: 'Giorgio',
+        de_hans: 'Hans', hans: 'Hans',
+        ja_takumi: 'Takumi', takumi: 'Takumi',
+        ja_mizuki: 'Mizuki', mizuki: 'Mizuki'
+      };
+
       let audioUrl = '';
-      if (fishAudioKeys.includes(cleanKey)) {
-        audioUrl = `/api/tts/audio?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(cleanKey)}`;
+      const seVoice = seVoiceMap[cleanKey];
+      if (seVoice) {
+        audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(seVoice)}&text=${encodeURIComponent(text)}`;
       } else {
-        audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${encodeURIComponent(targetLang)}&client=tw-ob`;
+        audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${encodeURIComponent(targetLang || 'es')}&client=tw-ob`;
       }
 
       const audio = new Audio();
@@ -525,23 +548,20 @@
     function handleIncomingMessage(msg) {
       if (!msg) return;
 
-      // Room / Channel Verification: descartar TTS de otros canales
+      // Room / Channel Verification: descartar TTS de otros canales solo si es claramente de otra cuenta
       if (myStreamerKey || myToken) {
         const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
         const targetToken = (msg.token || msg.data?.token || '').trim();
-        if (myStreamerKey) {
-          if (targetRoom && targetRoom !== 'default' && targetRoom !== myStreamerKey && targetRoom !== myToken && !linkedChannels.has(targetRoom)) {
-            return;
-          }
-          if (targetRoom === 'default' && myStreamerKey !== 'default') {
-            return;
-          }
-        }
-        if (myToken && targetToken && targetToken !== myToken) {
+
+        if (myToken && targetToken && myToken === targetToken) {
+          // Coincidencia exacta de token (máxima prioridad)
+        } else if (myStreamerKey && (targetRoom === myStreamerKey || targetRoom === myToken || linkedChannels.has(targetRoom) || targetRoom === 'streamer' || targetRoom === 'default')) {
+          // Coincidencia de sala o streamer
+        } else if (myToken && !targetToken && (targetRoom === myStreamerKey || linkedChannels.has(targetRoom))) {
+          // Transmisión local sin token pero mismo canal
+        } else if (targetRoom && targetRoom !== 'default' && targetRoom !== 'streamer' && myStreamerKey && targetRoom !== myStreamerKey && !linkedChannels.has(targetRoom)) {
           return;
         }
-      } else {
-        return;
       }
 
       if (msg.event === 'tts') {
@@ -686,19 +706,26 @@
       connectMqtt();
 
       // 3. BroadcastChannel & Storage aislados por streamer (sin mezclar cuentas)
-      if (typeof BroadcastChannel !== 'undefined' && (myStreamerKey || myToken)) {
-        const chanName = myStreamerKey || myToken;
-        try {
-          const bc = new BroadcastChannel('orbyxbot_stream_' + chanName);
-          bc.onmessage = (e) => handleIncomingMessage(e.data);
-        } catch(e) {}
+      if (typeof BroadcastChannel !== 'undefined') {
+        const channelsToListen = new Set(['orbibot_stream_channel', 'orbyxbot_stream_default']);
+        if (myStreamerKey) channelsToListen.add('orbyxbot_stream_' + myStreamerKey);
+        if (myToken) channelsToListen.add('orbyxbot_stream_' + myToken);
+
+        channelsToListen.forEach(chanName => {
+          try {
+            const bc = new BroadcastChannel(chanName);
+            bc.onmessage = (e) => handleIncomingMessage(e.data);
+          } catch(e) {}
+        });
       }
 
       window.addEventListener('storage', (e) => {
-        if (myStreamerKey && e.key === ('orbibot_last_event_' + myStreamerKey) && e.newValue) {
+        if (!e.newValue) return;
+        if (myStreamerKey && e.key === ('orbibot_last_event_' + myStreamerKey)) {
           try { handleIncomingMessage(JSON.parse(e.newValue)); } catch (err) {}
-        }
-        if (myToken && e.key === ('orbibot_last_event_' + myToken) && e.newValue) {
+        } else if (myToken && e.key === ('orbibot_last_event_' + myToken)) {
+          try { handleIncomingMessage(JSON.parse(e.newValue)); } catch (err) {}
+        } else if (e.key === 'orbibot_last_event') {
           try { handleIncomingMessage(JSON.parse(e.newValue)); } catch (err) {}
         }
       });

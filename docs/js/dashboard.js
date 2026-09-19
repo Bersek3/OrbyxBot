@@ -1574,48 +1574,130 @@ function initDashboardMqtt() {
   }
 }
 
+function findVoiceCommandOrAlias(firstWord) {
+  if (!firstWord || typeof firstWord !== 'string') return null;
+  const cleanCmd = firstWord.toLowerCase().trim();
+  if (!cleanCmd.startsWith('!')) return null;
+  const token = cleanCmd.slice(1).replace(/^[-@/]/, '').replace(/^voice:/, '').trim();
+  if (!token) return null;
+
+  // 1. Buscar en comandos cacheados del streamer
+  const commands = (typeof cachedTTSCommands !== 'undefined' && Array.isArray(cachedTTSCommands) && cachedTTSCommands.length)
+    ? cachedTTSCommands
+    : ((typeof appConfig !== 'undefined' && Array.isArray(appConfig?.ttsCommands) && appConfig.ttsCommands.length) ? appConfig.ttsCommands : (typeof DEFAULT_TTS_COMMANDS !== 'undefined' ? DEFAULT_TTS_COMMANDS : []));
+
+  const matched = commands.find(c => c && c.enabled !== false && c.command && c.command.toLowerCase().trim() === cleanCmd);
+  if (matched) return matched;
+
+  // 2. Buscar en DEFAULT_TTS_COMMANDS si aún no estaba en la lista local
+  if (typeof DEFAULT_TTS_COMMANDS !== 'undefined' && Array.isArray(DEFAULT_TTS_COMMANDS)) {
+    const defMatched = DEFAULT_TTS_COMMANDS.find(c => c && c.enabled !== false && c.command && c.command.toLowerCase().trim() === cleanCmd);
+    if (defMatched) return defMatched;
+  }
+
+  // 3. Catálogo Universal de Alias de Voces
+  const aliasMap = {
+    // Voces IA / Famosas (Fish Audio)
+    messi: 'es_ar_messi', lionel_messi: 'es_ar_messi', leo_messi: 'es_ar_messi',
+    maduro: 'es_ve_maduro', nicolas_maduro: 'es_ve_maduro',
+    tiktok: 'es_tiktok', voz_tiktok: 'es_tiktok',
+    homero: 'es_mx_homero', homero_simpson: 'es_mx_homero', homer: 'es_mx_homero',
+    dross: 'es_dross', drossrotzank: 'es_dross',
+    badbunny: 'es_badbunny', bad_bunny: 'es_badbunny', benito: 'es_badbunny',
+    rubius: 'es_rubius', elrubius: 'es_rubius', el_rubius: 'es_rubius',
+    farid: 'es_farid', farid_dieck: 'es_farid',
+    westcol: 'es_westcol',
+    cr7: 'es_cr7', cristiano: 'es_cr7', cristiano_ronaldo: 'es_cr7', ronaldo: 'es_cr7', bicho: 'es_cr7', siuuu: 'es_cr7',
+    goku: 'es_goku', goku_latino: 'es_goku',
+    maradona: 'es_maradona', diego_maradona: 'es_maradona',
+    xokas: 'es_xokas', elxokas: 'es_xokas', el_xokas: 'es_xokas',
+    illojuan: 'es_illojuan', illo_juan: 'es_illojuan', juan: 'es_illojuan',
+    auron: 'es_auronplay', auronplay: 'es_auronplay',
+    peruano: 'es_peruano',
+    closs: 'es_marianocloss', marianocloss: 'es_marianocloss', mariano_closs: 'es_marianocloss',
+    lacobra: 'es_lacobra', la_cobra: 'es_lacobra', cobra: 'es_lacobra',
+    davo: 'es_davo', davoxeneize: 'es_davo', davo_xeneize: 'es_davo',
+
+    // Voces Estándar / Idiomas
+    mia: 'es_mx_mia', miguel: 'es_us_miguel', lupe: 'es_us_lupe', penelope: 'es_us_penelope',
+    enrique: 'es_es_enrique', conchita: 'es_es_conchita', lucia: 'es_es_lucia',
+    brian: 'en_brian', emma: 'en_emma', joey: 'en_joey', matthew: 'en_matthew',
+    kendra: 'en_kendra', justin: 'en_justin', russell: 'en_russell',
+    giorgio: 'it_giorgio', hans: 'de_hans', takumi: 'ja_takumi', mizuki: 'ja_mizuki', mathieu: 'fr_mathieu'
+  };
+
+  const resolvedVoiceId = aliasMap[token] || (typeof VOICE_PROFILES !== 'undefined' && VOICE_PROFILES[token] ? token : (typeof VOICE_PROFILES !== 'undefined' && VOICE_PROFILES['es_' + token] ? 'es_' + token : null));
+  if (resolvedVoiceId) {
+    const profile = (typeof VOICE_PROFILES !== 'undefined' && (VOICE_PROFILES[resolvedVoiceId] || VOICE_PROFILES[token])) || {};
+    return {
+      id: 'tts_auto_' + token,
+      voiceId: resolvedVoiceId,
+      name: profile.name || token,
+      command: cleanCmd,
+      permissions: ['todos'],
+      enabled: true,
+      volume: 90,
+      rate: profile.rate || 1.0,
+      pitch: profile.pitch || 1.0
+    };
+  }
+
+  return null;
+}
+
 function broadcastEvent(event, data) {
   const room = getActiveStreamerRoom();
   const channel = (appConfig?.twitch?.channel || appConfig?.kick?.channel || room).toLowerCase().replace(/^#/, '');
   const isConn = isStreamerLoggedIn();
 
-  // Si no hay sesión iniciada, no transmitir
-  if (!isConn) {
-    console.warn('[Broadcast] Sesión cerrada. Evento no transmitido.');
-    return;
-  }
-
   const eventId = data.id || ('evt_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7));
   const token = getEffectiveWidgetToken();
   const payload = { id: eventId, event, data, channel: room, room, token, timestamp: Date.now() };
 
-  // 1. BroadcastChannel estrictamente aislado por sala del streamer (sin canales globales cruzados)
-  if (room && room !== 'default') {
-    try {
-      const scopedBc = new BroadcastChannel('orbyxbot_stream_' + room);
-      scopedBc.postMessage(payload);
-      scopedBc.close();
-    } catch (e) { }
-  }
+  // 1. BroadcastChannel: emitir en múltiples nombres para asegurar recepción instantánea de widgets
+  try {
+    const bcNames = new Set(['orbibot_stream_channel', 'orbyxbot_stream_default']);
+    if (room && room !== 'default') bcNames.add('orbyxbot_stream_' + room);
+    if (token) bcNames.add('orbyxbot_stream_' + token);
+    if (channel && channel !== room) bcNames.add('orbyxbot_stream_' + channel);
+
+    bcNames.forEach(name => {
+      try {
+        const scopedBc = new BroadcastChannel(name);
+        scopedBc.postMessage(payload);
+        scopedBc.close();
+      } catch (e) { }
+    });
+  } catch (e) { }
 
   // 2. Storage event con namespace privado por streamer y token
   try {
+    localStorage.setItem('orbibot_last_event', JSON.stringify(payload));
     if (room && room !== 'default') {
       localStorage.setItem('orbibot_last_event_' + room, JSON.stringify(payload));
     }
     if (token) {
       localStorage.setItem('orbibot_last_event_' + token, JSON.stringify(payload));
     }
+    if (channel && channel !== room) {
+      localStorage.setItem('orbibot_last_event_' + channel, JSON.stringify(payload));
+    }
   } catch (e) { }
 
   // 3. Cloud MQTT Relay (aislamiento estricto con token privado por streamer)
-  if (dashboardMqttClient && isMqttConnected) {
+  if (isConn && dashboardMqttClient && isMqttConnected) {
     try {
       const msgStr = JSON.stringify(payload);
       const effectiveTopic = token ? `orbibot/${room}_${token}/events` : `orbibot/${room}/events`;
       const msgPriv = new Paho.MQTT.Message(msgStr);
       msgPriv.destinationName = effectiveTopic;
       dashboardMqttClient.send(msgPriv);
+      if (channel && channel !== room) {
+        const chanTopic = token ? `orbibot/${channel}_${token}/events` : `orbibot/${channel}/events`;
+        const msgChan = new Paho.MQTT.Message(msgStr);
+        msgChan.destinationName = chanTopic;
+        dashboardMqttClient.send(msgChan);
+      }
     } catch (e) {
       console.warn('Error publishing to MQTT relay:', e);
     }
@@ -2117,8 +2199,7 @@ function connectInBrowserTwitchBot(twitchData) {
 
         if (ttsCfg.enabled !== false && ttsCfg.allowChatCommand !== false) {
           const ttsCmd = (ttsCfg.chatCommand || '!tts').toLowerCase();
-          const commands = (typeof cachedTTSCommands !== 'undefined' && cachedTTSCommands.length) ? cachedTTSCommands : (appConfig?.ttsCommands || []);
-          const matchedVoiceCmd = commands.find(c => c.enabled !== false && c.command && c.command.toLowerCase() === firstWord);
+          const matchedVoiceCmd = findVoiceCommandOrAlias(firstWord);
 
           if (firstWord === '!ttsdetener' || firstWord === '!ttsstop' || firstWord === '!ttspause') {
             if (isModOrBroadcaster) {
@@ -2152,7 +2233,7 @@ function connectInBrowserTwitchBot(twitchData) {
                 closs: 'es_marianocloss', lacobra: 'es_lacobra', davo: 'es_davo', mia: 'es_mx_mia',
                 miguel: 'es_us_miguel', brian: 'en_brian'
               };
-              if (aliasMap[firstToken] || (typeof SE_VOICE_MAP !== 'undefined' && SE_VOICE_MAP[firstToken])) {
+              if (aliasMap[firstToken] || (typeof SE_VOICE_MAP !== 'undefined' && SE_VOICE_MAP[firstToken]) || (typeof VOICE_PROFILES !== 'undefined' && VOICE_PROFILES[firstToken])) {
                 selectedVoice = aliasMap[firstToken] || firstToken;
                 ttsRaw = ttsRaw.slice(ttsRaw.indexOf(' ') + 1).trim();
               }
@@ -2184,7 +2265,7 @@ function connectInBrowserTwitchBot(twitchData) {
               (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
 
             if (allowed) {
-              const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
+              const voiceText = trimmed.slice(firstWord.length).trim();
               if (voiceText) {
                 const selectedVoice = matchedVoiceCmd.voiceId || ttsCfg.voice || 'es_mx_mia';
                 const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
@@ -2729,8 +2810,7 @@ function connectInBrowserKickBot(kickData) {
             const ttsConfig = currentCfg.tts || appConfig?.tts || {};
             if (ttsConfig.enabled !== false && ttsConfig.allowChatCommand !== false) {
               const ttsCmd = (ttsConfig.chatCommand || '!tts').toLowerCase();
-              const commands = (typeof cachedTTSCommands !== 'undefined' && cachedTTSCommands.length) ? cachedTTSCommands : (appConfig?.ttsCommands || []);
-              const matchedVoiceCmd = commands.find(c => c.enabled !== false && c.command && c.command.toLowerCase() === firstWord);
+              const matchedVoiceCmd = findVoiceCommandOrAlias(firstWord);
 
               if (firstWord === '!ttsdetener' || firstWord === '!ttsstop' || firstWord === '!ttspause') {
                 if (isModOrBroadcaster) {
@@ -2764,7 +2844,7 @@ function connectInBrowserKickBot(kickData) {
                     closs: 'es_marianocloss', lacobra: 'es_lacobra', davo: 'es_davo', mia: 'es_mx_mia',
                     miguel: 'es_us_miguel', brian: 'en_brian'
                   };
-                  if (aliasMap[firstToken] || (typeof SE_VOICE_MAP !== 'undefined' && SE_VOICE_MAP[firstToken])) {
+                  if (aliasMap[firstToken] || (typeof SE_VOICE_MAP !== 'undefined' && SE_VOICE_MAP[firstToken]) || (typeof VOICE_PROFILES !== 'undefined' && VOICE_PROFILES[firstToken])) {
                     selectedVoice = aliasMap[firstToken] || firstToken;
                     ttsRaw = ttsRaw.slice(ttsRaw.indexOf(' ') + 1).trim();
                   }
@@ -2796,7 +2876,7 @@ function connectInBrowserKickBot(kickData) {
                   (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
 
                 if (allowed) {
-                  const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
+                  const voiceText = trimmed.slice(firstWord.length).trim();
                   if (voiceText) {
                     const selectedVoice = matchedVoiceCmd.voiceId || ttsConfig.voice || 'es_mx_mia';
                     const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
@@ -4267,7 +4347,32 @@ function getTTSAudioUrl(text, voiceId) {
   if (FISH_AUDIO_KEYS.includes(clean)) {
     return `/api/tts/audio?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(clean)}`;
   }
-  const profile = VOICE_PROFILES[clean] || VOICE_PROFILES[voiceId] || VOICE_PROFILES['es_mx_mia'];
+  const seVoiceMap = {
+    es_mx_mia: 'Mia', mia: 'Mia',
+    es_us_miguel: 'Miguel', miguel: 'Miguel',
+    es_us_penelope: 'Penelope', penelope: 'Penelope',
+    es_es_enrique: 'Enrique', enrique: 'Enrique',
+    es_es_conchita: 'Conchita', conchita: 'Conchita',
+    es_es_lucia: 'Lucia', lucia: 'Lucia',
+    en_brian: 'Brian', brian: 'Brian',
+    en_emma: 'Emma', emma: 'Emma',
+    en_joey: 'Joey', joey: 'Joey',
+    en_matthew: 'Matthew', matthew: 'Matthew',
+    en_kendra: 'Kendra', kendra: 'Kendra',
+    en_justin: 'Justin', justin: 'Justin',
+    en_russell: 'Russell', russell: 'Russell',
+    pt_cristiano: 'Cristiano', cristiano: 'Cristiano',
+    fr_mathieu: 'Mathieu', mathieu: 'Mathieu',
+    it_giorgio: 'Giorgio', giorgio: 'Giorgio',
+    de_hans: 'Hans', hans: 'Hans',
+    ja_takumi: 'Takumi', takumi: 'Takumi',
+    ja_mizuki: 'Mizuki', mizuki: 'Mizuki'
+  };
+  const seVoice = seVoiceMap[clean];
+  if (seVoice) {
+    return `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(seVoice)}&text=${encodeURIComponent(text)}`;
+  }
+  const profile = VOICE_PROFILES[clean] || VOICE_PROFILES[voiceId] || VOICE_PROFILES['es_mx_mia'] || {};
   const lang = (profile.lang || 'es-ES').split('-')[0];
   return `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${encodeURIComponent(lang)}&client=tw-ob`;
 }
@@ -5294,35 +5399,58 @@ function initTTSMultiVoiceSystem() {
   loadTTSCommands();
 }
 
+function mergeDefaultTTSCommands(userCmds = []) {
+  const map = new Map();
+  if (typeof DEFAULT_TTS_COMMANDS !== 'undefined' && Array.isArray(DEFAULT_TTS_COMMANDS)) {
+    for (const def of DEFAULT_TTS_COMMANDS) {
+      if (def && def.command) {
+        map.set(def.command.toLowerCase().trim(), { ...def });
+      }
+    }
+  }
+  if (Array.isArray(userCmds)) {
+    for (const u of userCmds) {
+      if (u && u.command) {
+        const key = u.command.toLowerCase().trim();
+        const existing = map.get(key);
+        if (existing) {
+          map.set(key, { ...existing, ...u });
+        } else {
+          map.set(key, { ...u });
+        }
+      }
+    }
+  }
+  return Array.from(map.values());
+}
+
 async function loadTTSCommands() {
+  let loaded = null;
   try {
     const res = await fetch('/api/tts/commands');
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data) && data.length > 0) {
-        cachedTTSCommands = data;
+        loaded = data;
       }
     }
   } catch (err) {
     console.warn('Error loading TTS commands from API:', err);
   }
 
-  if (!cachedTTSCommands || cachedTTSCommands.length === 0) {
+  if (!loaded || loaded.length === 0) {
     try {
       const local = localStorage.getItem('orbibot_tts_commands');
       if (local) {
         const parsed = JSON.parse(local);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          cachedTTSCommands = parsed;
+          loaded = parsed;
         }
       }
     } catch (e) { }
   }
 
-  if (!cachedTTSCommands || cachedTTSCommands.length === 0) {
-    cachedTTSCommands = [...DEFAULT_TTS_COMMANDS];
-  }
-
+  cachedTTSCommands = mergeDefaultTTSCommands(loaded || []);
   renderTTSCommands(cachedTTSCommands);
 }
 
@@ -5332,7 +5460,7 @@ function renderTTSCommands(commands) {
   if (!container) return;
 
   if (!Array.isArray(commands) || commands.length === 0) {
-    commands = [...DEFAULT_TTS_COMMANDS];
+    commands = mergeDefaultTTSCommands([]);
   }
   cachedTTSCommands = commands;
 
