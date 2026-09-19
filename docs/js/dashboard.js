@@ -10244,20 +10244,36 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   if (typeof renderTTSQueueUI === 'function') renderTTSQueueUI();
 
   // Reset / Load Song Request
-  if (targetSongRequest && typeof updateSongRequestUI === 'function') {
-    updateSongRequestUI(targetSongRequest, false);
-  } else {
-    currentSrState = { currentSong: null, queue: [], isPlaying: false, channel: streamerId };
-    if (typeof updateSongRequestUI === 'function') updateSongRequestUI(currentSrState, false);
+  // Paso 1: mostrar datos de Supabase inmediatamente como preview rápido (puede ser obsoleto)
+  const initialSR = targetSongRequest
+    ? targetSongRequest
+    : { currentSong: null, queue: [], isPlaying: false, channel: streamerId };
+  currentSrState = initialSR;
+  if (typeof updateSongRequestUI === 'function') updateSongRequestUI(initialSR, false);
+
+  // Paso 2: SIEMPRE consultar el servidor en vivo (fuente de verdad real)
+  // Los datos de Supabase pueden estar obsoletos si el streamer usaba solo el overlay de OBS
+  // sin tener el dashboard abierto. El servidor tiene el estado real en memoria.
+  (async () => {
     try {
-      fetch(`/api/sr/state?channel=${encodeURIComponent(streamerId)}`)
-        .then(r => r.json())
-        .then(srData => {
-          if (srData && typeof updateSongRequestUI === 'function') updateSongRequestUI(srData, false);
-        })
-        .catch(() => {});
-    } catch (e) { }
-  }
+      // Preferir el canal de Twitch del streamer como clave (más confiable que streamerId)
+      const liveChannel = (targetCfg?.twitch?.channel || streamerId || '').toLowerCase().replace(/^#/, '').trim();
+      const srRes = await fetch(`/api/sr/state?channel=${encodeURIComponent(liveChannel)}`);
+      if (!srRes.ok) return;
+      const srData = await srRes.json();
+      if (!srData || typeof updateSongRequestUI !== 'function') return;
+
+      const liveHasData = srData.currentSong || (Array.isArray(srData.queue) && srData.queue.length > 0);
+      const supaHasData = initialSR.currentSong || (Array.isArray(initialSR.queue) && initialSR.queue.length > 0);
+
+      // Usar datos del servidor si tiene canciones, o si Supabase no tenía nada útil
+      if (liveHasData || !supaHasData) {
+        updateSongRequestUI(srData, false);
+      }
+    } catch (e) {
+      // En GitHub Pages el servidor no está disponible; los datos de Supabase ya están cargados
+    }
+  })();
 
   bindConfigToUI(appConfig);
   updatePlatformLinkingUI();
