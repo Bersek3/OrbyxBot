@@ -2212,9 +2212,19 @@ async function loadInitialData() {
 let browserTmiClient = null;
 function connectInBrowserTwitchBot(twitchData) {
   if (!window.tmi || !twitchData) return;
-  const rawChannel = twitchData.channel || twitchData.login || (twitchData.displayName ? twitchData.displayName.toLowerCase() : '');
-  const channel = (rawChannel || '').toLowerCase().replace(/^#/, '');
-  if (!channel) return;
+  let rawChannel = twitchData.channel || twitchData.login || (twitchData.displayName ? twitchData.displayName.toLowerCase() : '');
+  if (rawChannel && rawChannel.includes('@')) {
+    rawChannel = '';
+  }
+  if (!rawChannel && twitchData.displayName && !twitchData.displayName.includes('@')) {
+    rawChannel = twitchData.displayName;
+  }
+  const channel = (rawChannel || '').toLowerCase().replace(/^#/, '').trim();
+  if (!channel || channel.includes('@') || !/^[a-z0-9_]+$/.test(channel)) {
+    console.warn(`⚠️ [Dashboard Twitch IRC] Canal de Twitch no es válido para conexión IRC ("${rawChannel || 'vacío'}").`);
+    updateBotStatusUI({ status: 'disconnected' });
+    return;
+  }
 
   if (browserTmiClient) {
     try { browserTmiClient.disconnect(); } catch (e) { }
@@ -2238,14 +2248,15 @@ function connectInBrowserTwitchBot(twitchData) {
 
   function setupClient(client) {
     client.on('connected', () => {
+      console.log(`🟢 [Dashboard] Conectado al chat de Twitch #${channel}`);
       updateBotStatusUI({ status: 'connected', channel });
       const statChan = document.getElementById('statChannelName');
       if (statChan) statChan.innerText = `#${channel}`;
       const notice = document.getElementById('chatStatusNotice');
       if (notice) notice.innerText = `🟢 En línea (#${channel})`;
       const chatContainer = document.getElementById('liveChatMessages');
-      if (chatContainer && chatContainer.innerText.includes('Conecta tu canal de Twitch')) {
-        chatContainer.innerHTML = `<div class="chat-msg-row" style="color: var(--cyan-accent);"><em>🟢 Conectado al chat de #${channel}. Esperando mensajes...</em></div>`;
+      if (chatContainer && (chatContainer.innerText.includes('Conecta tu canal de Twitch') || chatContainer.innerText.includes('Esperando mensajes'))) {
+        chatContainer.innerHTML = `<div class="chat-msg-row" style="color: var(--cyan-accent);"><em>🟢 Conectado al chat de Twitch #${channel}. Esperando mensajes...</em></div>`;
       }
       showToast(`Conectado al chat de #${channel}`, 'success');
     });
@@ -2267,7 +2278,9 @@ function connectInBrowserTwitchBot(twitchData) {
         badges: tags.badges || {},
         badgesRaw: tags['badges-raw'] || null,
         emotes: tags.emotes || null,
-        roomId: tags['room-id'] || null
+        roomId: tags['room-id'] || null,
+        platform: 'twitch',
+        channel: channel
       };
 
       appendChatMessage(chatData);
@@ -10096,6 +10109,34 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     targetCfg.kick.profile_picture = targetKickAuth.profile_picture || targetKickAuth.avatar || targetCfg.kick.profile_picture || '';
     targetCfg.kick.connected = true;
   }
+
+  // Búsqueda de respaldo en adminStreamersCache si el canal sigue siendo un email o está vacío
+  const cachedStreamer = (adminStreamersCache || []).find(s => 
+    s.streamerId === streamerId || 
+    (s.relatedIds && s.relatedIds.includes(streamerId)) ||
+    (s.email && s.email.toLowerCase() === streamerId.toLowerCase())
+  );
+  if (cachedStreamer) {
+    const cachedTwitch = cachedStreamer.twitchChannel || (Array.isArray(cachedStreamer.channels) && cachedStreamer.channels.find(c => c.startsWith('twitch:'))?.split(':')[1]?.trim());
+    const cachedKick = cachedStreamer.kickChannel || (Array.isArray(cachedStreamer.channels) && cachedStreamer.channels.find(c => c.startsWith('kick:'))?.split(':')[1]?.trim());
+
+    if (cachedTwitch && (!targetCfg.twitch.channel || targetCfg.twitch.channel.includes('@'))) {
+      targetCfg.twitch.channel = cachedTwitch;
+      if (!targetCfg.twitch.displayName || targetCfg.twitch.displayName.includes('@')) {
+        targetCfg.twitch.displayName = cachedStreamer.displayName || cachedTwitch;
+      }
+      targetCfg.twitch.connected = true;
+    }
+    if (cachedKick && (!targetCfg.kick?.channel || targetCfg.kick.channel.includes('@'))) {
+      if (!targetCfg.kick) targetCfg.kick = {};
+      targetCfg.kick.channel = cachedKick;
+      targetCfg.kick.username = cachedKick;
+      targetCfg.kick.connected = true;
+    }
+  }
+
+  // Asegurar que las plataformas de chat en el panel estén activas
+  targetCfg.chatPlatforms = { twitch: true, kick: true };
 
   // Respaldar estado original del Superadmin
   if (!adminOriginalConfig) {
