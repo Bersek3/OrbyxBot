@@ -9232,6 +9232,8 @@ loadInitialData = async function () {
 };
 
 // ================= ADMINISTRACIÓN GENERAL & MODO ASISTENCIA =================
+// ================= ADMINISTRACIÓN GENERAL & MODO ASISTENCIA =================
+const KNOWN_SUPERADMINS = ['francisco.jm.aguilar@gmail.com'];
 let isUserSuperAdmin = false;
 let adminStreamersCache = [];
 let adminTargetStreamerId = null;
@@ -9246,6 +9248,16 @@ async function checkAdminStatus() {
     return;
   }
 
+  const cleanEmail = session.email.trim().toLowerCase();
+
+  // 1. Verificación inmediata de Superadministradores conocidos (Siempre activo en GitHub Pages y local)
+  if (KNOWN_SUPERADMINS.includes(cleanEmail)) {
+    isUserSuperAdmin = true;
+    updateAdminUIElements(true);
+    return;
+  }
+
+  // 2. Consulta al backend vía API
   try {
     const res = await fetch('/api/admin/check', {
       method: 'POST',
@@ -9262,13 +9274,32 @@ async function checkAdminStatus() {
     }
   } catch (e) { }
 
-  // Fallback: Check direct Supabase query if frontend client exists
+  // 3. Consulta en Supabase orbibot_settings (almacenamiento global)
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('orbibot_settings')
+        .select('value')
+        .eq('streamer_id', 'global')
+        .eq('key', 'admins')
+        .maybeSingle();
+      if (!error && data && Array.isArray(data.value)) {
+        if (data.value.some(a => (a.email && a.email.toLowerCase() === cleanEmail) || (a.user_id && a.user_id === session.id))) {
+          isUserSuperAdmin = true;
+          updateAdminUIElements(true);
+          return;
+        }
+      }
+    } catch (e) { }
+  }
+
+  // 4. Consulta en Supabase orbibot_admins (si la tabla existe)
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient
         .from('orbibot_admins')
         .select('*')
-        .or(`email.eq.${session.email},user_id.eq.${session.id || ''}`);
+        .or(`email.eq.${cleanEmail},user_id.eq.${session.id || ''}`);
       if (!error && data && data.length > 0) {
         isUserSuperAdmin = true;
         updateAdminUIElements(true);
@@ -9319,26 +9350,42 @@ async function loadAdminStreamersList(force = false) {
         return;
       }
     }
-  } catch (e) {
-    console.warn('Error fetching streamers via API:', e);
-  }
+  } catch (e) { }
 
-  // Fallback direct Supabase query
+  // Fallback directo a Supabase orbibot_settings (funciona 100% en GitHub Pages)
   if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.from('orbibot_user_data').select('user_id, scope, updated_at');
-      if (!error && data) {
-        const uniqueUsers = new Map();
+      const { data, error } = await supabaseClient.from('orbibot_settings').select('*');
+      if (!error && data && data.length > 0) {
+        const streamersMap = new Map();
         data.forEach(row => {
-          if (!uniqueUsers.has(row.user_id)) {
-            uniqueUsers.set(row.user_id, {
-              id: row.user_id,
-              email: row.user_id.includes('@') ? row.user_id : '',
-              updatedAt: row.updated_at
+          const sId = row.streamer_id;
+          if (!sId || sId === 'global' || sId === 'system') return;
+          if (!streamersMap.has(sId)) {
+            streamersMap.set(sId, {
+              id: sId,
+              streamerId: sId,
+              displayName: sId,
+              twitchChannel: '',
+              kickChannel: '',
+              updatedAt: row.updated_at || new Date().toISOString()
             });
           }
+          const s = streamersMap.get(sId);
+          if (row.key === 'config' && row.value) {
+            if (row.value.twitch?.channel) s.twitchChannel = row.value.twitch.channel;
+            if (row.value.kick?.channel || row.value.kick?.username) s.kickChannel = row.value.kick.channel || row.value.kick.username;
+          }
+          if (row.key === 'twitch_auth' && row.value) {
+            const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
+            if (val.channel || val.login || val.displayName) s.twitchChannel = val.channel || val.login || val.displayName;
+          }
+          if (row.key === 'kick_auth' && row.value) {
+            const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
+            if (val.channel || val.username) s.kickChannel = val.channel || val.username;
+          }
         });
-        adminStreamersCache = Array.from(uniqueUsers.values());
+        adminStreamersCache = Array.from(streamersMap.values());
         renderAdminStreamersList(adminStreamersCache);
         loadAdminsList();
         return;
@@ -9477,7 +9524,6 @@ async function enterStreamerSupportMode(streamerId, displayName = '') {
     if (res.ok) {
       const data = await res.json();
       if (data.success && data.config) {
-        // Guardar estado original del admin para restaurar al salir
         if (!adminOriginalConfig) {
           adminOriginalConfig = JSON.parse(JSON.stringify(appConfig || {}));
         }
@@ -9485,13 +9531,11 @@ async function enterStreamerSupportMode(streamerId, displayName = '') {
         adminTargetStreamerId = streamerId;
         appConfig = data.config;
 
-        // Activar banner superior de modo asistencia
         const banner = document.getElementById('adminSupportModeBanner');
         const nameEl = document.getElementById('adminTargetStreamerName');
         if (banner) banner.style.display = 'flex';
         if (nameEl) nameEl.textContent = displayName ? `@${displayName} (${streamerId})` : streamerId;
 
-        // Renderizar toda la UI con la config del streamer objetivo
         bindConfigToUI(appConfig);
         if (Array.isArray(data.commands)) renderCommands(data.commands);
         if (Array.isArray(data.rewards)) renderRewards(data.rewards);
@@ -9502,14 +9546,62 @@ async function enterStreamerSupportMode(streamerId, displayName = '') {
         }
         if (data.songRequest) updateSongRequestUI(data.songRequest);
 
-        // Cambiar a la pestaña de Widgets o Dashboard
         switchTab('tab-dashboard');
         showToast(`✅ Ahora estás en Modo Asistencia para ${displayName || streamerId}`, 'success');
         return;
       }
     }
-  } catch (e) {
-    console.error('Error entering support mode:', e);
+  } catch (e) { }
+
+  // Fallback directo a Supabase orbibot_settings (GitHub Pages)
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('orbibot_settings')
+        .select('*')
+        .eq('streamer_id', streamerId);
+
+      if (!error && data && data.length > 0) {
+        if (!adminOriginalConfig) {
+          adminOriginalConfig = JSON.parse(JSON.stringify(appConfig || {}));
+        }
+        adminTargetStreamerId = streamerId;
+
+        let loadedCfg = null;
+        let loadedCmds = [];
+        let loadedRws = [];
+        let loadedGls = [];
+        let loadedTts = [];
+
+        data.forEach(item => {
+          if (item.key === 'config') loadedCfg = item.value;
+          if (item.key === 'commands' && Array.isArray(item.value)) loadedCmds = item.value;
+          if (item.key === 'channel_points' && Array.isArray(item.value)) loadedRws = item.value;
+          if (item.key === 'goals' && Array.isArray(item.value)) loadedGls = item.value;
+          if (item.key === 'tts_commands' && Array.isArray(item.value)) loadedTts = item.value;
+        });
+
+        appConfig = loadedCfg || getFreshDefaultConfig();
+
+        const banner = document.getElementById('adminSupportModeBanner');
+        const nameEl = document.getElementById('adminTargetStreamerName');
+        if (banner) banner.style.display = 'flex';
+        if (nameEl) nameEl.textContent = displayName ? `@${displayName} (${streamerId})` : streamerId;
+
+        bindConfigToUI(appConfig);
+        if (loadedCmds.length > 0) renderCommands(loadedCmds);
+        if (loadedRws.length > 0) renderRewards(loadedRws);
+        if (loadedGls.length > 0) renderGoals(loadedGls);
+        if (loadedTts.length > 0) {
+          cachedTTSCommands = loadedTts;
+          renderTTSCommands(cachedTTSCommands);
+        }
+
+        switchTab('tab-dashboard');
+        showToast(`✅ Ahora estás en Modo Asistencia para ${displayName || streamerId}`, 'success');
+        return;
+      }
+    } catch (e) { }
   }
 
   showToast('No se pudo cargar la configuración completa del streamer.', 'error');
@@ -9526,17 +9618,17 @@ async function saveAdminSupportChanges() {
 
   showToast('💾 Guardando cambios para el streamer...', 'info');
 
-  try {
-    const payload = {
-      email: session.email,
-      userId: session.id,
-      config: appConfig,
-      commands: (typeof cachedCommands !== 'undefined') ? cachedCommands : [],
-      rewards: (typeof cachedRewards !== 'undefined') ? cachedRewards : [],
-      goals: (typeof appConfig?.goals !== 'undefined') ? appConfig.goals : [],
-      ttsCommands: (typeof cachedTTSCommands !== 'undefined') ? cachedTTSCommands : []
-    };
+  const payload = {
+    email: session.email,
+    userId: session.id,
+    config: appConfig,
+    commands: (typeof cachedCommands !== 'undefined') ? cachedCommands : [],
+    rewards: (typeof cachedRewards !== 'undefined') ? cachedRewards : [],
+    goals: (typeof appConfig?.goals !== 'undefined') ? appConfig.goals : [],
+    ttsCommands: (typeof cachedTTSCommands !== 'undefined') ? cachedTTSCommands : []
+  };
 
+  try {
     const res = await fetch(`/api/admin/streamer/${encodeURIComponent(adminTargetStreamerId)}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -9550,8 +9642,20 @@ async function saveAdminSupportChanges() {
         return;
       }
     }
-  } catch (e) {
-    console.error('Error saving support changes:', e);
+  } catch (e) { }
+
+  // Fallback directo a Supabase orbibot_settings (GitHub Pages)
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'config', value: payload.config });
+      await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'commands', value: payload.commands });
+      await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'channel_points', value: payload.rewards });
+      await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'goals', value: payload.goals });
+      await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'tts_commands', value: payload.ttsCommands });
+
+      showToast('🎉 ¡Configuración guardada directamente en Supabase para el streamer!', 'success');
+      return;
+    } catch (e) { }
   }
 
   showToast('Error al guardar cambios para el streamer en el servidor.', 'error');
@@ -9572,7 +9676,6 @@ function exitAdminSupportMode() {
   const banner = document.getElementById('adminSupportModeBanner');
   if (banner) banner.style.display = 'none';
 
-  // Volver a la pestaña de administración
   switchTab('tab-admin');
   showToast('Has salido del Modo Asistencia. Volviste a tu panel de Administrador.', 'info');
 }
@@ -9612,16 +9715,25 @@ async function loadAdminsList() {
     }
   } catch (e) { }
 
-  // Supabase fallback
+  // Supabase fallback (orbibot_settings key="admins")
   if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.from('orbibot_admins').select('*');
-      if (!error && data) {
-        renderAdminsList(data);
+      const { data, error } = await supabaseClient
+        .from('orbibot_settings')
+        .select('value')
+        .eq('streamer_id', 'global')
+        .eq('key', 'admins')
+        .maybeSingle();
+
+      if (!error && data && Array.isArray(data.value)) {
+        renderAdminsList(data.value);
         return;
       }
     } catch (e) { }
   }
+
+  // Known fallback list
+  renderAdminsList(KNOWN_SUPERADMINS.map(email => ({ email, role: 'superadmin', notes: 'Administrador Principal' })));
 }
 
 function renderAdminsList(admins) {
@@ -9657,7 +9769,7 @@ function renderAdminsList(admins) {
 async function handleAddNewAdmin() {
   const emailInput = document.getElementById('adminNewEmailInput');
   const notesInput = document.getElementById('adminNewNotesInput');
-  const email = emailInput ? emailInput.value.trim() : '';
+  const email = emailInput ? emailInput.value.trim().toLowerCase() : '';
   const notes = notesInput ? notesInput.value.trim() : 'Soporte';
 
   if (!email || !email.includes('@')) {
@@ -9668,6 +9780,8 @@ async function handleAddNewAdmin() {
 
   const session = getUserSession();
   if (!session || !isUserSuperAdmin) return;
+
+  const newAdminObj = { email, role: 'superadmin', notes, created_at: new Date().toISOString() };
 
   try {
     const res = await fetch('/api/admin/add', {
@@ -9688,12 +9802,41 @@ async function handleAddNewAdmin() {
     }
   } catch (e) { }
 
+  // Supabase fallback (orbibot_settings)
+  if (supabaseClient) {
+    try {
+      const { data: cur } = await supabaseClient
+        .from('orbibot_settings')
+        .select('value')
+        .eq('streamer_id', 'global')
+        .eq('key', 'admins')
+        .maybeSingle();
+
+      let currentList = (cur && Array.isArray(cur.value)) ? cur.value : [];
+      if (!currentList.some(a => a.email?.toLowerCase() === email)) {
+        currentList.push(newAdminObj);
+      }
+      await supabaseClient.from('orbibot_settings').upsert({
+        streamer_id: 'global',
+        key: 'admins',
+        value: currentList
+      });
+
+      showToast(`✅ Administrador ${email} guardado en Supabase.`, 'success');
+      if (emailInput) emailInput.value = '';
+      if (notesInput) notesInput.value = '';
+      loadAdminsList();
+      return;
+    } catch (e) { }
+  }
+
   showToast('Error al añadir administrador.', 'error');
 }
 
 async function handleRemoveAdmin(adminEmail) {
   if (!adminEmail) return;
-  if (!confirm(`¿Estás seguro de revocar permisos de administrador a ${adminEmail}?`)) return;
+  const cleanTarget = adminEmail.trim().toLowerCase();
+  if (!confirm(`¿Estás seguro de revocar permisos de administrador a ${cleanTarget}?`)) return;
 
   const session = getUserSession();
   if (!session || !isUserSuperAdmin) return;
@@ -9702,18 +9845,42 @@ async function handleRemoveAdmin(adminEmail) {
     const res = await fetch('/api/admin/remove', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: session.email, userId: session.id, targetEmail: adminEmail })
+      body: JSON.stringify({ email: session.email, userId: session.id, targetEmail: cleanTarget })
     });
 
     if (res.ok) {
       const data = await res.json();
       if (data.success) {
-        showToast(`Admin ${adminEmail} revocado.`, 'info');
+        showToast(`Admin ${cleanTarget} revocado.`, 'info');
         loadAdminsList();
         return;
       }
     }
   } catch (e) { }
+
+  // Supabase fallback
+  if (supabaseClient) {
+    try {
+      const { data: cur } = await supabaseClient
+        .from('orbibot_settings')
+        .select('value')
+        .eq('streamer_id', 'global')
+        .eq('key', 'admins')
+        .maybeSingle();
+
+      let currentList = (cur && Array.isArray(cur.value)) ? cur.value : [];
+      currentList = currentList.filter(a => a.email?.toLowerCase() !== cleanTarget);
+      await supabaseClient.from('orbibot_settings').upsert({
+        streamer_id: 'global',
+        key: 'admins',
+        value: currentList
+      });
+
+      showToast(`Admin ${cleanTarget} revocado en Supabase.`, 'info');
+      loadAdminsList();
+      return;
+    } catch (e) { }
+  }
 
   showToast('Error al revocar administrador.', 'error');
 }
