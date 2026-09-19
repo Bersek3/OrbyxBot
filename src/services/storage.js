@@ -1856,7 +1856,7 @@ class StorageService {
       rawStreamerData.set(localId, localSt);
     }
 
-    // 4. Unificar entidades usando Disjoint Set / Claves compartidas (tokens, emails, twitches, kicks)
+    // 4. Unificar entidades usando Disjoint Set / Claves compartidas con validación estricta
     const unifiedGroups = [];
     const visitedIds = new Set();
 
@@ -1872,10 +1872,11 @@ class StorageService {
         for (const [otherId, otherSt] of rawStreamerData.entries()) {
           if (visitedIds.has(otherId)) continue;
 
-          const sharesToken = Array.from(otherSt.tokens).some(t => cluster.some(c => c.tokens.has(t)));
-          const sharesEmail = Array.from(otherSt.emails).some(e => cluster.some(c => c.emails.has(e)));
-          const sharesTwitch = Array.from(otherSt.twitches).some(tw => cluster.some(c => c.twitches.has(tw)));
-          const sharesKick = Array.from(otherSt.kicks).some(k => cluster.some(c => c.kicks.has(k)));
+          // Comprobación ESTRICTA con strings no vacíos y válidos
+          const sharesToken = Array.from(otherSt.tokens).some(t => t && t.length > 5 && cluster.some(c => c.tokens.has(t)));
+          const sharesEmail = Array.from(otherSt.emails).some(e => e && e.includes('@') && cluster.some(c => c.emails.has(e)));
+          const sharesTwitch = Array.from(otherSt.twitches).some(tw => tw && tw.length > 1 && cluster.some(c => c.twitches.has(tw)));
+          const sharesKick = Array.from(otherSt.kicks).some(k => k && k.length > 1 && cluster.some(c => c.kicks.has(k)));
 
           if (sharesToken || sharesEmail || sharesTwitch || sharesKick) {
             cluster.push(otherSt);
@@ -1896,11 +1897,11 @@ class StorageService {
 
       cluster.forEach(c => {
         relatedIds.push(c.id);
-        c.tokens.forEach(t => combinedTokens.add(t));
-        c.emails.forEach(e => combinedEmails.add(e));
-        c.twitches.forEach(t => combinedTwitches.add(t));
-        c.kicks.forEach(k => combinedKicks.add(k));
-        c.displayNames.forEach(n => combinedNames.add(n));
+        c.tokens.forEach(t => { if (t && t.trim()) combinedTokens.add(t.trim()); });
+        c.emails.forEach(e => { if (e && e.includes('@')) combinedEmails.add(e.trim().toLowerCase()); });
+        c.twitches.forEach(t => { if (t && t.trim()) combinedTwitches.add(t.trim().toLowerCase()); });
+        c.kicks.forEach(k => { if (k && k.trim()) combinedKicks.add(k.trim().toLowerCase()); });
+        c.displayNames.forEach(n => { if (n && n.trim()) combinedNames.add(n.trim()); });
         if (new Date(c.updatedAt) > new Date(latestUpdate)) latestUpdate = c.updatedAt;
         maxRewards = Math.max(maxRewards, c.rewardsCount);
         maxCommands = Math.max(maxCommands, c.commandsCount);
