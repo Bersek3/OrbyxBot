@@ -300,39 +300,9 @@
       const cleanKey = (voiceKey || '').toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
       const profile = VOICE_PROFILES[cleanKey] || VOICE_PROFILES[voiceKey] || VOICE_PROFILES['es_mx_mia'];
       const targetLang = (profile.lang || 'es-ES').split('-')[0].toLowerCase();
-
-      const seVoiceMap = {
-        es_mx_mia: 'Mia', mia: 'Mia',
-        es_us_miguel: 'Miguel', miguel: 'Miguel',
-        es_us_penelope: 'Penelope', penelope: 'Penelope',
-        es_es_enrique: 'Enrique', enrique: 'Enrique',
-        es_es_conchita: 'Conchita', conchita: 'Conchita',
-        es_es_lucia: 'Lucia', lucia: 'Lucia',
-        en_brian: 'Brian', brian: 'Brian',
-        en_emma: 'Emma', emma: 'Emma',
-        en_joey: 'Joey', joey: 'Joey',
-        en_matthew: 'Matthew', matthew: 'Matthew',
-        en_kendra: 'Kendra', kendra: 'Kendra',
-        en_justin: 'Justin', justin: 'Justin',
-        en_russell: 'Russell', russell: 'Russell',
-        pt_cristiano: 'Cristiano', cristiano: 'Cristiano',
-        fr_mathieu: 'Mathieu', mathieu: 'Mathieu',
-        it_giorgio: 'Giorgio', giorgio: 'Giorgio',
-        de_hans: 'Hans', hans: 'Hans',
-        ja_takumi: 'Takumi', takumi: 'Takumi',
-        ja_mizuki: 'Mizuki', mizuki: 'Mizuki'
-      };
-
-      let audioUrl = '';
-      const seVoice = seVoiceMap[cleanKey];
-      if (seVoice) {
-        audioUrl = `https://api.streamelements.com/kappa/v2/speech?voice=${encodeURIComponent(seVoice)}&text=${encodeURIComponent(text)}`;
-      } else {
-        audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=${encodeURIComponent(targetLang || 'es')}&client=tw-ob`;
-      }
+      const audioUrl = `/api/tts/audio?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(cleanKey || targetLang)}`;
 
       const audio = new Audio();
-      audio.crossOrigin = 'anonymous';
       audio.src = audioUrl;
       audio.volume = Math.max(0, Math.min(1, volume));
       currentActiveAudio = audio;
@@ -470,15 +440,19 @@
         };
 
         const segAudioUrl = seg.audioUrl || `/api/tts/audio?text=${encodeURIComponent(seg.text)}&voice=${encodeURIComponent(seg.voice || 'es_mx_mia')}`;
-        const isFish = seg.engine === 'fish_audio' || fishAudioKeys.includes(seg.voice) || (segAudioUrl && segAudioUrl.includes('/api/tts/audio'));
+        const isFish = seg.engine === 'fish_audio' || fishAudioKeys.includes(seg.voice) || (segAudioUrl && (segAudioUrl.includes('/api/tts/audio') || segAudioUrl.includes('/api/tts')));
 
         if (isFish && segAudioUrl) {
           stopCurrentAudio();
+          console.log(`🎙️ [TTS Overlay] Reproduciendo voz '${seg.voice}' desde ${segAudioUrl}`);
           const directAudio = new Audio();
-          directAudio.crossOrigin = 'anonymous';
           directAudio.src = segAudioUrl;
           directAudio.volume = item.volume !== undefined ? item.volume : 0.9;
           currentActiveAudio = directAudio;
+
+          directAudio.onplay = () => {
+            console.log(`▶️ [TTS Overlay] Audio iniciado para voz '${seg.voice}'`);
+          };
 
           directAudio.onended = () => {
             if (currentActiveAudio === directAudio) currentActiveAudio = null;
@@ -494,7 +468,7 @@
           };
 
           directAudio.onerror = (e) => {
-            console.warn('[TTS Overlay] Falló audio directo de Fish Audio, usando sintetizador fallback:', e);
+            console.warn('[TTS Overlay] Falló audio directo de voz IA, usando sintetizador fallback:', e);
             runFallback();
           };
 
@@ -719,7 +693,7 @@
               const voiceText = trimmed.slice(firstWord.length).trim();
               if (voiceText) {
                 console.log(`🎙️ [TTS Overlay] Comando TTS recibido de @${username} (#${ch}): '!${firstWord.slice(1)} ${voiceText}'`);
-                const audioUrl = `/api/tts?text=${encodeURIComponent(voiceText)}&voice=${encodeURIComponent(matchedVoice)}`;
+                const audioUrl = `/api/tts/audio?text=${encodeURIComponent(voiceText)}&voice=${encodeURIComponent(matchedVoice)}`;
                 const ttsData = {
                   id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
                   user: username,

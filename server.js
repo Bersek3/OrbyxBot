@@ -1280,8 +1280,9 @@ app.post('/api/tts/control', (req, res) => {
   res.json(result);
 });
 
-app.get('/api/tts/audio', async (req, res) => {
+app.get(['/api/tts', '/api/tts/audio'], async (req, res) => {
   try {
+    res.setHeader('Access-Control-Allow-Origin', '*');
     const rawText = (req.query.text || '').toString().trim();
     const voice = (req.query.voice || 'es_mx_mia').toString().toLowerCase().trim();
     if (!rawText) {
@@ -1411,14 +1412,8 @@ app.get('/api/tts/audio', async (req, res) => {
           res.setHeader('Cache-Control', 'public, max-age=3600');
           return res.send(buffer);
         } else {
-          console.warn(`[Fish Audio TTS] API devolvió status ${fishRes.status} para voz ${voice}`);
-          if (voice.includes('messi')) {
-            const samplePath = path.join(__dirname, 'public', 'assets', 'sounds', 'messi_sample.mp3');
-            if (fs.existsSync(samplePath) && (rawText.toLowerCase().includes('hola') || rawText.toLowerCase().includes('prueba') || rawText.toLowerCase().includes('messi') || rawText.length < 60)) {
-              res.setHeader('Content-Type', 'audio/mpeg');
-              return res.sendFile(samplePath);
-            }
-          }
+          const errStatus = fishRes.status;
+          console.warn(`[Fish Audio TTS] API devolvió status ${errStatus} para voz ${voice}`);
         }
       } catch (fishErr) {
         console.warn('[Fish Audio TTS] Error de conexión:', fishErr.message);
@@ -1438,17 +1433,46 @@ app.get('/api/tts/audio', async (req, res) => {
         const samplePath = path.join(__dirname, 'public', 'assets', 'sounds', sampleFile);
         if (fs.existsSync(samplePath)) {
           res.setHeader('Content-Type', 'audio/mpeg');
+          res.setHeader('Cache-Control', 'public, max-age=3600');
           return res.sendFile(samplePath);
         }
       }
-      return res.redirect(`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(rawText)}&tl=es-ES&client=tw-ob`);
+
+      // Fallback a Google Translate TTS proxeado por el servidor (sin errores de CORS)
+      try {
+        const gRes = await fetch(`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(rawText)}&tl=es-ES&client=tw-ob`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+        if (gRes.ok) {
+          const gBuf = Buffer.from(await gRes.arrayBuffer());
+          res.setHeader('Content-Type', 'audio/mpeg');
+          res.setHeader('Cache-Control', 'public, max-age=3600');
+          return res.send(gBuf);
+        }
+      } catch (gErr) {
+        console.warn('[TTS Proxy] Error en fallback de Google para voz IA:', gErr.message);
+      }
     }
 
-    // Google Translate TTS fallback para otras voces
+    // Google Translate TTS proxeado para otras voces (sin problemas de CORS en clientes)
     const lang = voice.split('_')[0] || 'es';
-    return res.redirect(`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(rawText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`);
+    try {
+      const gRes = await fetch(`https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(rawText)}&tl=${encodeURIComponent(lang)}&client=tw-ob`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+      });
+      if (gRes.ok) {
+        const gBuf = Buffer.from(await gRes.arrayBuffer());
+        res.setHeader('Content-Type', 'audio/mpeg');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        return res.send(gBuf);
+      }
+    } catch (gErr) {
+      console.warn('[TTS Proxy] Error en Google TTS:', gErr.message);
+    }
+
+    return res.status(500).send('Error generando audio TTS');
   } catch (err) {
-    console.error('Error in /api/tts/audio:', err);
+    console.error('Error in /api/tts endpoint:', err);
     res.status(500).send('Error generando audio TTS');
   }
 });
