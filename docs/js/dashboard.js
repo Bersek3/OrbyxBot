@@ -6,6 +6,7 @@ let appConfig = null;
 let ytPlayer = null;
 let ytApiReady = false;
 let socket = null;
+let adminTargetStreamerId = null;
 
 // ================= INITIALIZATION =================
 document.addEventListener('DOMContentLoaded', async () => {
@@ -16,13 +17,19 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEventListeners();
   setupAutoSaveListeners();
   populateWidgetUrls();
-  await loadInitialData();
+  await checkAdminStatus();
+  const savedSupportStreamer = sessionStorage.getItem('orbibot_support_streamer_id');
+  const savedSupportName = sessionStorage.getItem('orbibot_support_streamer_name');
+  if (savedSupportStreamer && isUserSuperAdmin) {
+    await enterStreamerSupportMode(savedSupportStreamer, savedSupportName || savedSupportStreamer);
+  } else {
+    await loadInitialData();
+  }
   populateWidgetUrls();
   connectWebSocket();
   initDashboardMqtt();
   updatePlatformLinkingUI();
   initTTSMultiVoiceSystem();
-  checkAdminStatus();
 });
 
 // ================= SUPABASE AUTH & CONFIGURATION =================
@@ -237,6 +244,10 @@ async function saveToAllSupabaseScopes(key, value) {
 }
 
 async function loadUserDataFromSupabase(userIdentifier) {
+  if (adminTargetStreamerId || sessionStorage.getItem('orbibot_support_streamer_id')) {
+    console.log(`🛡️ [loadUserDataFromSupabase] Modo Asistencia activo. Omitiendo sobreescritura.`);
+    return;
+  }
   if (!supabaseClient || !userIdentifier) return;
   try {
     const cleanId = (userIdentifier || '').toLowerCase().replace(/^#/, '').trim();
@@ -541,6 +552,13 @@ function initSupabaseAuth() {
           setUserSession(userObj);
           closeAuthModal();
 
+          // Si el modo soporte está activo o hay una sesión de asistencia guardada en sessionStorage, NO sobreescribir con la cuenta del admin
+          if (adminTargetStreamerId || sessionStorage.getItem('orbibot_support_streamer_id')) {
+            console.log('🛡️ [Auth Event] Modo Asistencia activo. Manteniendo sesión del streamer asistido.');
+            await checkAdminStatus();
+            return;
+          }
+
           // Si solo es un refresco de token en segundo plano y el dashboard ya está visible, no interrumpir la pantalla del usuario
           const isDashboardVisible = document.getElementById('dashboardAppView')?.style?.display === 'flex';
           if (event === 'TOKEN_REFRESHED' && isDashboardVisible) {
@@ -589,8 +607,16 @@ function initSupabaseAuth() {
             loggedInAt: Date.now()
           };
           setUserSession(userObj);
-          await loadUserDataFromSupabase(userObj.email);
           await checkAdminStatus();
+
+          const savedSupportStreamer = sessionStorage.getItem('orbibot_support_streamer_id');
+          const savedSupportName = sessionStorage.getItem('orbibot_support_streamer_name');
+          if (savedSupportStreamer && isUserSuperAdmin) {
+            await enterStreamerSupportMode(savedSupportStreamer, savedSupportName || savedSupportStreamer);
+            return;
+          }
+
+          await loadUserDataFromSupabase(userObj.email);
           const currentTab = getActiveDashboardTab();
           showDashboardView(currentTab);
           updatePlatformLinkingUI();
@@ -2001,6 +2027,10 @@ function handleSocketMessage(msg) {
 
 // ================= LOAD DATA =================
 async function loadStandaloneData() {
+  if (adminTargetStreamerId) {
+    console.log(`🛡️ [loadStandaloneData] Modo Asistencia activo para @${adminTargetStreamerId}. Omitiendo recarga de datos locales.`);
+    return;
+  }
   const session = getUserSession();
   if (!session || !session.email) {
     const defaultCfg = getFreshDefaultConfig();
@@ -2070,6 +2100,10 @@ async function loadStandaloneData() {
 }
 
 async function loadInitialData() {
+  if (adminTargetStreamerId || sessionStorage.getItem('orbibot_support_streamer_id')) {
+    console.log(`🛡️ [loadInitialData] Modo Asistencia activo. Omitiendo recarga.`);
+    return;
+  }
   const isStaticHosting = window.location.hostname.includes('github.io') || window.location.protocol === 'file:';
   if (isStaticHosting) {
     console.log('⚡ OrbyxBot funcionando en modo Standalone / GitHub Pages.');
@@ -9503,7 +9537,6 @@ const KNOWN_SUPERADMINS = [
 ];
 let isUserSuperAdmin = false;
 let adminStreamersCache = [];
-let adminTargetStreamerId = null;
 let adminOriginalConfig = null;
 let adminOriginalCommands = null;
 let adminOriginalRewards = null;
@@ -10140,6 +10173,12 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   updateWidgetUrls();
   if (typeof initWidgetCustomization === 'function') initWidgetCustomization();
 
+  // Guardar sesión de soporte en sessionStorage para persistencia ante cambio de pestañas o recargas
+  try {
+    sessionStorage.setItem('orbibot_support_streamer_id', streamerId);
+    sessionStorage.setItem('orbibot_support_streamer_name', displayName || streamerId);
+  } catch (e) { }
+
   // Re-suscribir WebSocket y MQTT a la sala del streamer asistido
   const targetRoom = getActiveStreamerRoom();
   const effectiveToken = getEffectiveWidgetToken();
@@ -10168,8 +10207,10 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     connectInBrowserKickBot(appConfig.kick);
   }
 
+  showDashboardView('tab-dashboard');
   switchTab('tab-dashboard');
-  showToast(`✅ Modo Asistencia Activo para @${displayName || streamerId}. Viendo el panel y widgets exactamente como el streamer.`, 'success');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  showToast(`✅ Modo Asistencia Activo para @${displayName || streamerId}. Viendo el Panel General y configuración del streamer.`, 'success');
 }
 
 // 6. saveAdminSupportChanges()
@@ -10235,6 +10276,11 @@ async function saveAdminSupportChanges() {
 // 7. exitAdminSupportMode()
 function exitAdminSupportMode() {
   if (!adminTargetStreamerId) return;
+
+  try {
+    sessionStorage.removeItem('orbibot_support_streamer_id');
+    sessionStorage.removeItem('orbibot_support_streamer_name');
+  } catch (e) { }
 
   if (adminOriginalConfig) {
     appConfig = adminOriginalConfig;
