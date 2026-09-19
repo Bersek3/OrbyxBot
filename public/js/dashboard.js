@@ -1351,30 +1351,61 @@ async function disconnectKickAccount() {
     await fetch('/api/auth/kick/disconnect', { method: 'POST' });
   } catch (e) { }
 
+  // 1. Save to cloud BEFORE clearing local appConfig, so saveToAllSupabaseScopes 
+  // still knows the old kick channel and wipes it from that specific scope too!
+  let tempConfig = JSON.parse(JSON.stringify(appConfig || {}));
+  tempConfig.kick = {
+    channel: '', username: '', profile_picture: '', userId: '',
+    accessToken: '', refreshToken: '', clientId: '01M0VT0JC58YQEVGRHM8JFXQX3', connected: false
+  };
+  
+  if (typeof saveToAllSupabaseScopes === 'function') {
+    // kick_auth is deprecated but clear it just in case
+    saveToAllSupabaseScopes('kick_auth', null).catch(() => {});
+    
+    // Save the new config to all current scopes (including the Kick scope we are about to leave)
+    saveToAllSupabaseScopes('config', tempConfig).catch(() => {});
+  }
+
+  // 2. Now clear local state
   localStorage.removeItem('orbibot_kick_auth');
   localStorage.removeItem('orbibot_kick_channel');
   localStorage.removeItem('orbibot_kick_auth_event');
   localStorage.removeItem('orbibot_kick_auth_error');
 
-  if (!appConfig) appConfig = {};
-  appConfig.kick = {
-    channel: '',
-    username: '',
-    profile_picture: '',
-    userId: '',
-    accessToken: '',
-    refreshToken: '',
-    clientId: '01M0VT0JC58YQEVGRHM8JFXQX3',
-    connected: false
-  };
-
-  // Limpiar en la nube con Supabase
-  if (typeof saveToAllSupabaseScopes === 'function') {
-    saveToAllSupabaseScopes('kick_auth', null).catch(() => {});
-    saveToAllSupabaseScopes('config', appConfig).catch(() => {});
-  }
+  appConfig = tempConfig;
 
   showToast('Canal de Kick desvinculado.', 'info');
+
+  updatePlatformLinkingUI();
+  populateWidgetUrls();
+}
+
+async function disconnectTwitchAccount() {
+  if (browserTmiClient) {
+    try { browserTmiClient.disconnect(); } catch (e) { }
+    browserTmiClient = null;
+  }
+
+  try {
+    await fetch('/api/auth/twitch/disconnect', { method: 'POST' });
+  } catch (e) { }
+
+  let tempConfig = JSON.parse(JSON.stringify(appConfig || {}));
+  tempConfig.twitch = {
+    channel: '', botUsername: '', oauthToken: '', clientId: 'yw1vr664ichms8an2x5lhji58v7ozk', connected: false
+  };
+
+  if (typeof saveToAllSupabaseScopes === 'function') {
+    saveToAllSupabaseScopes('twitch_auth', null).catch(() => {});
+    saveToAllSupabaseScopes('config', tempConfig).catch(() => {});
+  }
+
+  localStorage.removeItem('orbibot_twitch_auth');
+
+  appConfig = tempConfig;
+
+  showToast('Canal de Twitch desvinculado.', 'info');
   updatePlatformLinkingUI();
   populateWidgetUrls();
 }
@@ -1395,6 +1426,7 @@ window.handleChatPlatformToggle = handleChatPlatformToggle;
 window.triggerKickOAuthLogin = triggerKickOAuthLogin;
 window.handleKickAuthSuccess = handleKickAuthSuccess;
 window.disconnectKickAccount = disconnectKickAccount;
+window.disconnectTwitchAccount = disconnectTwitchAccount;
 
 // Export Custom Goals Manager functions to window
 window.renderGoals = renderGoals;
