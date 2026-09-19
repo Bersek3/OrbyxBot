@@ -681,6 +681,10 @@
           <span class="nav-icon">⚡</span>
           <span>Comandos de Chat</span>
         </li>
+        <li id="navItemAdmin" class="nav-item" data-tab="tab-admin" style="display: none; border-left: 3px solid #facc15; background: rgba(234, 179, 8, 0.08);">
+          <span class="nav-icon">👑</span>
+          <span style="color: #facc15; font-weight: 700;">Administración & Soporte</span>
+        </li>
       </ul>
 
       <div class="sidebar-footer">
@@ -699,6 +703,12 @@
           <h2 id="currentTabTitle">Panel General</h2>
         </div>
         <div class="top-actions">
+          <!-- Píldora de Superadmin -->
+          <div id="adminSuperBadge"
+            style="display:none; align-items:center; gap:6px; padding:4px 12px; background:linear-gradient(90deg, rgba(234,179,8,0.2), rgba(249,115,22,0.2)); border:1px solid rgba(234,179,8,0.5); border-radius:999px; font-size:12px; font-weight:800; color:#facc15; box-shadow:0 0 12px rgba(234,179,8,0.3);">
+            <span>👑 SUPERADMIN</span>
+          </div>
+
           <!-- Botón Iniciar Sesión con Twitch (visible cuando no está conectado) -->
           <button id="topTwitchLoginBtn" class="btn"
             style="background: #9146FF; color: #fff; font-weight: 700; gap: 8px; box-shadow: 0 4px 15px rgba(145, 70, 255, 0.4);">
@@ -730,6 +740,25 @@
           </div>
         </div>
       </header>
+
+      <!-- Sticky Banner para Modo Asistencia / Soporte a Streamer -->
+      <div id="adminSupportModeBanner" style="display:none; position:sticky; top:0; z-index:900; background:linear-gradient(90deg, #7c3aed, #db2777); color:#fff; padding:12px 24px; border-bottom:2px solid rgba(255,255,255,0.3); box-shadow:0 4px 20px rgba(124,58,237,0.5); align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <span style="font-size:22px;">🛡️</span>
+          <div>
+            <div style="font-weight:800; font-size:13px; text-transform:uppercase; letter-spacing:0.5px; color:#fde047;">MODO ASISTENCIA & SOPORTE A STREAMER ACTIVO</div>
+            <div style="font-size:13px; opacity:0.95;">Visualizando y diagnosticando la cuenta de: <strong id="adminTargetStreamerName" style="background:rgba(0,0,0,0.35); padding:2px 8px; border-radius:6px; color:#fff;">@streamer</strong></div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <button class="btn btn-sm" onclick="saveAdminSupportChanges()" style="background:#10b981; color:#fff; font-weight:700; border:none; padding:8px 16px; border-radius:8px; box-shadow:0 2px 10px rgba(16,185,129,0.4); cursor:pointer;">
+            <i class="fas fa-save"></i> Guardar Cambios para Streamer
+          </button>
+          <button class="btn btn-sm" onclick="exitAdminSupportMode()" style="background:rgba(0,0,0,0.45); color:#fff; font-weight:700; border:1px solid rgba(255,255,255,0.3); padding:8px 16px; border-radius:8px; cursor:pointer;">
+            <i class="fas fa-times"></i> Salir de Modo Asistencia
+          </button>
+        </div>
+      </div>
 
       <main class="content-container">
 
@@ -1095,6 +1124,31 @@
 
         <!-- ================= TAB 4: TEXT-TO-SPEECH (TTS MULTI-VOCES) ================= -->
         <section id="tab-tts" class="tab-pane">
+          <!-- Master Chat TTS Activation / Deactivation Banner -->
+          <div style="background: linear-gradient(135deg, rgba(20, 26, 42, 0.9), rgba(15, 20, 32, 0.95)); border: 1.5px solid rgba(163, 230, 53, 0.35); border-radius: 14px; padding: 18px 24px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <div style="width: 46px; height: 46px; border-radius: 12px; background: rgba(163, 230, 53, 0.15); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #a3e635; border: 1px solid rgba(163, 230, 53, 0.4);">
+                🎙️
+              </div>
+              <div>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                  <h3 style="font-size: 16px; font-weight: 800; color: #fff; margin: 0;">Activación General de TTS en Chat</h3>
+                  <span id="ttsMasterStatusBadge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 11px; font-weight: 800; padding: 2px 10px; border-radius: 999px;">ACTIVO EN CHAT</span>
+                </div>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 4px 0 0 0;">
+                  Interruptor maestro: Si lo apagas, ningún comando de voz (<code style="color: #a3e635;">!tts</code>, <code style="color: #a3e635;">!messi</code>, <code style="color: #a3e635;">!homero</code>, etc.) se reproducirá en directo desde el chat de Twitch o Kick.
+                </p>
+              </div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <label class="switch-label" style="display: flex; align-items: center; gap: 12px; cursor: pointer; margin: 0;">
+                <span id="ttsMasterToggleLabel" style="font-size: 13px; font-weight: 700; color: #fff;">TTS Habilitado</span>
+                <input type="checkbox" id="toggleTtsMasterChat" class="switch-input" checked onchange="handleTtsGlobalChatToggle(this.checked)">
+                <span class="switch-slider" style="position: relative; width: 48px; height: 26px; border-radius: 999px;"></span>
+              </label>
+            </div>
+          </div>
+
           <!-- Sub-pestañas de Navegación TTS (Estilo TTS Monster / SoundAlerts) -->
           <div class="tts-subtabs-nav">
             <button class="tts-subtab-btn active" data-subtab="tts-subtab-commands">Comandos</button>
@@ -2500,6 +2554,98 @@ console.log('Widget personalizado cargado');"></textarea>
               <div style="margin-top:12px; font-size:11px; color:var(--text-muted); text-align:center;">
                 Los cambios se reflejan aquí al instante. El overlay real en OBS se actualizará al guardar.
               </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ================= TAB 8: ADMINISTRACIÓN GENERAL & SOPORTE ================= -->
+        <section id="tab-admin" class="tab-pane">
+          <!-- Admin Header Bar -->
+          <div style="background: linear-gradient(135deg, rgba(234, 179, 8, 0.12), rgba(30, 20, 50, 0.95)); border: 1px solid rgba(234, 179, 8, 0.4); border-radius: 16px; padding: 22px 26px; margin-bottom: 24px; position: relative; overflow: hidden; box-shadow: 0 4px 25px rgba(0, 0, 0, 0.4);">
+            <div style="position: absolute; top:0; left:0; right:0; height:3px; background: linear-gradient(90deg, #facc15, #ec4899, #8b5cf6);"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h3 style="font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 10px;">
+                  <span>👑</span> <span>Panel de Administrador General & Soporte</span>
+                </h3>
+                <p style="font-size: 13.5px; color: var(--text-secondary); margin: 0;">
+                  Acceso maestro para inspeccionar, diagnosticar y asistir a cualquier streamer con sus widgets, TTS, alertas y música en OBS.
+                </p>
+              </div>
+              <div style="display: flex; gap: 10px;">
+                <button class="btn btn-secondary btn-sm" onclick="loadAdminStreamersList(true)" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.2);">
+                  <i class="fas fa-sync-alt"></i> Actualizar Lista
+                </button>
+              </div>
+            </div>
+
+            <!-- Stats Bar -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 18px;">
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700;">Streamers Registrados</div>
+                <div id="adminStatTotalStreamers" style="font-size: 22px; font-weight: 800; color: #facc15; margin-top: 2px;">0</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700;">Canales Twitch</div>
+                <div id="adminStatTwitchCount" style="font-size: 22px; font-weight: 800; color: #a78bfa; margin-top: 2px;">0</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700;">Canales Kick</div>
+                <div id="adminStatKickCount" style="font-size: 22px; font-weight: 800; color: #53fc18; margin-top: 2px;">0</div>
+              </div>
+              <div style="background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 12px 16px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: #94a3b8; font-weight: 700;">Tu Rol</div>
+                <div style="font-size: 14px; font-weight: 800; color: #00f2fe; margin-top: 6px;">Superadministrador</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Buscador y Filtro de Streamers -->
+          <div class="card" style="margin-bottom: 20px; padding: 18px 22px;">
+            <div style="display: flex; gap: 14px; align-items: center; flex-wrap: wrap;">
+              <div style="flex: 1; min-width: 260px; position: relative;">
+                <input type="text" id="adminStreamerSearchInput" class="form-control" placeholder="🔍 Buscar streamer por ID, usuario de Twitch, Kick o email..." oninput="filterAdminStreamersList(this.value)">
+              </div>
+              <button class="btn btn-primary" onclick="handleAdminManualStreamerSupport()" style="font-size: 13px; font-weight: 700;">
+                <i class="fas fa-user-astronaut"></i> Asistir por ID Manual
+              </button>
+            </div>
+          </div>
+
+          <!-- Tabla de Streamers Disponibles -->
+          <div class="card" style="padding: 20px 24px; margin-bottom: 24px;">
+            <div class="card-header" style="margin-bottom: 16px;">
+              <span class="card-title">👥 Directorio de Streamers para Asistencia</span>
+              <span id="adminStreamersCountBadge" style="font-size: 11px; background: rgba(234,179,8,0.15); color: #facc15; border: 1px solid rgba(234,179,8,0.3); padding: 2px 10px; border-radius: 999px; font-weight: 700;">0 streamers</span>
+            </div>
+
+            <div id="adminStreamersListContainer" style="display: flex; flex-direction: column; gap: 12px;">
+              <div style="text-align: center; padding: 36px 20px; color: var(--text-secondary);">
+                <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #facc15; margin-bottom: 10px; display: block;"></i>
+                Cargando directorio de streamers desde la base de datos...
+              </div>
+            </div>
+          </div>
+
+          <!-- Gestión de Administradores Autorizados -->
+          <div class="card" style="padding: 20px 24px;">
+            <div class="card-header" style="margin-bottom: 16px;">
+              <span class="card-title">🛡️ Administradores Generales Autorizados (Base de Datos)</span>
+            </div>
+            <p style="font-size: 13px; color: var(--text-secondary); margin-bottom: 16px;">
+              Los administradores tienen permiso para inspeccionar y dar soporte a los streamers. Puedes añadir administradores aquí o insertándolos directamente en la tabla <code>orbibot_admins</code> de Supabase.
+            </p>
+
+            <div style="display: flex; gap: 10px; margin-bottom: 18px; flex-wrap: wrap;">
+              <input type="email" id="adminNewEmailInput" class="form-control" style="flex: 1; min-width: 240px;" placeholder="correo_nuevo_admin@gmail.com">
+              <input type="text" id="adminNewNotesInput" class="form-control" style="flex: 1; min-width: 200px;" placeholder="Notas / Rol (ej: Soporte Técnico)">
+              <button class="btn btn-accent" onclick="handleAddNewAdmin()" style="font-size: 13px; font-weight: 700;">
+                <i class="fas fa-user-plus"></i> Agregar Admin
+              </button>
+            </div>
+
+            <div id="adminListContainer" style="display: flex; flex-direction: column; gap: 8px;">
+              <!-- Se renderiza dinámicamente con renderAdminsList() -->
             </div>
           </div>
         </section>

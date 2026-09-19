@@ -22,6 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initDashboardMqtt();
   updatePlatformLinkingUI();
   initTTSMultiVoiceSystem();
+  checkAdminStatus();
 });
 
 // ================= SUPABASE AUTH & CONFIGURATION =================
@@ -541,6 +542,7 @@ function initSupabaseAuth() {
 
           // Sincronizar ajustes guardados en la nube para este usuario
           await loadUserDataFromSupabase(userObj.email);
+          await checkAdminStatus();
 
           // Mantener o abrir la pestaña en la que el usuario estaba trabajando
           const currentTab = getActiveDashboardTab();
@@ -555,6 +557,7 @@ function initSupabaseAuth() {
           }
         } else if (event === 'SIGNED_OUT') {
           clearAllUserLocalData();
+          checkAdminStatus();
           showLandingView();
         }
       });
@@ -580,9 +583,12 @@ function initSupabaseAuth() {
           };
           setUserSession(userObj);
           await loadUserDataFromSupabase(userObj.email);
+          await checkAdminStatus();
           const currentTab = getActiveDashboardTab();
           showDashboardView(currentTab);
           updatePlatformLinkingUI();
+        } else {
+          checkAdminStatus();
         }
       });
     } catch (e) {
@@ -959,6 +965,7 @@ async function handleAuthLogout() {
     }
   }
   clearAllUserLocalData();
+  checkAdminStatus();
   showToast('Has cerrado tu sesión de OrbyxBot Cloud.', 'info');
   showLandingView();
   updateAuthUI();
@@ -1437,6 +1444,10 @@ function setupNavigation() {
         titleEl.innerText = item.querySelector('span:last-child').innerText;
       }
       saveActiveDashboardTab(targetTabId);
+
+      if (targetTabId === 'tab-admin' && typeof loadAdminStreamersList === 'function') {
+        loadAdminStreamersList();
+      }
     });
   });
 
@@ -2095,40 +2106,104 @@ function connectInBrowserTwitchBot(twitchData) {
         return;
       }
 
-      // Procesamiento de comando !tts desde el chat en cliente de navegador
+      // Procesamiento de comandos TTS desde el chat de Twitch en cliente de navegador
       try {
         const currentCfg = JSON.parse(localStorage.getItem('orbibot_config') || '{}');
         const ttsCfg = currentCfg.tts || {};
-        const ttsCmd = (ttsCfg.chatCommand || '!tts').toLowerCase();
-        if (ttsCfg.enabled !== false && ttsCfg.allowChatCommand !== false && message.trim().toLowerCase().startsWith(ttsCmd)) {
-          let ttsRaw = message.trim().slice(ttsCmd.length).trim();
-          if (ttsRaw) {
-            let selectedVoice = ttsCfg.voice || 'es_mx_mia';
-            const firstToken = ttsRaw.split(/\s+/)[0].toLowerCase().replace(/^[-@/]/, '').replace(/^voice:/, '');
-            const aliasMap = {
-              mia: 'es_mx_mia', miguel: 'es_us_miguel', lupe: 'es_us_lupe', penelope: 'es_us_penelope', 'penélope': 'es_us_penelope',
-              enrique: 'es_es_enrique', conchita: 'es_es_conchita', lucia: 'es_es_lucia', 'lucía': 'es_es_lucia',
-              brian: 'en_brian', emma: 'en_emma', joey: 'en_joey', matthew: 'en_matthew', kendra: 'en_kendra', justin: 'en_justin', russell: 'en_russell',
-              cristiano: 'pt_cristiano', mathieu: 'fr_mathieu', giorgio: 'it_giorgio', hans: 'de_hans', takumi: 'ja_takumi', mizuki: 'ja_mizuki'
-            };
-            if (aliasMap[firstToken] || SE_VOICE_MAP[firstToken]) {
-              selectedVoice = aliasMap[firstToken] || firstToken;
-              ttsRaw = ttsRaw.slice(ttsRaw.indexOf(' ') + 1).trim();
+        const isBroadcaster = Boolean(tags.badges?.broadcaster === '1' || tags.username === channel.toLowerCase());
+        const isModOrBroadcaster = isMod || isBroadcaster;
+        const firstWord = message.trim().split(' ')[0].toLowerCase();
+        const trimmed = message.trim();
+
+        if (ttsCfg.enabled !== false && ttsCfg.allowChatCommand !== false) {
+          const ttsCmd = (ttsCfg.chatCommand || '!tts').toLowerCase();
+          const commands = (typeof cachedTTSCommands !== 'undefined' && cachedTTSCommands.length) ? cachedTTSCommands : (appConfig?.ttsCommands || []);
+          const matchedVoiceCmd = commands.find(c => c.enabled !== false && c.command && c.command.toLowerCase() === firstWord);
+
+          if (firstWord === '!ttsdetener' || firstWord === '!ttsstop' || firstWord === '!ttspause') {
+            if (isModOrBroadcaster) {
+              broadcastEvent('tts_control', { action: 'stop', channel });
+              return;
             }
+          }
+          if (firstWord === '!ttsreiniciar' || firstWord === '!ttsreset' || firstWord === '!ttsclear') {
+            if (isModOrBroadcaster) {
+              broadcastEvent('tts_control', { action: 'reset', channel });
+              return;
+            }
+          }
+          if (firstWord === '!ttsskip' || firstWord === '!ttssaltar') {
+            if (isModOrBroadcaster) {
+              broadcastEvent('tts_control', { action: 'skip', channel });
+              return;
+            }
+          }
+
+          if (trimmed.toLowerCase().startsWith(ttsCmd)) {
+            let ttsRaw = trimmed.slice(ttsCmd.length).trim();
             if (ttsRaw) {
-              const ttsAudioUrl = getTTSAudioUrl(ttsRaw, selectedVoice);
-              const ttsData = {
-                id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
-                user: username,
-                text: ttsRaw,
-                voice: selectedVoice,
-                volume: Number(ttsCfg.volume !== undefined ? ttsCfg.volume : 90) / 100,
-                rate: Number(ttsCfg.rate || 1.0),
-                pitch: Number(ttsCfg.pitch || 1.0),
-                audioUrl: ttsAudioUrl,
-                timestamp: Date.now()
+              let selectedVoice = ttsCfg.voice || 'es_mx_mia';
+              const firstToken = ttsRaw.split(/\s+/)[0].toLowerCase().replace(/^[-@/]/, '').replace(/^voice:/, '');
+              const aliasMap = {
+                messi: 'es_ar_messi', maduro: 'es_ve_maduro', tiktok: 'es_tiktok', homero: 'es_mx_homero',
+                dross: 'es_dross', badbunny: 'es_badbunny', rubius: 'es_rubius', farid: 'es_farid',
+                westcol: 'es_westcol', cr7: 'es_cr7', goku: 'es_goku', maradona: 'es_maradona',
+                xokas: 'es_xokas', illojuan: 'es_illojuan', auron: 'es_auronplay', peruano: 'es_peruano',
+                closs: 'es_marianocloss', lacobra: 'es_lacobra', davo: 'es_davo', mia: 'es_mx_mia',
+                miguel: 'es_us_miguel', brian: 'en_brian'
               };
-              broadcastEvent('tts', ttsData);
+              if (aliasMap[firstToken] || (typeof SE_VOICE_MAP !== 'undefined' && SE_VOICE_MAP[firstToken])) {
+                selectedVoice = aliasMap[firstToken] || firstToken;
+                ttsRaw = ttsRaw.slice(ttsRaw.indexOf(' ') + 1).trim();
+              }
+              if (ttsRaw) {
+                const ttsAudioUrl = getTTSAudioUrl(ttsRaw, selectedVoice);
+                const ttsData = {
+                  id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                  user: username,
+                  text: ttsRaw,
+                  voice: selectedVoice,
+                  volume: Number(ttsCfg.volume !== undefined ? ttsCfg.volume : 90) / 100,
+                  rate: Number(ttsCfg.rate || 1.0),
+                  pitch: Number(ttsCfg.pitch || 1.0),
+                  audioUrl: ttsAudioUrl,
+                  channel,
+                  platform: 'twitch',
+                  timestamp: Date.now()
+                };
+                broadcastEvent('tts', ttsData);
+                return;
+              }
+            }
+          } else if (matchedVoiceCmd) {
+            const userBadges = { isMod, isSub, vip: Boolean(tags.badges?.vip), broadcaster: isBroadcaster };
+            const allowed = !matchedVoiceCmd.permissions || matchedVoiceCmd.permissions.includes('todos') ||
+              (userBadges.broadcaster && matchedVoiceCmd.permissions.includes('broadcaster')) ||
+              (userBadges.isMod && matchedVoiceCmd.permissions.includes('mod')) ||
+              (userBadges.isSub && matchedVoiceCmd.permissions.includes('sub')) ||
+              (userBadges.vip && matchedVoiceCmd.permissions.includes('vip'));
+
+            if (allowed) {
+              const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
+              if (voiceText) {
+                const selectedVoice = matchedVoiceCmd.voiceId || ttsCfg.voice || 'es_mx_mia';
+                const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
+                const ttsData = {
+                  id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                  user: username,
+                  text: voiceText,
+                  voice: selectedVoice,
+                  volume: Number(matchedVoiceCmd.volume !== undefined ? matchedVoiceCmd.volume : (ttsCfg.volume || 90)) / 100,
+                  rate: Number(matchedVoiceCmd.rate || ttsCfg.rate || 1.0),
+                  pitch: Number(matchedVoiceCmd.pitch || ttsCfg.pitch || 1.0),
+                  audioUrl: ttsAudioUrl,
+                  channel,
+                  platform: 'twitch',
+                  timestamp: Date.now()
+                };
+                broadcastEvent('tts', ttsData);
+                return;
+              }
             }
           }
         }
@@ -2917,6 +2992,28 @@ function bindConfigToUI(cfg) {
     if (document.getElementById('cfgTtsMinBits')) document.getElementById('cfgTtsMinBits').value = cfg.tts.minBits !== undefined ? cfg.tts.minBits : 50;
     if (document.getElementById('cfgTtsFishApiKey')) {
       document.getElementById('cfgTtsFishApiKey').value = cfg.tts.fishApiKey || 'sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI';
+    }
+
+    // Sync Master Chat TTS Toggle & Status Badge
+    const isTtsChatActive = cfg.tts.enabled !== false && cfg.tts.allowChatCommand !== false;
+    const masterToggle = document.getElementById('toggleTtsMasterChat');
+    const masterBadge = document.getElementById('ttsMasterStatusBadge');
+    const masterLabel = document.getElementById('ttsMasterToggleLabel');
+
+    if (masterToggle) masterToggle.checked = isTtsChatActive;
+    if (masterLabel) masterLabel.textContent = isTtsChatActive ? 'TTS Habilitado' : 'TTS Silenciado';
+    if (masterBadge) {
+      if (isTtsChatActive) {
+        masterBadge.textContent = 'ACTIVO EN CHAT';
+        masterBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+        masterBadge.style.color = '#10b981';
+        masterBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+      } else {
+        masterBadge.textContent = 'DESACTIVADO EN CHAT';
+        masterBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+        masterBadge.style.color = '#ef4444';
+        masterBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+      }
     }
   }
 
@@ -9136,6 +9233,559 @@ loadInitialData = async function () {
     setupRewardAutocomplete();
   }
 };
+
+// ================= ADMINISTRACIÓN GENERAL & MODO ASISTENCIA =================
+let isUserSuperAdmin = false;
+let adminStreamersCache = [];
+let adminTargetStreamerId = null;
+let adminOriginalConfig = null;
+
+// 1. checkAdminStatus()
+async function checkAdminStatus() {
+  const session = getUserSession();
+  if (!session || !session.email) {
+    isUserSuperAdmin = false;
+    updateAdminUIElements(false);
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/admin/check', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: session.email, userId: session.id })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.isAdmin) {
+        isUserSuperAdmin = true;
+        updateAdminUIElements(true);
+        return;
+      }
+    }
+  } catch (e) { }
+
+  // Fallback: Check direct Supabase query if frontend client exists
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient
+        .from('orbibot_admins')
+        .select('*')
+        .or(`email.eq.${session.email},user_id.eq.${session.id || ''}`);
+      if (!error && data && data.length > 0) {
+        isUserSuperAdmin = true;
+        updateAdminUIElements(true);
+        return;
+      }
+    } catch (e) { }
+  }
+
+  isUserSuperAdmin = false;
+  updateAdminUIElements(false);
+}
+
+function updateAdminUIElements(isAdmin) {
+  const badge = document.getElementById('adminSuperBadge');
+  const navItem = document.getElementById('navItemAdmin');
+  if (badge) badge.style.display = isAdmin ? 'inline-flex' : 'none';
+  if (navItem) navItem.style.display = isAdmin ? 'flex' : 'none';
+}
+
+// 2. loadAdminStreamersList(force)
+async function loadAdminStreamersList(force = false) {
+  const session = getUserSession();
+  if (!session || !isUserSuperAdmin) return;
+
+  const container = document.getElementById('adminStreamersListContainer');
+  if (container) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 36px 20px; color: var(--text-secondary);">
+        <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #facc15; margin-bottom: 10px; display: block;"></i>
+        Cargando lista de streamers registrados...
+      </div>
+    `;
+  }
+
+  try {
+    const res = await fetch('/api/admin/streamers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: session.email, userId: session.id })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.streamers)) {
+        adminStreamersCache = data.streamers;
+        renderAdminStreamersList(adminStreamersCache);
+        loadAdminsList();
+        return;
+      }
+    }
+  } catch (e) {
+    console.warn('Error fetching streamers via API:', e);
+  }
+
+  // Fallback direct Supabase query
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.from('orbibot_user_data').select('user_id, scope, updated_at');
+      if (!error && data) {
+        const uniqueUsers = new Map();
+        data.forEach(row => {
+          if (!uniqueUsers.has(row.user_id)) {
+            uniqueUsers.set(row.user_id, {
+              id: row.user_id,
+              email: row.user_id.includes('@') ? row.user_id : '',
+              updatedAt: row.updated_at
+            });
+          }
+        });
+        adminStreamersCache = Array.from(uniqueUsers.values());
+        renderAdminStreamersList(adminStreamersCache);
+        loadAdminsList();
+        return;
+      }
+    } catch (e) { }
+  }
+
+  if (container) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 24px; color: #ef4444;">
+        <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 8px;"></i>
+        <div>No se pudo cargar la lista de streamers. Verifica tu conexión o permisos de administrador.</div>
+      </div>
+    `;
+  }
+}
+
+// 3. renderAdminStreamersList(streamers)
+function renderAdminStreamersList(streamers) {
+  const container = document.getElementById('adminStreamersListContainer');
+  const countBadge = document.getElementById('adminStreamersCountBadge');
+  const totalStat = document.getElementById('adminStatTotalStreamers');
+  const twitchStat = document.getElementById('adminStatTwitchCount');
+  const kickStat = document.getElementById('adminStatKickCount');
+
+  if (!container) return;
+  if (!Array.isArray(streamers)) streamers = [];
+
+  if (countBadge) countBadge.textContent = `${streamers.length} streamer${streamers.length === 1 ? '' : 's'}`;
+  if (totalStat) totalStat.textContent = streamers.length;
+
+  let twitchCount = 0;
+  let kickCount = 0;
+  streamers.forEach(s => {
+    if (s.twitchChannel) twitchCount++;
+    if (s.kickChannel) kickCount++;
+  });
+  if (twitchStat) twitchStat.textContent = twitchCount;
+  if (kickStat) kickStat.textContent = kickCount;
+
+  if (streamers.length === 0) {
+    container.innerHTML = `
+      <div style="text-align: center; padding: 36px 20px; color: var(--text-muted);">
+        <div style="font-size: 32px; margin-bottom: 8px;">👥</div>
+        <div style="font-weight: 700; color: var(--text-secondary);">No se encontraron streamers en la base de datos</div>
+        <div style="font-size: 12px; margin-top: 4px;">Cuando los streamers se registren o vinculen canales aparecerán listados aquí.</div>
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = `
+    <div style="overflow-x: auto;">
+      <table class="custom-table" style="width: 100%;">
+        <thead>
+          <tr>
+            <th>Streamer / Usuario</th>
+            <th>Twitch</th>
+            <th>Kick</th>
+            <th>Última Actividad</th>
+            <th style="text-align: right;">Acciones de Soporte</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${streamers.map(s => {
+            const displayName = s.displayName || s.email || s.id || 'Usuario';
+            const twitch = s.twitchChannel ? `<span style="color: #a78bfa; font-weight: 700;"><i class="fab fa-twitch"></i> @${escapeHtml(s.twitchChannel)}</span>` : '<span style="color: #64748b; font-size: 12px;">No vinculado</span>';
+            const kick = s.kickChannel ? `<span style="color: #53fc18; font-weight: 700;"><i class="fas fa-bolt"></i> @${escapeHtml(s.kickChannel)}</span>` : '<span style="color: #64748b; font-size: 12px;">No vinculado</span>';
+            const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
+
+            return `
+              <tr>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(145,70,255,0.2); border: 1px solid rgba(145,70,255,0.4); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #c4b5fd; font-size: 13px;">
+                      ${(displayName[0] || 'U').toUpperCase()}
+                    </div>
+                    <div>
+                      <div style="font-weight: 700; color: #fff; font-size: 13.5px;">${escapeHtml(displayName)}</div>
+                      <div style="font-size: 11px; color: #94a3b8; font-family: monospace;">ID: ${escapeHtml(s.id)}</div>
+                    </div>
+                  </div>
+                </td>
+                <td>${twitch}</td>
+                <td>${kick}</td>
+                <td style="font-size: 12px; color: #94a3b8;">${dateStr}</td>
+                <td style="text-align: right;">
+                  <button class="btn btn-sm" onclick="enterStreamerSupportMode('${escapeHtml(s.id)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-tools"></i> Asistir / Ver Config
+                  </button>
+                </td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// 4. filterAdminStreamersList(query)
+function filterAdminStreamersList(query) {
+  if (!query || !query.trim()) {
+    renderAdminStreamersList(adminStreamersCache);
+    return;
+  }
+  const q = query.trim().toLowerCase();
+  const filtered = adminStreamersCache.filter(s => {
+    return (s.id && s.id.toLowerCase().includes(q)) ||
+           (s.email && s.email.toLowerCase().includes(q)) ||
+           (s.displayName && s.displayName.toLowerCase().includes(q)) ||
+           (s.twitchChannel && s.twitchChannel.toLowerCase().includes(q)) ||
+           (s.kickChannel && s.kickChannel.toLowerCase().includes(q));
+  });
+  renderAdminStreamersList(filtered);
+}
+
+// 5. enterStreamerSupportMode(streamerId, displayName)
+async function enterStreamerSupportMode(streamerId, displayName = '') {
+  if (!streamerId) return;
+  const session = getUserSession();
+  if (!session || !isUserSuperAdmin) {
+    showToast('Acceso denegado: solo Superadministradores.', 'error');
+    return;
+  }
+
+  showToast(`🛡️ Cargando cuenta de streamer ${displayName || streamerId}...`, 'info');
+
+  try {
+    const res = await fetch(`/api/admin/streamer/${encodeURIComponent(streamerId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: session.email, userId: session.id })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.config) {
+        // Guardar estado original del admin para restaurar al salir
+        if (!adminOriginalConfig) {
+          adminOriginalConfig = JSON.parse(JSON.stringify(appConfig || {}));
+        }
+
+        adminTargetStreamerId = streamerId;
+        appConfig = data.config;
+
+        // Activar banner superior de modo asistencia
+        const banner = document.getElementById('adminSupportModeBanner');
+        const nameEl = document.getElementById('adminTargetStreamerName');
+        if (banner) banner.style.display = 'flex';
+        if (nameEl) nameEl.textContent = displayName ? `@${displayName} (${streamerId})` : streamerId;
+
+        // Renderizar toda la UI con la config del streamer objetivo
+        bindConfigToUI(appConfig);
+        if (Array.isArray(data.commands)) renderCommands(data.commands);
+        if (Array.isArray(data.rewards)) renderRewards(data.rewards);
+        if (Array.isArray(data.goals)) renderGoals(data.goals);
+        if (Array.isArray(data.ttsCommands)) {
+          cachedTTSCommands = data.ttsCommands;
+          renderTTSCommands(cachedTTSCommands);
+        }
+        if (data.songRequest) updateSongRequestUI(data.songRequest);
+
+        // Cambiar a la pestaña de Widgets o Dashboard
+        switchTab('tab-dashboard');
+        showToast(`✅ Ahora estás en Modo Asistencia para ${displayName || streamerId}`, 'success');
+        return;
+      }
+    }
+  } catch (e) {
+    console.error('Error entering support mode:', e);
+  }
+
+  showToast('No se pudo cargar la configuración completa del streamer.', 'error');
+}
+
+// 6. saveAdminSupportChanges()
+async function saveAdminSupportChanges() {
+  if (!adminTargetStreamerId) {
+    showToast('No estás en modo asistencia activo.', 'warn');
+    return;
+  }
+  const session = getUserSession();
+  if (!session || !isUserSuperAdmin) return;
+
+  showToast('💾 Guardando cambios para el streamer...', 'info');
+
+  try {
+    const payload = {
+      email: session.email,
+      userId: session.id,
+      config: appConfig,
+      commands: (typeof cachedCommands !== 'undefined') ? cachedCommands : [],
+      rewards: (typeof cachedRewards !== 'undefined') ? cachedRewards : [],
+      goals: (typeof appConfig?.goals !== 'undefined') ? appConfig.goals : [],
+      ttsCommands: (typeof cachedTTSCommands !== 'undefined') ? cachedTTSCommands : []
+    };
+
+    const res = await fetch(`/api/admin/streamer/${encodeURIComponent(adminTargetStreamerId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        showToast('🎉 ¡Configuración del streamer actualizada y guardada con éxito en la base de datos!', 'success');
+        return;
+      }
+    }
+  } catch (e) {
+    console.error('Error saving support changes:', e);
+  }
+
+  showToast('Error al guardar cambios para el streamer en el servidor.', 'error');
+}
+
+// 7. exitAdminSupportMode()
+function exitAdminSupportMode() {
+  if (!adminTargetStreamerId) return;
+
+  if (adminOriginalConfig) {
+    appConfig = adminOriginalConfig;
+    adminOriginalConfig = null;
+    bindConfigToUI(appConfig);
+  }
+
+  adminTargetStreamerId = null;
+
+  const banner = document.getElementById('adminSupportModeBanner');
+  if (banner) banner.style.display = 'none';
+
+  // Volver a la pestaña de administración
+  switchTab('tab-admin');
+  showToast('Has salido del Modo Asistencia. Volviste a tu panel de Administrador.', 'info');
+}
+
+// 8. handleAdminManualStreamerSupport()
+function handleAdminManualStreamerSupport() {
+  const input = document.getElementById('adminStreamerSearchInput');
+  const targetId = input ? input.value.trim() : '';
+  if (!targetId) {
+    showToast('Escribe el ID o usuario del streamer que deseas asistir.', 'warn');
+    if (input) input.focus();
+    return;
+  }
+  enterStreamerSupportMode(targetId, targetId);
+}
+
+// 9. Gestor de Administradores (loadAdminsList, handleAddNewAdmin, handleRemoveAdmin)
+async function loadAdminsList() {
+  const container = document.getElementById('adminListContainer');
+  if (!container) return;
+  const session = getUserSession();
+  if (!session || !isUserSuperAdmin) return;
+
+  try {
+    const res = await fetch('/api/admin/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: session.email, userId: session.id })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && Array.isArray(data.admins)) {
+        renderAdminsList(data.admins);
+        return;
+      }
+    }
+  } catch (e) { }
+
+  // Supabase fallback
+  if (supabaseClient) {
+    try {
+      const { data, error } = await supabaseClient.from('orbibot_admins').select('*');
+      if (!error && data) {
+        renderAdminsList(data);
+        return;
+      }
+    } catch (e) { }
+  }
+}
+
+function renderAdminsList(admins) {
+  const container = document.getElementById('adminListContainer');
+  if (!container) return;
+  if (!Array.isArray(admins) || admins.length === 0) {
+    container.innerHTML = `
+      <div style="font-size: 13px; color: #94a3b8; padding: 12px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+        No hay administradores adicionales configurados en base de datos.
+      </div>
+    `;
+    return;
+  }
+
+  container.innerHTML = admins.map(a => {
+    return `
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; gap: 10px;">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="color: #facc15; font-size: 16px;">🛡️</span>
+          <div>
+            <strong style="color: #fff; font-size: 13px;">${escapeHtml(a.email || a.user_id || 'Admin')}</strong>
+            <span style="font-size: 11.5px; color: #94a3b8; margin-left: 8px;">(${escapeHtml(a.notes || a.role || 'Superadmin')})</span>
+          </div>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="handleRemoveAdmin('${escapeHtml(a.email || a.user_id)}')" style="padding: 4px 10px; font-size: 11px;">
+          <i class="fas fa-trash-alt"></i> Quitar
+        </button>
+      </div>
+    `;
+  }).join('');
+}
+
+async function handleAddNewAdmin() {
+  const emailInput = document.getElementById('adminNewEmailInput');
+  const notesInput = document.getElementById('adminNewNotesInput');
+  const email = emailInput ? emailInput.value.trim() : '';
+  const notes = notesInput ? notesInput.value.trim() : 'Soporte';
+
+  if (!email || !email.includes('@')) {
+    showToast('Ingresa un correo electrónico válido para el nuevo administrador.', 'warn');
+    if (emailInput) emailInput.focus();
+    return;
+  }
+
+  const session = getUserSession();
+  if (!session || !isUserSuperAdmin) return;
+
+  try {
+    const res = await fetch('/api/admin/add', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: session.email, userId: session.id, newEmail: email, role: 'superadmin', notes })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        showToast(`✅ Administrador ${email} añadido correctamente.`, 'success');
+        if (emailInput) emailInput.value = '';
+        if (notesInput) notesInput.value = '';
+        loadAdminsList();
+        return;
+      }
+    }
+  } catch (e) { }
+
+  showToast('Error al añadir administrador.', 'error');
+}
+
+async function handleRemoveAdmin(adminEmail) {
+  if (!adminEmail) return;
+  if (!confirm(`¿Estás seguro de revocar permisos de administrador a ${adminEmail}?`)) return;
+
+  const session = getUserSession();
+  if (!session || !isUserSuperAdmin) return;
+
+  try {
+    const res = await fetch('/api/admin/remove', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: session.email, userId: session.id, targetEmail: adminEmail })
+    });
+
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Admin ${adminEmail} revocado.`, 'info');
+        loadAdminsList();
+        return;
+      }
+    }
+  } catch (e) { }
+
+  showToast('Error al revocar administrador.', 'error');
+}
+
+// 10. Master Chat TTS Toggle
+function handleTtsGlobalChatToggle(enabled) {
+  if (!appConfig) appConfig = {};
+  if (!appConfig.tts) appConfig.tts = {};
+
+  appConfig.tts.enabled = Boolean(enabled);
+  appConfig.tts.allowChatCommand = Boolean(enabled);
+
+  // Sincronizar checkboxes y etiquetas en UI
+  const masterBadge = document.getElementById('ttsMasterStatusBadge');
+  const masterLabel = document.getElementById('ttsMasterToggleLabel');
+  const masterCheck = document.getElementById('toggleTtsMasterChat');
+  const cfgAllow = document.getElementById('cfgTtsAllowCommand');
+  const cfgEnabled = document.getElementById('cfgTtsEnabled');
+
+  if (masterCheck) masterCheck.checked = enabled;
+  if (cfgAllow) cfgAllow.checked = enabled;
+  if (cfgEnabled) cfgEnabled.checked = enabled;
+
+  if (masterBadge) {
+    if (enabled) {
+      masterBadge.textContent = 'ACTIVO EN CHAT';
+      masterBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+      masterBadge.style.color = '#10b981';
+      masterBadge.style.border = '1px solid rgba(16, 185, 129, 0.4)';
+    } else {
+      masterBadge.textContent = 'DESACTIVADO EN CHAT';
+      masterBadge.style.background = 'rgba(239, 68, 68, 0.2)';
+      masterBadge.style.color = '#ef4444';
+      masterBadge.style.border = '1px solid rgba(239, 68, 68, 0.4)';
+    }
+  }
+
+  if (masterLabel) {
+    masterLabel.textContent = enabled ? 'TTS Habilitado' : 'TTS Silenciado';
+  }
+
+  // Guardar en almacenamiento local y nube
+  try {
+    localStorage.setItem('orbibot_config', JSON.stringify(appConfig));
+  } catch (e) { }
+
+  if (typeof saveToAllSupabaseScopes === 'function') {
+    saveToAllSupabaseScopes('config', appConfig).catch(() => {});
+  }
+
+  broadcastEvent('config_updated', appConfig);
+  showToast(enabled ? '🎙️ TTS activado para el chat (!tts, !messi, etc.)' : '🔇 TTS desactivado en general para el chat', enabled ? 'success' : 'warn');
+}
+
+// Export admin and TTS master functions to window
+window.checkAdminStatus = checkAdminStatus;
+window.loadAdminStreamersList = loadAdminStreamersList;
+window.renderAdminStreamersList = renderAdminStreamersList;
+window.filterAdminStreamersList = filterAdminStreamersList;
+window.enterStreamerSupportMode = enterStreamerSupportMode;
+window.saveAdminSupportChanges = saveAdminSupportChanges;
+window.exitAdminSupportMode = exitAdminSupportMode;
+window.handleAdminManualStreamerSupport = handleAdminManualStreamerSupport;
+window.loadAdminsList = loadAdminsList;
+window.renderAdminsList = renderAdminsList;
+window.handleAddNewAdmin = handleAddNewAdmin;
+window.handleRemoveAdmin = handleRemoveAdmin;
+window.handleTtsGlobalChatToggle = handleTtsGlobalChatToggle;
+
 
 
 

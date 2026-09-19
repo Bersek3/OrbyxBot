@@ -1,24 +1,44 @@
 -- =======================================================
--- ⚡ OrbiBot - Migración a Multi-Tenant
+-- ⚡ OrbiBot - Migración a Multi-Tenant & Administradores
 -- =======================================================
--- Ejecuta este script SOLO si ya tienes la tabla orbibot_settings creada
--- con el esquema anterior (key TEXT PRIMARY KEY sin streamer_id).
---
--- Este script migrará tus datos existentes sin perderlos.
--- Ejecuta en: https://supabase.com/dashboard/project/pzrlfuzjkwkrnmqkoaue/sql
+-- Ejecuta este script en: https://supabase.com/dashboard/project/pzrlfuzjkwkrnmqkoaue/sql
 
--- 1. Agregar columna streamer_id a la tabla existente
+-- 1. Agregar columna streamer_id a la tabla orbibot_settings existente si no existe
 ALTER TABLE public.orbibot_settings 
 ADD COLUMN IF NOT EXISTS streamer_id TEXT NOT NULL DEFAULT 'default';
 
--- 2. Eliminar la clave primaria anterior (key sola)
+-- 2. Asegurar clave primaria compuesta (streamer_id + key)
 ALTER TABLE public.orbibot_settings DROP CONSTRAINT IF EXISTS orbibot_settings_pkey;
-
--- 3. Crear nueva clave primaria compuesta (streamer_id + key)
 ALTER TABLE public.orbibot_settings ADD PRIMARY KEY (streamer_id, key);
 
--- 4. Índice para búsquedas rápidas por streamer
+-- 3. Índice para búsquedas rápidas por streamer
 CREATE INDEX IF NOT EXISTS idx_orbibot_streamer ON public.orbibot_settings(streamer_id);
 
--- ✅ Migración completada. Los datos existentes ahora están bajo streamer_id = 'default'.
--- OrbiBot asignará automáticamente el streamer_id correcto cuando el streamer se autentique.
+-- =======================================================
+-- 👑 4. CREAR TABLA DE ADMINISTRADORES GENERALES
+-- =======================================================
+CREATE TABLE IF NOT EXISTS public.orbibot_admins (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    user_id TEXT,
+    role TEXT NOT NULL DEFAULT 'superadmin', -- 'superadmin', 'support', 'admin'
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orbibot_admins_email ON public.orbibot_admins(email);
+
+ALTER TABLE public.orbibot_admins ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir lectura de admins" ON public.orbibot_admins;
+CREATE POLICY "Permitir lectura de admins" ON public.orbibot_admins
+    FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Permitir gestion de admins" ON public.orbibot_admins;
+CREATE POLICY "Permitir gestion de admins" ON public.orbibot_admins
+    FOR ALL USING (true);
+
+-- ✅ Para añadirte como Administrador General manualmente en Supabase:
+-- INSERT INTO public.orbibot_admins (email, role, notes) 
+-- VALUES ('tu_correo@gmail.com', 'superadmin', 'Admin Principal')
+-- ON CONFLICT (email) DO NOTHING;

@@ -402,6 +402,86 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// ================= 👑 RUTAS DE ADMINISTRACIÓN GENERAL & SOPORTE =================
+
+// Verificar si el usuario actual es Administrador General
+app.get('/api/admin/check', async (req, res) => {
+  try {
+    const email = req.query.email || req.headers['x-admin-email'];
+    const userId = req.query.userId || req.headers['x-admin-userid'];
+    const adminCheck = await storage.isUserAdmin(email, userId);
+    res.json(adminCheck);
+  } catch (err) {
+    res.status(500).json({ isAdmin: false, error: err.message });
+  }
+});
+
+// Listar todos los streamers registrados para el panel de soporte
+app.get('/api/admin/streamers', async (req, res) => {
+  try {
+    const streamers = await storage.getAllStreamers();
+    res.json({ success: true, count: streamers.length, streamers });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Obtener toda la configuración de un streamer para asistencia/soporte
+app.get('/api/admin/streamer/:streamerId', async (req, res) => {
+  try {
+    const { streamerId } = req.params;
+    const fullConfig = await storage.getStreamerFullConfig(streamerId);
+    res.json({ success: true, data: fullConfig });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Guardar o reparar la configuración de un streamer desde el panel de soporte
+app.post('/api/admin/streamer/:streamerId', async (req, res) => {
+  try {
+    const { streamerId } = req.params;
+    const bundle = req.body;
+    const result = await storage.saveStreamerFullConfig(streamerId, bundle);
+    broadcast('config_updated', bundle.config || {});
+    res.json({ success: true, message: `Configuración guardada para @${streamerId}`, result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Listar administradores registrados
+app.get('/api/admin/list', async (req, res) => {
+  try {
+    const admins = await storage.getAdmins();
+    res.json({ success: true, admins });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// Añadir administrador
+app.post('/api/admin/add', async (req, res) => {
+  try {
+    const { email, role, notes } = req.body;
+    const newAdmin = await storage.addAdmin(email, role, notes);
+    res.json({ success: true, message: `Administrador ${email} registrado con éxito.`, admin: newAdmin });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
+// Eliminar administrador
+app.post('/api/admin/remove', async (req, res) => {
+  try {
+    const { email } = req.body;
+    const result = await storage.removeAdmin(email);
+    res.json({ success: true, message: `Administrador ${email} eliminado.`, result });
+  } catch (err) {
+    res.status(400).json({ success: false, message: err.message });
+  }
+});
+
 // Direct Twitch OAuth Token Validation & Connection
 app.post('/api/auth/twitch-token', async (req, res) => {
   try {

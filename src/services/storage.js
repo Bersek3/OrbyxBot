@@ -1539,6 +1539,410 @@ class StorageService {
     }
     return { id: user.id, email: user.email, username: user.username };
   }
+
+  // ================= 👑 ADMINISTRACIÓN GENERAL & SOPORTE MULTI-STREAMER =================
+
+  /**
+   * Verifica si un usuario (por email o userId) es Administrador General
+   */
+  async isUserAdmin(email, userId) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    const cleanUserId = (userId || '').trim();
+    if (!cleanEmail && !cleanUserId) return { isAdmin: false };
+
+    // 1. Validar por variable de entorno ADMIN_EMAILS (separados por coma)
+    const envAdmins = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(e => e.trim()).filter(Boolean);
+    if (cleanEmail && envAdmins.includes(cleanEmail)) {
+      return { isAdmin: true, role: 'superadmin', source: 'env' };
+    }
+
+    // 2. Validar en Supabase (tabla orbibot_admins)
+    if (this.supabase) {
+      try {
+        let query = this.supabase.from('orbibot_admins').select('*');
+        if (cleanEmail && cleanUserId) {
+          query = query.or(`email.eq.${cleanEmail},user_id.eq.${cleanUserId}`);
+        } else if (cleanEmail) {
+          query = query.eq('email', cleanEmail);
+        } else if (cleanUserId) {
+          query = query.eq('user_id', cleanUserId);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          return { isAdmin: true, role: data[0].role || 'superadmin', source: 'supabase', admin: data[0] };
+        }
+      } catch (err) {
+        console.warn('⚠️ [Storage Admin] Error al verificar admin en Supabase:', err.message);
+      }
+    }
+
+    // 3. Validar en MongoDB (colección admins)
+    if (this.isMongoReady && this.mongoDb) {
+      try {
+        const filter = {
+          $or: [
+            ...(cleanEmail ? [{ email: cleanEmail }] : []),
+            ...(cleanUserId ? [{ user_id: cleanUserId }] : [])
+          ]
+        };
+        const adminRecord = await this.mongoDb.collection('admins').findOne(filter);
+        if (adminRecord) {
+          return { isAdmin: true, role: adminRecord.role || 'superadmin', source: 'mongodb', admin: adminRecord };
+        }
+      } catch (err) {
+        console.warn('⚠️ [Storage Admin] Error al verificar admin en MongoDB:', err.message);
+      }
+    }
+
+    // 4. Validar en admins.json local
+    try {
+      const globalAdmins = readJSON('admins.json', []);
+      const found = globalAdmins.find(a => (cleanEmail && a.email?.toLowerCase() === cleanEmail) || (cleanUserId && a.user_id === cleanUserId));
+      if (found) {
+        return { isAdmin: true, role: found.role || 'superadmin', source: 'local', admin: found };
+      }
+    } catch (e) {}
+
+    return { isAdmin: false };
+  }
+
+  /**
+   * Obtiene la lista de todos los administradores registrados
+   */
+  async getAdmins() {
+    const adminMap = new Map();
+
+    // 1. Supabase
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase.from('orbibot_admins').select('*');
+        if (!error && data) {
+          data.forEach(a => {
+            if (a.email) adminMap.set(a.email.toLowerCase(), a);
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 2. MongoDB
+    if (this.isMongoReady && this.mongoDb) {
+      try {
+        const mongoAdmins = await this.mongoDb.collection('admins').find().toArray();
+        if (mongoAdmins) {
+          mongoAdmins.forEach(a => {
+            if (a.email && !adminMap.has(a.email.toLowerCase())) {
+              adminMap.set(a.email.toLowerCase(), a);
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 3. Variables de entorno
+    const envAdmins = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(e => e.trim()).filter(Boolean);
+    envAdmins.forEach(email => {
+      if (!adminMap.has(email)) {
+        adminMap.set(email, { email, role: 'superadmin', notes: 'Configurado en .env', created_at: new Date().toISOString() });
+      }
+    });
+
+    return Array.from(adminMap.values());
+  }
+
+  /**
+   * Añade un nuevo Administrador General
+   */
+  async addAdmin(email, role = 'superadmin', notes = '') {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) throw new Error('El correo del administrador es obligatorio.');
+
+    const adminObj = {
+      email: cleanEmail,
+      role: role || 'superadmin',
+      notes: notes || 'Admin creado desde Panel de Control',
+      created_at: new Date().toISOString()
+    };
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('orbibot_admins').upsert(adminObj, { onConflict: 'email' });
+      } catch (e) {
+        console.warn('⚠️ [Storage Admin] Error al guardar admin en Supabase:', e.message);
+      }
+    }
+
+    if (this.isMongoReady && this.mongoDb) {
+      try {
+        await this.mongoDb.collection('admins').updateOne(
+          { email: cleanEmail },
+          { $set: adminObj },
+          { upsert: true }
+        );
+      } catch (e) {}
+    }
+
+    const local = readJSON('admins.json', []);
+    if (!local.some(a => a.email?.toLowerCase() === cleanEmail)) {
+      local.push(adminObj);
+      writeJSON('admins.json', local);
+    }
+
+    return adminObj;
+  }
+
+  /**
+   * Elimina un Administrador General
+   */
+  async removeAdmin(email) {
+    const cleanEmail = (email || '').trim().toLowerCase();
+    if (!cleanEmail) throw new Error('El correo del administrador es obligatorio.');
+
+    if (this.supabase) {
+      try {
+        await this.supabase.from('orbibot_admins').delete().eq('email', cleanEmail);
+      } catch (e) {}
+    }
+
+    if (this.isMongoReady && this.mongoDb) {
+      try {
+        await this.mongoDb.collection('admins').deleteOne({ email: cleanEmail });
+      } catch (e) {}
+    }
+
+    const local = readJSON('admins.json', []);
+    const filtered = local.filter(a => a.email?.toLowerCase() !== cleanEmail);
+    writeJSON('admins.json', filtered);
+
+    return { success: true, email: cleanEmail };
+  }
+
+  /**
+   * Obtiene la lista de todos los streamers registrados y sus resúmenes de configuración
+   */
+  async getAllStreamers() {
+    const streamersMap = new Map();
+
+    // 1. Consultar Supabase orbibot_settings
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase.from('orbibot_settings').select('*');
+        if (!error && data && data.length > 0) {
+          data.forEach(item => {
+            const sId = item.streamer_id;
+            if (!sId || sId === 'system' || sId === 'global') return;
+            if (!streamersMap.has(sId)) {
+              streamersMap.set(sId, {
+                streamerId: sId,
+                twitchChannel: '',
+                kickChannel: '',
+                updatedAt: item.updated_at || new Date().toISOString(),
+                hasConfig: false,
+                commandsCount: 0,
+                rewardsCount: 0,
+                goalsCount: 0,
+                soundsCount: 0
+              });
+            }
+            const current = streamersMap.get(sId);
+            if (item.updated_at && (!current.updatedAt || new Date(item.updated_at) > new Date(current.updatedAt))) {
+              current.updatedAt = item.updated_at;
+            }
+            if (item.key === 'config' && item.value) {
+              current.hasConfig = true;
+              if (item.value.twitch?.channel) current.twitchChannel = item.value.twitch.channel;
+              if (item.value.kick?.channel || item.value.kick?.username) current.kickChannel = item.value.kick.channel || item.value.kick.username;
+            }
+            if (item.key === 'twitch_auth' && item.value) {
+              const val = typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
+              if (val.channel || val.login || val.displayName) current.twitchChannel = val.channel || val.login || val.displayName;
+            }
+            if (item.key === 'kick_auth' && item.value) {
+              const val = typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
+              if (val.channel || val.username) current.kickChannel = val.channel || val.username;
+            }
+            if (item.key === 'commands' && Array.isArray(item.value)) current.commandsCount = item.value.length;
+            if (item.key === 'channel_points' && Array.isArray(item.value)) current.rewardsCount = item.value.length;
+            if (item.key === 'goals' && Array.isArray(item.value)) current.goalsCount = item.value.length;
+            if (item.key === 'custom_sounds' && Array.isArray(item.value)) current.soundsCount = item.value.length;
+          });
+        }
+      } catch (e) {
+        console.warn('⚠️ [Storage Admin] Error al consultar streamers en Supabase:', e.message);
+      }
+    }
+
+    // 2. Consultar MongoDB settings
+    if (this.isMongoReady && this.mongoDb) {
+      try {
+        const records = await this.mongoDb.collection('settings').find({ streamer_id: { $nin: ['system', 'global'] } }).toArray();
+        if (records && records.length > 0) {
+          records.forEach(item => {
+            const sId = item.streamer_id;
+            if (!sId) return;
+            if (!streamersMap.has(sId)) {
+              streamersMap.set(sId, {
+                streamerId: sId,
+                twitchChannel: '',
+                kickChannel: '',
+                updatedAt: item.updated_at || new Date().toISOString(),
+                hasConfig: false,
+                commandsCount: 0,
+                rewardsCount: 0,
+                goalsCount: 0,
+                soundsCount: 0
+              });
+            }
+            const current = streamersMap.get(sId);
+            if (item.key === 'config' && item.value) {
+              current.hasConfig = true;
+              if (item.value.twitch?.channel) current.twitchChannel = item.value.twitch.channel;
+              if (item.value.kick?.channel || item.value.kick?.username) current.kickChannel = item.value.kick.channel || item.value.kick.username;
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 3. Incluir streamer local si no está ya
+    const localId = this.getStreamerId();
+    if (localId && localId !== 'default' && !streamersMap.has(localId)) {
+      const cfg = this.getConfig();
+      streamersMap.set(localId, {
+        streamerId: localId,
+        twitchChannel: cfg.twitch?.channel || '',
+        kickChannel: cfg.kick?.channel || cfg.kick?.username || '',
+        updatedAt: new Date().toISOString(),
+        hasConfig: true,
+        commandsCount: this.getCommands().length,
+        rewardsCount: this.getRewards().length,
+        goalsCount: this.getGoals().length,
+        soundsCount: this.getCustomSounds().length
+      });
+    }
+
+    return Array.from(streamersMap.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  }
+
+  /**
+   * Obtiene la configuración completa de un streamer para asistencia/soporte
+   */
+  async getStreamerFullConfig(streamerId) {
+    const cleanId = (streamerId || '').toLowerCase().replace(/^#/, '').trim();
+    if (!cleanId) throw new Error('streamerId es obligatorio.');
+
+    const result = {
+      streamerId: cleanId,
+      config: null,
+      alerts: null,
+      commands: null,
+      tts_commands: null,
+      channel_points: null,
+      goals: null,
+      custom_sounds: null,
+      custom_images: null,
+      widget_token: null
+    };
+
+    // 1. Supabase
+    if (this.supabase) {
+      try {
+        const { data, error } = await this.supabase
+          .from('orbibot_settings')
+          .select('*')
+          .eq('streamer_id', cleanId);
+        if (!error && data && data.length > 0) {
+          data.forEach(item => {
+            if (result.hasOwnProperty(item.key) || item.key === 'widget_token') {
+              result[item.key] = item.value;
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    // 2. MongoDB Fallback
+    if (this.isMongoReady && this.mongoDb && !result.config) {
+      try {
+        const mongoRecords = await this.mongoDb.collection('settings').find({ streamer_id: cleanId }).toArray();
+        if (mongoRecords && mongoRecords.length > 0) {
+          mongoRecords.forEach(item => {
+            if (result.hasOwnProperty(item.key)) {
+              result[item.key] = item.value;
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    // Si es el streamer local actual, rellenar lo que falte
+    if (cleanId === this.getStreamerId()) {
+      if (!result.config) result.config = this.getConfig();
+      if (!result.alerts) result.alerts = this.getAlerts();
+      if (!result.commands) result.commands = this.getCommands();
+      if (!result.tts_commands) result.tts_commands = this.getTtsCommands();
+      if (!result.channel_points) result.channel_points = this.getRewards();
+      if (!result.goals) result.goals = this.getGoals();
+      if (!result.custom_sounds) result.custom_sounds = this.getCustomSounds();
+      if (!result.custom_images) result.custom_images = this.getCustomImages();
+    }
+
+    return result;
+  }
+
+  /**
+   * Guarda o repara la configuración de un streamer desde el panel de soporte
+   */
+  async saveStreamerFullConfig(streamerId, bundle) {
+    const cleanId = (streamerId || '').toLowerCase().replace(/^#/, '').trim();
+    if (!cleanId) throw new Error('streamerId es obligatorio.');
+    if (!bundle || typeof bundle !== 'object') throw new Error('Datos inválidos para guardar.');
+
+    const keysToSave = ['config', 'alerts', 'commands', 'tts_commands', 'channel_points', 'goals', 'custom_sounds', 'custom_images', 'widget_token'];
+    const now = new Date().toISOString();
+
+    for (const key of keysToSave) {
+      if (bundle[key] !== undefined) {
+        const val = bundle[key];
+
+        // Guardar en Supabase
+        if (this.supabase) {
+          try {
+            await this.supabase.from('orbibot_settings').upsert({
+              streamer_id: cleanId,
+              key,
+              value: val,
+              updated_at: now
+            }, { onConflict: 'streamer_id,key' });
+          } catch (e) {}
+        }
+
+        // Guardar en MongoDB
+        if (this.isMongoReady && this.mongoDb) {
+          try {
+            await this.mongoDb.collection('settings').updateOne(
+              { streamer_id: cleanId, key },
+              { $set: { streamer_id: cleanId, key, value: val, updated_at: now } },
+              { upsert: true }
+            );
+          } catch (e) {}
+        }
+      }
+    }
+
+    // Si coincide con el streamer local, actualizar también archivos locales
+    if (cleanId === this.getStreamerId()) {
+      if (bundle.config) this.saveConfig(bundle.config);
+      if (bundle.alerts) this.saveAlerts(bundle.alerts);
+      if (bundle.commands) this.saveCommands(bundle.commands);
+      if (bundle.tts_commands) this.saveTtsCommands(bundle.tts_commands);
+      if (bundle.channel_points) this.saveRewards(bundle.channel_points);
+      if (bundle.goals) this.saveGoals(bundle.goals);
+      if (bundle.custom_sounds) this.saveCustomSounds(bundle.custom_sounds);
+      if (bundle.custom_images) this.saveCustomImages(bundle.custom_images);
+    }
+
+    return { success: true, streamerId: cleanId, savedAt: now };
+  }
 }
 
 module.exports = new StorageService();

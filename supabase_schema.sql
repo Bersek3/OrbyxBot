@@ -3,6 +3,8 @@
 -- =======================================================
 -- Multi-Tenant: Cada streamer tiene sus propias configuraciones
 -- aisladas mediante la columna "streamer_id".
+-- Incluye tabla de Administradores Generales (orbibot_admins)
+-- para soporte multi-streamer y resolución de problemas.
 --
 -- Ejecuta este script en el "SQL Editor" de tu panel de Supabase:
 -- https://supabase.com/dashboard/project/pzrlfuzjkwkrnmqkoaue/sql
@@ -22,7 +24,7 @@ CREATE INDEX IF NOT EXISTS idx_orbibot_streamer ON public.orbibot_settings(strea
 -- 3. Habilitar seguridad de nivel de fila (Row Level Security - RLS)
 ALTER TABLE public.orbibot_settings ENABLE ROW LEVEL SECURITY;
 
--- 4. Crear políticas de acceso para permitir lectura y escritura segura
+-- 4. Crear políticas de acceso para permitir lectura y escritura
 DROP POLICY IF EXISTS "Permitir lectura publica" ON public.orbibot_settings;
 CREATE POLICY "Permitir lectura publica" ON public.orbibot_settings
     FOR SELECT USING (true);
@@ -54,5 +56,32 @@ CREATE TRIGGER update_orbibot_settings_updated_at
     FOR EACH ROW
     EXECUTE PROCEDURE update_updated_at_column();
 
--- ¡Listo! Tu base de datos multi-tenant de OrbiBot está configurada.
--- Cada streamer tendrá sus propias filas aisladas automáticamente.
+-- =======================================================
+-- 👑 TABLA DE ADMINISTRADORES GENERALES (SUPERADMINS)
+-- =======================================================
+-- Para añadir un administrador manualmente, simplemente inserta su correo aquí:
+-- INSERT INTO public.orbibot_admins (email, role, notes) 
+-- VALUES ('tu_correo@gmail.com', 'superadmin', 'Administrador Principal');
+
+CREATE TABLE IF NOT EXISTS public.orbibot_admins (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    email TEXT UNIQUE NOT NULL,
+    user_id TEXT,
+    role TEXT NOT NULL DEFAULT 'superadmin', -- 'superadmin', 'support', 'admin'
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_orbibot_admins_email ON public.orbibot_admins(email);
+
+ALTER TABLE public.orbibot_admins ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Permitir lectura de admins" ON public.orbibot_admins;
+CREATE POLICY "Permitir lectura de admins" ON public.orbibot_admins
+    FOR SELECT USING (true);
+
+DROP POLICY IF EXISTS "Permitir gestion de admins" ON public.orbibot_admins;
+CREATE POLICY "Permitir gestion de admins" ON public.orbibot_admins
+    FOR ALL USING (true);
+
+-- ¡Listo! Tu base de datos multi-tenant y de administradores de OrbiBot está configurada.
