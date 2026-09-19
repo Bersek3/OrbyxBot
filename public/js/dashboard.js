@@ -184,34 +184,41 @@ function resetDashboardUIToDefault() {
 
 async function saveToAllSupabaseScopes(key, value) {
   if (!supabaseClient) return;
-  const session = getUserSession();
-  if (!session || (!session.email && !session.id)) {
-    return;
-  }
 
   const scopes = new Set();
-  if (session.email) scopes.add(session.email.toLowerCase().trim());
-  if (session.id) scopes.add(session.id);
+
+  if (adminTargetStreamerId) {
+    scopes.add(adminTargetStreamerId.toLowerCase().trim());
+    const targetTwitch = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+    const targetKick = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+    if (targetTwitch) scopes.add(targetTwitch);
+    if (targetKick) scopes.add(targetKick);
+  } else {
+    const session = getUserSession();
+    if (!session || (!session.email && !session.id)) {
+      return;
+    }
+    if (session.email) scopes.add(session.email.toLowerCase().trim());
+    if (session.id) scopes.add(session.id);
+
+    // Solo asociar al canal de Twitch si fue explícitamente vinculado por este usuario
+    const localTwitch = localStorage.getItem('orbibot_twitch_auth');
+    if (localTwitch) {
+      try {
+        const parsed = JSON.parse(localTwitch);
+        const chan = (parsed.channel || parsed.login || parsed.displayName || '').toLowerCase().replace(/^#/, '').trim();
+        if (chan) scopes.add(chan);
+      } catch (e) { }
+    } else if (appConfig?.twitch?.channel && appConfig?.twitch?.connected) {
+      const chan = appConfig.twitch.channel.toLowerCase().replace(/^#/, '').trim();
+      if (chan) scopes.add(chan);
+    }
+  }
 
   if (key === 'voice_catalog') {
     scopes.add('system');
     scopes.add('default');
   }
-
-  // Solo asociar al canal de Twitch si fue explícitamente vinculado por este usuario
-  const localTwitch = localStorage.getItem('orbibot_twitch_auth');
-  if (localTwitch) {
-    try {
-      const parsed = JSON.parse(localTwitch);
-      const chan = (parsed.channel || parsed.login || parsed.displayName || '').toLowerCase().replace(/^#/, '').trim();
-      if (chan) scopes.add(chan);
-    } catch (e) { }
-  } else if (appConfig?.twitch?.channel && appConfig?.twitch?.connected) {
-    const chan = appConfig.twitch.channel.toLowerCase().replace(/^#/, '').trim();
-    if (chan) scopes.add(chan);
-  }
-
-  // NUNCA agregar 'default' excepto para voice_catalog
 
   const promises = Array.from(scopes).filter(Boolean).map(streamerId => {
     return supabaseClient.from('orbibot_settings').upsert({
@@ -9424,12 +9431,16 @@ loadInitialData = async function () {
 };
 
 // ================= ADMINISTRACIÓN GENERAL & MODO ASISTENCIA =================
-// ================= ADMINISTRACIÓN GENERAL & MODO ASISTENCIA =================
 const KNOWN_SUPERADMINS = ['francisco.jm.aguilar@gmail.com'];
 let isUserSuperAdmin = false;
 let adminStreamersCache = [];
 let adminTargetStreamerId = null;
 let adminOriginalConfig = null;
+let adminOriginalCommands = null;
+let adminOriginalRewards = null;
+let adminOriginalTTS = null;
+let adminOriginalGoals = null;
+let adminOriginalSongRequest = null;
 
 // 1. checkAdminStatus()
 async function checkAdminStatus() {
@@ -9466,33 +9477,15 @@ async function checkAdminStatus() {
     }
   } catch (e) { }
 
-  // 3. Consulta en Supabase orbibot_settings (almacenamiento global)
-  if (supabaseClient) {
-    try {
-      const { data, error } = await supabaseClient
-        .from('orbibot_settings')
-        .select('value')
-        .eq('streamer_id', 'global')
-        .eq('key', 'admins')
-        .maybeSingle();
-      if (!error && data && Array.isArray(data.value)) {
-        if (data.value.some(a => (a.email && a.email.toLowerCase() === cleanEmail) || (a.user_id && a.user_id === session.id))) {
-          isUserSuperAdmin = true;
-          updateAdminUIElements(true);
-          return;
-        }
-      }
-    } catch (e) { }
-  }
-
-  // 4. Consulta en Supabase orbibot_admins (si la tabla existe)
+  // 3. Consulta directa a Supabase (Fallback para GitHub Pages)
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient
         .from('orbibot_admins')
         .select('*')
-        .or(`email.eq.${cleanEmail},user_id.eq.${session.id || ''}`);
-      if (!error && data && data.length > 0) {
+        .eq('email', cleanEmail)
+        .single();
+      if (!error && data && data.role === 'superadmin') {
         isUserSuperAdmin = true;
         updateAdminUIElements(true);
         return;
@@ -9504,98 +9497,84 @@ async function checkAdminStatus() {
   updateAdminUIElements(false);
 }
 
+// 2. updateAdminUIElements()
 function updateAdminUIElements(isAdmin) {
-  const badge = document.getElementById('adminSuperBadge');
-  const navItem = document.getElementById('navItemAdmin');
-  if (badge) badge.style.display = isAdmin ? 'inline-flex' : 'none';
-  if (navItem) navItem.style.display = isAdmin ? 'flex' : 'none';
+  const adminNavItem = document.getElementById('adminNavItem');
+  const adminSection = document.getElementById('tab-admin');
+  const superAdminBadge = document.getElementById('superAdminBadge');
+
+  if (adminNavItem) {
+    adminNavItem.style.display = isAdmin ? 'flex' : 'none';
+  }
+  if (superAdminBadge) {
+    superAdminBadge.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
+  if (!isAdmin && adminSection && adminSection.classList.contains('active')) {
+    switchTab('tab-dashboard');
+  }
+
+  if (isAdmin) {
+    loadStreamersSupportList();
+    loadAdminsList();
+  }
 }
 
-// 2. loadAdminStreamersList(force)
-async function loadAdminStreamersList(force = false) {
+// 3. loadStreamersSupportList()
+async function loadStreamersSupportList() {
+  const container = document.getElementById('adminStreamersListContainer');
+  if (!container) return;
   const session = getUserSession();
   if (!session || !isUserSuperAdmin) return;
 
-  const container = document.getElementById('adminStreamersListContainer');
-  if (container) {
-    container.innerHTML = `
-      <div style="text-align: center; padding: 36px 20px; color: var(--text-secondary);">
-        <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #facc15; margin-bottom: 10px; display: block;"></i>
-        Cargando lista de streamers registrados...
-      </div>
-    `;
-  }
+  container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Cargando lista de streamers registrados...</div>';
 
   try {
-    const res = await fetch('/api/admin/streamers', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: session.email, userId: session.id })
-    });
-
+    const res = await fetch(`/api/admin/streamers?email=${encodeURIComponent(session.email)}&userId=${encodeURIComponent(session.id)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.success && Array.isArray(data.streamers)) {
         adminStreamersCache = data.streamers;
         renderAdminStreamersList(adminStreamersCache);
-        loadAdminsList();
         return;
       }
     }
   } catch (e) { }
 
-  // Fallback directo a Supabase orbibot_settings (funciona 100% en GitHub Pages)
+  // Fallback directo a Supabase orbibot_settings (GitHub Pages)
   if (supabaseClient) {
     try {
-      const { data, error } = await supabaseClient.from('orbibot_settings').select('*');
-      if (!error && data && data.length > 0) {
-        const streamersMap = new Map();
+      const { data, error } = await supabaseClient
+        .from('orbibot_settings')
+        .select('streamer_id, key, value');
+
+      if (!error && data) {
+        const streamersMap = {};
         data.forEach(row => {
           const sId = row.streamer_id;
-          if (!sId || sId === 'global' || sId === 'system') return;
-          if (!streamersMap.has(sId)) {
-            streamersMap.set(sId, {
-              id: sId,
-              streamerId: sId,
-              displayName: sId,
-              twitchChannel: '',
-              kickChannel: '',
-              updatedAt: row.updated_at || new Date().toISOString()
-            });
+          if (!streamersMap[sId]) {
+            streamersMap[sId] = { streamerId: sId, displayName: sId, channels: [], updatedAt: new Date().toISOString() };
           }
-          const s = streamersMap.get(sId);
           if (row.key === 'config' && row.value) {
-            if (row.value.twitch?.channel) s.twitchChannel = row.value.twitch.channel;
-            if (row.value.kick?.channel || row.value.kick?.username) s.kickChannel = row.value.kick.channel || row.value.kick.username;
-          }
-          if (row.key === 'twitch_auth' && row.value) {
-            const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
-            if (val.channel || val.login || val.displayName) s.twitchChannel = val.channel || val.login || val.displayName;
-          }
-          if (row.key === 'kick_auth' && row.value) {
-            const val = typeof row.value === 'string' ? JSON.parse(row.value) : row.value;
-            if (val.channel || val.username) s.kickChannel = val.channel || val.username;
+            if (row.value.twitch && row.value.twitch.channel) {
+              streamersMap[sId].displayName = row.value.twitch.displayName || row.value.twitch.channel;
+              streamersMap[sId].channels.push(`twitch: ${row.value.twitch.channel}`);
+            }
+            if (row.value.kick && row.value.kick.channel) {
+              streamersMap[sId].channels.push(`kick: ${row.value.kick.channel}`);
+            }
           }
         });
-        adminStreamersCache = Array.from(streamersMap.values());
+        adminStreamersCache = Object.values(streamersMap);
         renderAdminStreamersList(adminStreamersCache);
-        loadAdminsList();
         return;
       }
     } catch (e) { }
   }
 
-  if (container) {
-    container.innerHTML = `
-      <div style="text-align: center; padding: 24px; color: #ef4444;">
-        <i class="fas fa-exclamation-triangle" style="font-size: 24px; margin-bottom: 8px;"></i>
-        <div>No se pudo cargar la lista de streamers. Verifica tu conexión o permisos de administrador.</div>
-      </div>
-    `;
-  }
+  container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">No se encontraron streamers registrados aún o no hay conexión con la base de datos.</div>';
 }
 
-// 3. renderAdminStreamersList(streamers)
+// 4. renderAdminStreamersList()
 function renderAdminStreamersList(streamers) {
   const container = document.getElementById('adminStreamersListContainer');
   const countBadge = document.getElementById('adminStreamersCountBadge');
@@ -9612,8 +9591,8 @@ function renderAdminStreamersList(streamers) {
   let twitchCount = 0;
   let kickCount = 0;
   streamers.forEach(s => {
-    if (s.twitchChannel) twitchCount++;
-    if (s.kickChannel) kickCount++;
+    if (s.channels && s.channels.some(c => c.startsWith('twitch:'))) twitchCount++;
+    if (s.channels && s.channels.some(c => c.startsWith('kick:'))) kickCount++;
   });
   if (twitchStat) twitchStat.textContent = twitchCount;
   if (kickStat) kickStat.textContent = kickCount;
@@ -9634,18 +9613,22 @@ function renderAdminStreamersList(streamers) {
       <table class="custom-table" style="width: 100%;">
         <thead>
           <tr>
-            <th>Streamer / Usuario</th>
-            <th>Twitch</th>
-            <th>Kick</th>
+            <th>Streamer / ID</th>
+            <th>Canales Vinculados</th>
             <th>Última Actividad</th>
             <th style="text-align: right;">Acciones de Soporte</th>
           </tr>
         </thead>
         <tbody>
           ${streamers.map(s => {
-            const displayName = s.displayName || s.email || s.id || 'Usuario';
-            const twitch = s.twitchChannel ? `<span style="color: #a78bfa; font-weight: 700;"><i class="fab fa-twitch"></i> @${escapeHtml(s.twitchChannel)}</span>` : '<span style="color: #64748b; font-size: 12px;">No vinculado</span>';
-            const kick = s.kickChannel ? `<span style="color: #53fc18; font-weight: 700;"><i class="fas fa-bolt"></i> @${escapeHtml(s.kickChannel)}</span>` : '<span style="color: #64748b; font-size: 12px;">No vinculado</span>';
+            const displayName = s.displayName || s.streamerId || 'Usuario';
+            const channelsStr = Array.isArray(s.channels) && s.channels.length > 0 
+              ? s.channels.map(c => {
+                  if (c.startsWith('twitch:')) return `<span style="color: #a78bfa; font-weight: 700;"><i class="fab fa-twitch"></i> @${escapeHtml(c.split(':')[1])}</span>`;
+                  if (c.startsWith('kick:')) return `<span style="color: #53fc18; font-weight: 700;"><i class="fas fa-bolt"></i> @${escapeHtml(c.split(':')[1])}</span>`;
+                  return escapeHtml(c);
+                }).join(' ')
+              : '<span style="color: #64748b; font-size: 12px;">Sin canales vinculados</span>';
             const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
 
             return `
@@ -9657,15 +9640,14 @@ function renderAdminStreamersList(streamers) {
                     </div>
                     <div>
                       <div style="font-weight: 700; color: #fff; font-size: 13.5px;">${escapeHtml(displayName)}</div>
-                      <div style="font-size: 11px; color: #94a3b8; font-family: monospace;">ID: ${escapeHtml(s.id)}</div>
+                      <div style="font-size: 11px; color: #94a3b8; font-family: monospace;">ID: ${escapeHtml(s.streamerId)}</div>
                     </div>
                   </div>
                 </td>
-                <td>${twitch}</td>
-                <td>${kick}</td>
+                <td>${channelsStr}</td>
                 <td style="font-size: 12px; color: #94a3b8;">${dateStr}</td>
                 <td style="text-align: right;">
-                  <button class="btn btn-sm" onclick="enterStreamerSupportMode('${escapeHtml(s.id)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                  <button class="btn btn-sm" onclick="enterStreamerSupportMode('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
                     <i class="fas fa-tools"></i> Asistir / Ver Config
                   </button>
                 </td>
@@ -9678,7 +9660,7 @@ function renderAdminStreamersList(streamers) {
   `;
 }
 
-// 4. filterAdminStreamersList(query)
+// 4.1 filterAdminStreamersList(query)
 function filterAdminStreamersList(query) {
   if (!query || !query.trim()) {
     renderAdminStreamersList(adminStreamersCache);
@@ -9686,11 +9668,9 @@ function filterAdminStreamersList(query) {
   }
   const q = query.trim().toLowerCase();
   const filtered = adminStreamersCache.filter(s => {
-    return (s.id && s.id.toLowerCase().includes(q)) ||
-           (s.email && s.email.toLowerCase().includes(q)) ||
+    return (s.streamerId && s.streamerId.toLowerCase().includes(q)) ||
            (s.displayName && s.displayName.toLowerCase().includes(q)) ||
-           (s.twitchChannel && s.twitchChannel.toLowerCase().includes(q)) ||
-           (s.kickChannel && s.kickChannel.toLowerCase().includes(q));
+           (s.channels && s.channels.some(c => c.toLowerCase().includes(q)));
   });
   renderAdminStreamersList(filtered);
 }
@@ -9726,7 +9706,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
         targetGls = sData.goals || [];
         targetTts = sData.ttsCommands || sData.tts_commands || [];
         targetToken = sData.widget_token || sData.widgetToken || null;
-        targetSongRequest = sData.songRequest || null;
+        targetSongRequest = sData.songRequest || sData.sr_state || null;
       }
     }
   } catch (e) { }
@@ -9747,6 +9727,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
           if (item.key === 'goals' && Array.isArray(item.value)) targetGls = item.value;
           if (item.key === 'tts_commands' && Array.isArray(item.value)) targetTts = item.value;
           if (item.key === 'widget_token' && item.value) targetToken = item.value;
+          if (item.key === 'sr_state' && item.value) targetSongRequest = item.value;
         });
       }
     } catch (e) { }
@@ -9770,6 +9751,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     adminOriginalRewards = (typeof cachedRewards !== 'undefined') ? JSON.parse(JSON.stringify(cachedRewards)) : [];
     adminOriginalTTS = (typeof cachedTTSCommands !== 'undefined') ? JSON.parse(JSON.stringify(cachedTTSCommands)) : [];
     adminOriginalGoals = (typeof appConfig?.goals !== 'undefined') ? JSON.parse(JSON.stringify(appConfig.goals)) : [];
+    adminOriginalSongRequest = (typeof currentSrState !== 'undefined' && currentSrState) ? JSON.parse(JSON.stringify(currentSrState)) : null;
   }
 
   // Activar contexto del streamer asistido
@@ -9790,23 +9772,29 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   if (nameEl) nameEl.textContent = displayName ? `@${displayName} (${streamerId})` : `@${streamerId}`;
 
   // Renderizar componentes y listas con datos del streamer
-  if (Array.isArray(targetCmds) && targetCmds.length > 0) {
-    cachedCommands = targetCmds;
-    if (typeof renderCommands === 'function') renderCommands(cachedCommands);
-  }
-  if (Array.isArray(targetRws) && targetRws.length > 0) {
-    cachedRewards = targetRws;
-    if (typeof renderRewards === 'function') renderRewards(cachedRewards);
-  }
-  if (Array.isArray(targetGls) && targetGls.length > 0) {
-    if (typeof renderGoals === 'function') renderGoals(targetGls);
-  }
-  if (Array.isArray(targetTts) && targetTts.length > 0) {
-    cachedTTSCommands = targetTts;
-    if (typeof renderTTSCommands === 'function') renderTTSCommands(cachedTTSCommands);
-  }
+  cachedCommands = Array.isArray(targetCmds) ? targetCmds : [];
+  if (typeof renderCommands === 'function') renderCommands(cachedCommands);
+
+  cachedRewards = Array.isArray(targetRws) ? targetRws : [];
+  if (typeof renderRewards === 'function') renderRewards(cachedRewards);
+
+  const effectiveGoals = Array.isArray(targetGls) ? targetGls : (appConfig?.goals || []);
+  if (typeof renderGoals === 'function') renderGoals(effectiveGoals);
+
+  cachedTTSCommands = Array.isArray(targetTts) && targetTts.length > 0 ? targetTts : DEFAULT_TTS_COMMANDS;
+  if (typeof renderTTSCommands === 'function') renderTTSCommands(cachedTTSCommands);
+
   if (targetSongRequest && typeof updateSongRequestUI === 'function') {
-    updateSongRequestUI(targetSongRequest);
+    updateSongRequestUI(targetSongRequest, false);
+  } else {
+    try {
+      fetch(`/api/sr/state?channel=${encodeURIComponent(streamerId)}`)
+        .then(r => r.json())
+        .then(srData => {
+          if (srData && typeof updateSongRequestUI === 'function') updateSongRequestUI(srData, false);
+        })
+        .catch(() => {});
+    } catch (e) { }
   }
 
   bindConfigToUI(appConfig);
@@ -9837,7 +9825,8 @@ async function saveAdminSupportChanges() {
     rewards: (typeof cachedRewards !== 'undefined') ? cachedRewards : [],
     goals: (typeof appConfig?.goals !== 'undefined') ? appConfig.goals : [],
     ttsCommands: (typeof cachedTTSCommands !== 'undefined') ? cachedTTSCommands : [],
-    widget_token: appConfig?.security?.widgetToken || getEffectiveWidgetToken()
+    widget_token: appConfig?.security?.widgetToken || getEffectiveWidgetToken(),
+    sr_state: (typeof currentSrState !== 'undefined') ? currentSrState : null
   };
 
   try {
@@ -9865,6 +9854,9 @@ async function saveAdminSupportChanges() {
       await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'goals', value: payload.goals });
       await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'tts_commands', value: payload.ttsCommands });
       await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'widget_token', value: payload.widget_token });
+      if (payload.sr_state) {
+        await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'sr_state', value: payload.sr_state });
+      }
 
       showToast('🎉 ¡Configuración guardada directamente en Supabase para el streamer!', 'success');
       return;
@@ -9882,7 +9874,7 @@ function exitAdminSupportMode() {
     appConfig = adminOriginalConfig;
     adminOriginalConfig = null;
   }
-  if (typeof adminOriginalCommands !== 'undefined' && adminOriginalCommands) {
+  if (adminOriginalCommands !== null) {
     cachedCommands = adminOriginalCommands;
     if (typeof renderCommands === 'function') renderCommands(cachedCommands);
     adminOriginalCommands = null;
