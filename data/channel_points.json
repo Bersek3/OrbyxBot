@@ -1,12 +1,12 @@
 [
   {
     "id": "reward-1789441511698",
-    "rewardId": "3c3fbdab-bf7d-45ff-9c99-5126d46b5f89",
-    "rewardName": "SONIDO CAMPANA",
     "action": "tts",
+    "enabled": true,
     "voiceId": "es_cr7",
-    "customMessage": "TOME AGUA SEÑORA.",
+    "rewardId": "3c3fbdab-bf7d-45ff-9c99-5126d46b5f89",
     "soundUrl": null,
-    "enabled": true
+    "rewardName": "SONIDO CAMPANA",
+    "customMessage": "TOME AGUA SEÑORA."
   }
 ]

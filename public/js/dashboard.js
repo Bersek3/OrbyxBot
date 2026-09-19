@@ -2749,16 +2749,22 @@ function connectInBrowserKickBot(kickData) {
     const targetRoom = chatroomId || kickData?.userId || channel;
     try {
       browserKickWs = new WebSocket(pusherUrl);
-      browserKickWs.onopen = () => {
-        browserKickWs.send(JSON.stringify({
-          event: 'pusher:subscribe',
-          data: { auth: '', channel: `chatrooms.${targetRoom}.v2` }
-        }));
-        browserKickWs.send(JSON.stringify({
-          event: 'pusher:subscribe',
-          data: { auth: '', channel: `channel.${targetRoom}` }
-        }));
-        console.log(`🟢 [Dashboard] Conectado al chat y eventos de Kick @${channel} (Room: ${targetRoom})`);
+      browserKickWs.onopen = function() {
+        if (this && this.readyState === WebSocket.OPEN) {
+          try {
+            this.send(JSON.stringify({
+              event: 'pusher:subscribe',
+              data: { auth: '', channel: `chatrooms.${targetRoom}.v2` }
+            }));
+            this.send(JSON.stringify({
+              event: 'pusher:subscribe',
+              data: { auth: '', channel: `channel.${targetRoom}` }
+            }));
+            console.log(`🟢 [Dashboard] Conectado al chat y eventos de Kick @${channel} (Room: ${targetRoom})`);
+          } catch (sendErr) {
+            console.warn('⚠️ [Dashboard] Error enviando suscripción a Kick:', sendErr.message);
+          }
+        }
       };
 
       browserKickWs.onmessage = (ev) => {
@@ -9562,20 +9568,20 @@ async function loadStreamersSupportList() {
 
   container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Cargando lista de streamers registrados...</div>';
 
+  let apiStreamers = [];
   // 1. Consulta al backend vía API
   try {
     const res = await fetch(`/api/admin/streamers?email=${encodeURIComponent(userEmail)}&userId=${encodeURIComponent(userId)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.success && Array.isArray(data.streamers) && data.streamers.length > 0) {
-        adminStreamersCache = data.streamers;
-        renderAdminStreamersList(adminStreamersCache);
-        return;
+      if (data.success && Array.isArray(data.streamers)) {
+        apiStreamers = data.streamers;
       }
     }
   } catch (e) { }
 
-  // 2. Fallback directo a Supabase orbibot_settings con unificación inteligente (GitHub Pages)
+  let supaStreamers = [];
+  // 2. Consulta y unificación directa con Supabase orbibot_settings
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient
@@ -9716,11 +9722,44 @@ async function loadStreamersSupportList() {
           });
         }
 
-        adminStreamersCache = unifiedGroups.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
-        renderAdminStreamersList(adminStreamersCache);
-        return;
+        supaStreamers = unifiedGroups;
       }
     } catch (e) { }
+  }
+
+  // 3. Fusionar listas (API y Supabase) para garantizar que NINGÚN streamer se quede fuera
+  const finalMap = new Map();
+
+  const addStreamerToMap = (s) => {
+    if (!s || !s.streamerId) return;
+    const key = (s.streamerId || '').toLowerCase();
+    if (!finalMap.has(key)) {
+      finalMap.set(key, s);
+    } else {
+      const existing = finalMap.get(key);
+      finalMap.set(key, {
+        ...existing,
+        ...s,
+        displayName: existing.displayName || s.displayName,
+        twitchChannel: existing.twitchChannel || s.twitchChannel,
+        kickChannel: existing.kickChannel || s.kickChannel,
+        email: existing.email || s.email,
+        channels: Array.from(new Set([...(existing.channels || []), ...(s.channels || [])])),
+        widgetToken: existing.widgetToken || s.widgetToken,
+        relatedIds: Array.from(new Set([...(existing.relatedIds || []), ...(s.relatedIds || [])]))
+      });
+    }
+  };
+
+  apiStreamers.forEach(addStreamerToMap);
+  supaStreamers.forEach(addStreamerToMap);
+
+  const combinedList = Array.from(finalMap.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+
+  if (combinedList.length > 0) {
+    adminStreamersCache = combinedList;
+    renderAdminStreamersList(adminStreamersCache);
+    return;
   }
 
   container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);">No se encontraron streamers registrados aún o no hay conexión con la base de datos.</div>';
