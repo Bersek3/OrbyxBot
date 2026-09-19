@@ -2236,7 +2236,10 @@ function connectInBrowserTwitchBot(twitchData) {
     channels: [channel]
   };
 
-  if (twitchData.oauthToken) {
+  const isSupportMode = Boolean(adminTargetStreamerId || sessionStorage.getItem('orbibot_support_streamer_id'));
+
+  // En modo asistencia o cuando no hay token explícito del canal, conectar como oyente anónimo para recibir 100% de los mensajes sin errores de autenticación
+  if (!isSupportMode && twitchData.oauthToken) {
     const token = twitchData.oauthToken.startsWith('oauth:') ? twitchData.oauthToken : `oauth:${twitchData.oauthToken}`;
     opts.identity = {
       username: twitchData.botUsername || channel,
@@ -2262,7 +2265,6 @@ function connectInBrowserTwitchBot(twitchData) {
     });
 
     client.on('message', (ch, tags, message, self) => {
-      if (self) return;
       const username = tags['display-name'] || tags.username;
       const isMod = tags.mod || tags.badges?.broadcaster === '1';
       const isSub = tags.subscriber || tags.badges?.subscriber !== undefined;
@@ -2283,8 +2285,12 @@ function connectInBrowserTwitchBot(twitchData) {
         channel: channel
       };
 
+      // 1. Mostrar SIEMPRE el mensaje en el log de chat del dashboard (incluso si self es true)
       appendChatMessage(chatData);
       broadcastEvent('chat_message', chatData);
+
+      // 2. Si el mensaje fue enviado por el propio bot/usuario autenticado, omitir disparo de comandos/TTS automáticos
+      if (self) return;
 
       // Bits
       if (tags.bits) {
