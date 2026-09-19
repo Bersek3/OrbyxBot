@@ -456,6 +456,22 @@ app.post('/api/admin/streamer/:streamerId', async (req, res) => {
   }
 });
 
+// Eliminar datos completos de un streamer (Supabase y MongoDB)
+app.post(['/api/admin/streamer/:streamerId/delete', '/api/admin/streamer/delete'], async (req, res) => {
+  try {
+    const streamerId = req.params.streamerId || req.body.streamerId;
+    const { relatedIds } = req.body;
+    if (!streamerId) {
+      return res.status(400).json({ success: false, message: 'streamerId es requerido.' });
+    }
+
+    const result = await storage.deleteStreamerData(streamerId, relatedIds);
+    res.json({ success: true, message: `Datos del streamer @${streamerId} eliminados correctamente.`, result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Listar administradores registrados
 app.all('/api/admin/list', async (req, res) => {
   try {

@@ -9806,6 +9806,42 @@ function updateAdminUIElements(isAdmin) {
   }
 }
 
+// Variables globales para administración y ocultación de streamers
+let adminShowHiddenStreamers = false;
+
+function getHiddenStreamersList() {
+  try {
+    const raw = localStorage.getItem('orbibot_hidden_streamers');
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveHiddenStreamersList(list) {
+  try {
+    localStorage.setItem('orbibot_hidden_streamers', JSON.stringify(list || []));
+  } catch (e) {}
+}
+
+function toggleShowHiddenStreamers() {
+  adminShowHiddenStreamers = !adminShowHiddenStreamers;
+  const btn = document.getElementById('adminToggleHiddenStreamersBtn');
+  if (btn) {
+    if (adminShowHiddenStreamers) {
+      btn.classList.remove('btn-secondary');
+      btn.classList.add('btn-warning');
+      btn.innerHTML = `<i class="fas fa-eye-slash"></i> Ocultar Descartados (<span id="adminHiddenStreamersCount">${getHiddenStreamersList().length}</span>)`;
+    } else {
+      btn.classList.remove('btn-warning');
+      btn.classList.add('btn-secondary');
+      btn.innerHTML = `<i class="fas fa-eye"></i> Ver Ocultos (<span id="adminHiddenStreamersCount">${getHiddenStreamersList().length}</span>)`;
+    }
+  }
+  const searchInput = document.getElementById('adminStreamerSearchInput');
+  filterAdminStreamersList(searchInput ? searchInput.value : '');
+}
+
 // 3. loadStreamersSupportList()
 async function loadStreamersSupportList() {
   const container = document.getElementById('adminStreamersListContainer');
@@ -9888,6 +9924,9 @@ async function loadStreamersSupportList() {
             if (val.kick?.channel || val.kick?.username) {
               st.kicks.add((val.kick.channel || val.kick.username).toLowerCase());
             }
+            if (val.security?.widgetToken) {
+              st.tokens.add(val.security.widgetToken);
+            }
           }
           if (row.key === 'kick_auth' && val) {
             const ch = val.channel || val.username;
@@ -9910,7 +9949,7 @@ async function loadStreamersSupportList() {
             for (const [otherId, otherSt] of rawMap.entries()) {
               if (visitedIds.has(otherId)) continue;
 
-              // Comprobación ESTRICTA con strings no vacíos y válidos
+              // Comprobación ESTRICTA con tokens compartidos, emails o canales
               const sharesToken = Array.from(otherSt.tokens).some(t => t && t.length > 5 && cluster.some(c => c.tokens.has(t)));
               const sharesEmail = Array.from(otherSt.emails).some(e => e && e.includes('@') && cluster.some(c => c.emails.has(e)));
               const sharesTwitch = Array.from(otherSt.twitches).some(tw => tw && tw.length > 1 && cluster.some(c => c.twitches.has(tw)));
@@ -9976,7 +10015,7 @@ async function loadStreamersSupportList() {
     } catch (e) { }
   }
 
-  // 3. Fusionar listas (API y Supabase) para garantizar que NINGÚN streamer se quede fuera
+  // 3. Fusionar listas (API y Supabase)
   const finalMap = new Map();
 
   const addStreamerToMap = (s) => {
@@ -10000,10 +10039,49 @@ async function loadStreamersSupportList() {
     }
   };
 
+  // Agregar Supabase primero (o API), consolidando por tokens relacionados para no duplicar UUIDs
   apiStreamers.forEach(addStreamerToMap);
   supaStreamers.forEach(addStreamerToMap);
 
-  const combinedList = Array.from(finalMap.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+  // Segunda pasada de consolidación: Si un streamer en finalMap comparte un relatedId o widgetToken con otro, fusionarlos
+  const entries = Array.from(finalMap.values());
+  const consolidated = [];
+  const processedKeys = new Set();
+
+  entries.forEach((item, idx) => {
+    const itemKey = (item.streamerId || '').toLowerCase();
+    if (processedKeys.has(itemKey)) return;
+
+    let merged = { ...item };
+    processedKeys.add(itemKey);
+
+    for (let j = idx + 1; j < entries.length; j++) {
+      const other = entries[j];
+      const otherKey = (other.streamerId || '').toLowerCase();
+      if (processedKeys.has(otherKey)) continue;
+
+      const sharesAnyId = (merged.relatedIds || []).some(rid => (other.relatedIds || []).includes(rid) || other.streamerId === rid || item.streamerId === otherKey);
+      const sharesToken = merged.widgetToken && other.widgetToken && merged.widgetToken === other.widgetToken;
+
+      if (sharesAnyId || sharesToken) {
+        processedKeys.add(otherKey);
+        merged.relatedIds = Array.from(new Set([...(merged.relatedIds || []), ...(other.relatedIds || []), other.streamerId]));
+        merged.channels = Array.from(new Set([...(merged.channels || []), ...(other.channels || [])]));
+        if (!merged.email && other.email) merged.email = other.email;
+        if (!merged.twitchChannel && other.twitchChannel) merged.twitchChannel = other.twitchChannel;
+        if (!merged.kickChannel && other.kickChannel) merged.kickChannel = other.kickChannel;
+        if ((!merged.displayName || merged.displayName.includes('-')) && other.displayName && !other.displayName.includes('-')) {
+          merged.displayName = other.displayName;
+        }
+        if (merged.streamerId.includes('-') && (!other.streamerId.includes('-') || other.email)) {
+          merged.streamerId = other.streamerId;
+        }
+      }
+    }
+    consolidated.push(merged);
+  });
+
+  const combinedList = consolidated.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
 
   if (combinedList.length > 0) {
     adminStreamersCache = combinedList;
@@ -10021,16 +10099,27 @@ function renderAdminStreamersList(streamers) {
   const totalStat = document.getElementById('adminStatTotalStreamers');
   const twitchStat = document.getElementById('adminStatTwitchCount');
   const kickStat = document.getElementById('adminStatKickCount');
+  const hiddenBtn = document.getElementById('adminToggleHiddenStreamersBtn');
+  const hiddenCountSpan = document.getElementById('adminHiddenStreamersCount');
 
   if (!container) return;
   if (!Array.isArray(streamers)) streamers = [];
 
-  if (countBadge) countBadge.textContent = `${streamers.length} streamer${streamers.length === 1 ? '' : 's'}`;
-  if (totalStat) totalStat.textContent = streamers.length;
+  const hiddenList = getHiddenStreamersList();
+  if (hiddenCountSpan) hiddenCountSpan.textContent = hiddenList.length;
+  if (hiddenBtn) hiddenBtn.style.display = hiddenList.length > 0 ? 'inline-flex' : 'none';
+
+  // Filtrar si no está activo el modo mostrar descartados/ocultos
+  const visibleStreamers = adminShowHiddenStreamers
+    ? streamers
+    : streamers.filter(s => !hiddenList.includes(s.streamerId) && !(s.relatedIds || []).some(rid => hiddenList.includes(rid)));
+
+  if (countBadge) countBadge.textContent = `${visibleStreamers.length} streamer${visibleStreamers.length === 1 ? '' : 's'}`;
+  if (totalStat) totalStat.textContent = visibleStreamers.length;
 
   let twitchCount = 0;
   let kickCount = 0;
-  streamers.forEach(s => {
+  visibleStreamers.forEach(s => {
     const hasTwitch = s.twitchChannel || (Array.isArray(s.channels) && s.channels.some(c => c.startsWith('twitch:')));
     const hasKick = s.kickChannel || (Array.isArray(s.channels) && s.channels.some(c => c.startsWith('kick:')));
     if (hasTwitch) twitchCount++;
@@ -10039,12 +10128,14 @@ function renderAdminStreamersList(streamers) {
   if (twitchStat) twitchStat.textContent = twitchCount;
   if (kickStat) kickStat.textContent = kickCount;
 
-  if (streamers.length === 0) {
+  if (visibleStreamers.length === 0) {
     container.innerHTML = `
       <div style="text-align: center; padding: 36px 20px; color: var(--text-muted);">
         <div style="font-size: 32px; margin-bottom: 8px;">👥</div>
-        <div style="font-weight: 700; color: var(--text-secondary);">No se encontraron streamers en la base de datos</div>
-        <div style="font-size: 12px; margin-top: 4px;">Cuando los streamers se registren o vinculen canales aparecerán listados aquí.</div>
+        <div style="font-weight: 700; color: var(--text-secondary);">No se encontraron streamers en la lista</div>
+        <div style="font-size: 12px; margin-top: 4px;">
+          ${hiddenList.length > 0 && !adminShowHiddenStreamers ? `Hay ${hiddenList.length} cuenta(s) oculta(s). Haz clic en "Ver Ocultos" para verlas.` : 'Cuando los streamers se registren o vinculen canales aparecerán listados aquí.'}
+        </div>
       </div>
     `;
     return;
@@ -10058,15 +10149,16 @@ function renderAdminStreamersList(streamers) {
             <th>Streamer / ID</th>
             <th>Canales Vinculados</th>
             <th>Última Actividad</th>
-            <th style="text-align: right;">Acciones de Soporte</th>
+            <th style="text-align: right;">Acciones de Gestión y Soporte</th>
           </tr>
         </thead>
         <tbody>
-          ${streamers.map(s => {
+          ${visibleStreamers.map(s => {
             const displayName = s.displayName || s.streamerId || 'Usuario';
             const twitch = s.twitchChannel || (Array.isArray(s.channels) && s.channels.find(c => c.startsWith('twitch:'))?.split(':')[1]?.trim()) || '';
             const kick = s.kickChannel || (Array.isArray(s.channels) && s.channels.find(c => c.startsWith('kick:'))?.split(':')[1]?.trim()) || '';
             const email = s.email || (s.streamerId && s.streamerId.includes('@') ? s.streamerId : '');
+            const isHidden = hiddenList.includes(s.streamerId) || (s.relatedIds || []).some(rid => hiddenList.includes(rid));
 
             const badges = [];
             if (twitch) {
@@ -10081,16 +10173,20 @@ function renderAdminStreamersList(streamers) {
 
             const channelsStr = badges.length > 0 ? badges.join(' ') : '<span style="color: #64748b; font-size: 12px;">Sin canales vinculados</span>';
             const dateStr = s.updatedAt && s.updatedAt !== new Date(0).toISOString() ? new Date(s.updatedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
+            const relatedIdsSafe = encodeURIComponent(JSON.stringify(s.relatedIds || [s.streamerId]));
 
             return `
-              <tr>
+              <tr style="${isHidden ? 'opacity: 0.65; background: rgba(239,68,68,0.05);' : ''}">
                 <td>
                   <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, rgba(145,70,255,0.3), rgba(0,242,254,0.3)); border: 1px solid rgba(145,70,255,0.45); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 13px;">
                       ${(displayName[0] || 'U').toUpperCase()}
                     </div>
                     <div>
-                      <div style="font-weight: 700; color: #fff; font-size: 13.5px;">${escapeHtml(displayName)}</div>
+                      <div style="font-weight: 700; color: #fff; font-size: 13.5px; display: flex; align-items: center; gap: 6px;">
+                        ${escapeHtml(displayName)}
+                        ${isHidden ? '<span style="font-size: 10px; background: rgba(239,68,68,0.2); color: #f87171; padding: 1px 6px; border-radius: 4px; font-weight: 700;">OCULTO</span>' : ''}
+                      </div>
                       <div style="font-size: 11px; color: #94a3b8; font-family: monospace;">ID: ${escapeHtml(s.streamerId)}</div>
                     </div>
                   </div>
@@ -10098,9 +10194,17 @@ function renderAdminStreamersList(streamers) {
                 <td>${channelsStr}</td>
                 <td style="font-size: 12px; color: #94a3b8;">${dateStr}</td>
                 <td style="text-align: right;">
-                  <button class="btn btn-sm" onclick="enterSupportModeAndReload('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(124,58,237,0.35);">
-                    <i class="fas fa-tools"></i> Asistir / Ver Config
-                  </button>
+                  <div style="display: inline-flex; align-items: center; gap: 6px;">
+                    <button class="btn btn-sm" onclick="enterSupportModeAndReload('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 12px; border-radius: 8px; font-size: 11.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 2px 8px rgba(124,58,237,0.35);" title="Asistir y configurar entorno">
+                      <i class="fas fa-tools"></i> Asistir
+                    </button>
+                    <button class="btn btn-sm" onclick="handleToggleHideStreamer('${escapeHtml(s.streamerId)}')" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); font-weight: 600; padding: 6px 10px; border-radius: 8px; font-size: 11.5px; cursor: pointer;" title="${isHidden ? 'Volver a mostrar en la lista principal' : 'Ocultar de la lista'}">
+                      <i class="fas ${isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i> ${isHidden ? 'Mostrar' : 'Ocultar'}
+                    </button>
+                    <button class="btn btn-sm" onclick="handleAdminDeleteStreamer('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}', '${relatedIdsSafe}')" style="background: rgba(239, 68, 68, 0.15); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.35); font-weight: 600; padding: 6px 10px; border-radius: 8px; font-size: 11.5px; cursor: pointer;" title="Eliminar completamente de la Base de Datos">
+                      <i class="fas fa-trash-alt"></i> Borrar
+                    </button>
+                  </div>
                 </td>
               </tr>
             `;
@@ -10127,6 +10231,86 @@ function filterAdminStreamersList(query) {
            (s.channels && s.channels.some(c => c.toLowerCase().includes(q)));
   });
   renderAdminStreamersList(filtered);
+}
+
+// 4.2 Ocultar / Mostrar streamer de la lista local
+function handleToggleHideStreamer(streamerId) {
+  if (!streamerId) return;
+  const list = getHiddenStreamersList();
+  const index = list.indexOf(streamerId);
+  if (index > -1) {
+    list.splice(index, 1);
+    showToast(`Streamer @${streamerId} reincorporado a la lista activa.`, 'info');
+  } else {
+    list.push(streamerId);
+    showToast(`Streamer @${streamerId} ocultado de la lista principal.`, 'info');
+  }
+  saveHiddenStreamersList(list);
+  const searchInput = document.getElementById('adminStreamerSearchInput');
+  filterAdminStreamersList(searchInput ? searchInput.value : '');
+}
+
+// 4.3 Eliminar completamente streamer de la Base de Datos
+async function handleAdminDeleteStreamer(streamerId, displayName, relatedIdsSafe) {
+  if (!streamerId) return;
+  if (!isUserSuperAdmin) {
+    showToast('Acceso denegado: solo Superadministradores.', 'error');
+    return;
+  }
+
+  let relatedIds = [streamerId];
+  try {
+    if (relatedIdsSafe) relatedIds = JSON.parse(decodeURIComponent(relatedIdsSafe));
+  } catch (e) {}
+
+  const confirmMsg = `⚠️ ¿Estás seguro de eliminar DEFINITIVAMENTE la cuenta de "${displayName || streamerId}" de la base de datos?\n\nEsta acción borrará todas sus configuraciones, comandos, recompensas y tokens asociados (IDs: ${relatedIds.join(', ')}).`;
+  if (!confirm(confirmMsg)) return;
+
+  showToast(`🗑️ Eliminando cuenta @${displayName || streamerId} de la base de datos...`, 'info');
+
+  let deleted = false;
+
+  // 1. Intentar por backend API
+  try {
+    const res = await fetch(`/api/admin/streamer/${encodeURIComponent(streamerId)}/delete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamerId, relatedIds })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) {
+        deleted = true;
+      }
+    }
+  } catch (e) {}
+
+  // 2. Directo en Supabase (GitHub Pages o fallback)
+  if (supabaseClient) {
+    try {
+      const { error } = await supabaseClient
+        .from('orbibot_settings')
+        .delete()
+        .in('streamer_id', relatedIds);
+
+      if (!error) {
+        deleted = true;
+      }
+    } catch (e) {
+      console.warn('Error al eliminar en Supabase client:', e);
+    }
+  }
+
+  if (deleted) {
+    showToast(`✅ Cuenta de @${displayName || streamerId} eliminada correctamente.`, 'success');
+    // Limpiar de ocultos si estaba
+    const hiddenList = getHiddenStreamersList().filter(id => !relatedIds.includes(id));
+    saveHiddenStreamersList(hiddenList);
+    // Recargar lista completa
+    await loadStreamersSupportList();
+  } else {
+    showToast(`❌ Error al eliminar la cuenta de la base de datos.`, 'error');
+  }
 }
 
 // 5. enterStreamerSupportMode()

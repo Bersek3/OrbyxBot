@@ -2107,6 +2107,64 @@ class StorageService {
 
     return { success: true, streamerId: cleanId, savedAt: now };
   }
+
+  /**
+   * Elimina por completo todos los registros de configuración de un streamer y sus IDs asociados.
+   * Purgado de Supabase y MongoDB.
+   */
+  async deleteStreamerData(streamerId, relatedIds = []) {
+    const idsToDelete = new Set();
+    if (streamerId) idsToDelete.add(streamerId.toString().trim());
+    if (Array.isArray(relatedIds)) {
+      relatedIds.forEach(id => {
+        if (id) idsToDelete.add(id.toString().trim());
+      });
+    }
+
+    // Prohibir terminantemente eliminar identificadores del sistema
+    idsToDelete.delete('system');
+    idsToDelete.delete('global');
+    idsToDelete.delete('default');
+
+    const idList = Array.from(idsToDelete);
+    if (idList.length === 0) {
+      throw new Error('No se especificaron identificadores válidos para eliminar.');
+    }
+
+    console.log(`🗑️ [Storage] Eliminando registros para IDs:`, idList);
+
+    // 1. Eliminar en Supabase orbibot_settings
+    if (this.supabase) {
+      try {
+        const { error } = await this.supabase
+          .from('orbibot_settings')
+          .delete()
+          .in('streamer_id', idList);
+
+        if (error) {
+          console.warn('⚠️ [Storage] Error al eliminar registros en Supabase:', error.message);
+        } else {
+          console.log(`✅ [Supabase] Registros eliminados correctamente para IDs:`, idList);
+        }
+      } catch (e) {
+        console.warn('⚠️ [Storage] Excepción al eliminar en Supabase:', e.message);
+      }
+    }
+
+    // 2. Eliminar en MongoDB si está activo
+    if (this.isMongoReady && this.mongoDb) {
+      try {
+        const mongoRes = await this.mongoDb.collection('settings').deleteMany({
+          streamer_id: { $in: idList }
+        });
+        console.log(`🍃 [MongoDB] Documentos eliminados: ${mongoRes.deletedCount}`);
+      } catch (e) {
+        console.warn('⚠️ [Storage] Excepción al eliminar en MongoDB:', e.message);
+      }
+    }
+
+    return { success: true, deletedIds: idList };
+  }
 }
 
 module.exports = new StorageService();
