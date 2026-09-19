@@ -360,6 +360,7 @@
     }
 
     const songStorageKey = channel ? ('orbibot_current_song_' + channel) : 'orbibot_current_song';
+    const songStoppedKey = channel ? ('orbibot_sr_stopped_' + channel) : 'orbibot_sr_stopped';
 
     function notifySongEnded() {
       // 1. Intentar API local pasando canal explícito
@@ -381,12 +382,18 @@
 
     function updateSongDisplay(song) {
       if (!song) {
+        currentSongData = null;
         trackTitle.innerText = 'Esperando canciones con !sr...';
         trackRequester.innerText = 'La cola de música está vacía';
-        try { localStorage.removeItem(songStorageKey); } catch(e) {}
+        try {
+          localStorage.removeItem(songStorageKey);
+          localStorage.setItem(songStoppedKey, '1');
+        } catch(e) {}
         stopYouTubeVideo();
         return;
       }
+      // If a new song is playing, clear the stopped flag
+      try { localStorage.removeItem(songStoppedKey); } catch(e) {}
 
       currentSongData = song;
       try { localStorage.setItem(songStorageKey, JSON.stringify(song)); } catch(e) {}
@@ -400,30 +407,48 @@
     }
 
     // Cargar estado inicial desde localStorage de inmediato
+    // Pero solo si no fue detenido explícitamente
     try {
-      const saved = localStorage.getItem(songStorageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.videoId) {
-          currentSongData = parsed;
-          pendingVideoId = parsed.videoId;
-          trackThumb.src = parsed.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80';
-          trackTitle.innerText = parsed.title || 'Cargando canción...';
-          trackRequester.innerText = `Pedida por @${parsed.requester || 'Anónimo'}`;
+      const wasStopped = localStorage.getItem(songStoppedKey);
+      if (!wasStopped) {
+        const saved = localStorage.getItem(songStorageKey);
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && parsed.videoId) {
+            currentSongData = parsed;
+            pendingVideoId = parsed.videoId;
+            trackThumb.src = parsed.thumbnail || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80';
+            trackTitle.innerText = parsed.title || 'Cargando canción...';
+            trackRequester.innerText = `Pedida por @${parsed.requester || 'Anónimo'}`;
+          }
         }
+      } else {
+        // Fue detenido: asegurarse de que no se muestre nada
+        localStorage.removeItem(songStorageKey);
       }
     } catch (e) { }
 
-    // Consultar estado actual del servidor
+    // Consultar estado actual del servidor (fuente de verdad definitiva)
     const stateUrl = channel ? `/api/sr/state?channel=${encodeURIComponent(channel)}` : '/api/sr/state';
     fetch(stateUrl)
       .then(r => r.json())
       .then(state => {
         if (state && state.currentSong) {
+          // Hay canción activa en servidor: mostrarla y limpiar stopped flag
           updateSongDisplay(state.currentSong);
+        } else {
+          // Servidor confirma: no hay canción sonando → limpiar todo
+          updateSongDisplay(null);
         }
       })
-      .catch(() => { });
+      .catch(() => {
+        // Si el servidor no responde, respetar el stopped flag si existe
+        try {
+          if (localStorage.getItem(songStoppedKey)) {
+            updateSongDisplay(null);
+          }
+        } catch(e) {}
+      });
 
     const myStreamerKey = channel || '';
     const myToken = token || '';
