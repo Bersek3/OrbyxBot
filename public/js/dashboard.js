@@ -9562,11 +9562,12 @@ async function loadStreamersSupportList() {
 
   container.innerHTML = '<div style="text-align:center; padding:20px; color:var(--text-muted);"><i class="fas fa-spinner fa-spin"></i> Cargando lista de streamers registrados...</div>';
 
+  // 1. Consulta al backend vía API
   try {
     const res = await fetch(`/api/admin/streamers?email=${encodeURIComponent(userEmail)}&userId=${encodeURIComponent(userId)}`);
     if (res.ok) {
       const data = await res.json();
-      if (data.success && Array.isArray(data.streamers)) {
+      if (data.success && Array.isArray(data.streamers) && data.streamers.length > 0) {
         adminStreamersCache = data.streamers;
         renderAdminStreamersList(adminStreamersCache);
         return;
@@ -9574,31 +9575,147 @@ async function loadStreamersSupportList() {
     }
   } catch (e) { }
 
-  // Fallback directo a Supabase orbibot_settings (GitHub Pages)
+  // 2. Fallback directo a Supabase orbibot_settings con unificación inteligente (GitHub Pages)
   if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient
         .from('orbibot_settings')
-        .select('streamer_id, key, value');
+        .select('*');
 
-      if (!error && data) {
-        const streamersMap = {};
+      if (!error && data && data.length > 0) {
+        const rawMap = new Map();
+
         data.forEach(row => {
           const sId = row.streamer_id;
-          if (!streamersMap[sId]) {
-            streamersMap[sId] = { streamerId: sId, displayName: sId, channels: [], updatedAt: new Date().toISOString() };
+          if (!sId || sId === 'system' || sId === 'global' || sId === 'default') return;
+
+          if (!rawMap.has(sId)) {
+            rawMap.set(sId, {
+              id: sId,
+              tokens: new Set(),
+              emails: new Set(sId.includes('@') ? [sId.toLowerCase()] : []),
+              twitches: new Set(!sId.includes('@') && !sId.includes('-') ? [sId.toLowerCase()] : []),
+              kicks: new Set(),
+              displayNames: new Set(),
+              updatedAt: new Date(0).toISOString()
+            });
           }
-          if (row.key === 'config' && row.value) {
-            if (row.value.twitch && row.value.twitch.channel) {
-              streamersMap[sId].displayName = row.value.twitch.displayName || row.value.twitch.channel;
-              streamersMap[sId].channels.push(`twitch: ${row.value.twitch.channel}`);
+
+          const st = rawMap.get(sId);
+          let val = row.value;
+          if (typeof val === 'string') {
+            try { val = JSON.parse(val); } catch(e) {}
+          }
+
+          if (row.updated_at && new Date(row.updated_at) > new Date(st.updatedAt)) {
+            st.updatedAt = row.updated_at;
+          }
+
+          if (row.key === 'widget_token' && typeof val === 'string') {
+            st.tokens.add(val);
+          }
+          if (val?.widgetToken || val?.security?.widgetToken) {
+            st.tokens.add(val.widgetToken || val.security.widgetToken);
+          }
+
+          if (row.key === 'twitch_auth' && val) {
+            const ch = val.channel || val.login || val.displayName;
+            if (ch) {
+              st.twitches.add(ch.toLowerCase());
+              if (val.displayName) st.displayNames.add(val.displayName);
             }
-            if (row.value.kick && row.value.kick.channel) {
-              streamersMap[sId].channels.push(`kick: ${row.value.kick.channel}`);
+          }
+          if (row.key === 'config' && val) {
+            if (val.twitch?.channel) {
+              st.twitches.add(val.twitch.channel.toLowerCase());
+              if (val.twitch.displayName) st.displayNames.add(val.twitch.displayName);
             }
+            if (val.kick?.channel || val.kick?.username) {
+              st.kicks.add((val.kick.channel || val.kick.username).toLowerCase());
+            }
+          }
+          if (row.key === 'kick_auth' && val) {
+            const ch = val.channel || val.username;
+            if (ch) st.kicks.add(ch.toLowerCase());
           }
         });
-        adminStreamersCache = Object.values(streamersMap);
+
+        const unifiedGroups = [];
+        const visitedIds = new Set();
+
+        for (const [id, st] of rawMap.entries()) {
+          if (visitedIds.has(id)) continue;
+
+          const cluster = [st];
+          visitedIds.add(id);
+
+          let expanded = true;
+          while (expanded) {
+            expanded = false;
+            for (const [otherId, otherSt] of rawMap.entries()) {
+              if (visitedIds.has(otherId)) continue;
+
+              const sharesToken = Array.from(otherSt.tokens).some(t => cluster.some(c => c.tokens.has(t)));
+              const sharesEmail = Array.from(otherSt.emails).some(e => cluster.some(c => c.emails.has(e)));
+              const sharesTwitch = Array.from(otherSt.twitches).some(tw => cluster.some(c => c.twitches.has(tw)));
+              const sharesKick = Array.from(otherSt.kicks).some(k => cluster.some(c => c.kicks.has(k)));
+
+              if (sharesToken || sharesEmail || sharesTwitch || sharesKick) {
+                cluster.push(otherSt);
+                visitedIds.add(otherId);
+                expanded = true;
+              }
+            }
+          }
+
+          const combinedTokens = new Set();
+          const combinedEmails = new Set();
+          const combinedTwitches = new Set();
+          const combinedKicks = new Set();
+          const combinedNames = new Set();
+          const relatedIds = [];
+          let latestUpdate = new Date(0).toISOString();
+
+          cluster.forEach(c => {
+            relatedIds.push(c.id);
+            c.tokens.forEach(t => combinedTokens.add(t));
+            c.emails.forEach(e => combinedEmails.add(e));
+            c.twitches.forEach(t => combinedTwitches.add(t));
+            c.kicks.forEach(k => combinedKicks.add(k));
+            c.displayNames.forEach(n => combinedNames.add(n));
+            if (new Date(c.updatedAt) > new Date(latestUpdate)) latestUpdate = c.updatedAt;
+          });
+
+          const twitchList = Array.from(combinedTwitches);
+          const kickList = Array.from(combinedKicks);
+          const emailList = Array.from(combinedEmails);
+          const namesList = Array.from(combinedNames);
+
+          const primaryTwitch = twitchList[0] || '';
+          const primaryKick = kickList[0] || '';
+          const primaryEmail = emailList[0] || '';
+
+          const primaryId = primaryTwitch || primaryKick || primaryEmail || relatedIds.find(rid => !rid.includes('-')) || relatedIds[0];
+          const displayName = namesList[0] || primaryTwitch || primaryKick || (primaryEmail ? primaryEmail.split('@')[0] : primaryId);
+
+          const channels = [];
+          twitchList.forEach(t => channels.push(`twitch: ${t}`));
+          kickList.forEach(k => channels.push(`kick: ${k}`));
+
+          unifiedGroups.push({
+            streamerId: primaryId,
+            displayName: displayName,
+            email: primaryEmail,
+            twitchChannel: primaryTwitch,
+            kickChannel: primaryKick,
+            channels: channels,
+            widgetToken: Array.from(combinedTokens)[0] || '',
+            updatedAt: latestUpdate,
+            relatedIds: relatedIds
+          });
+        }
+
+        adminStreamersCache = unifiedGroups.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
         renderAdminStreamersList(adminStreamersCache);
         return;
       }
@@ -9625,8 +9742,10 @@ function renderAdminStreamersList(streamers) {
   let twitchCount = 0;
   let kickCount = 0;
   streamers.forEach(s => {
-    if (s.channels && s.channels.some(c => c.startsWith('twitch:'))) twitchCount++;
-    if (s.channels && s.channels.some(c => c.startsWith('kick:'))) kickCount++;
+    const hasTwitch = s.twitchChannel || (Array.isArray(s.channels) && s.channels.some(c => c.startsWith('twitch:')));
+    const hasKick = s.kickChannel || (Array.isArray(s.channels) && s.channels.some(c => c.startsWith('kick:')));
+    if (hasTwitch) twitchCount++;
+    if (hasKick) kickCount++;
   });
   if (twitchStat) twitchStat.textContent = twitchCount;
   if (kickStat) kickStat.textContent = kickCount;
@@ -9656,20 +9775,29 @@ function renderAdminStreamersList(streamers) {
         <tbody>
           ${streamers.map(s => {
             const displayName = s.displayName || s.streamerId || 'Usuario';
-            const channelsStr = Array.isArray(s.channels) && s.channels.length > 0 
-              ? s.channels.map(c => {
-                  if (c.startsWith('twitch:')) return `<span style="color: #a78bfa; font-weight: 700;"><i class="fab fa-twitch"></i> @${escapeHtml(c.split(':')[1])}</span>`;
-                  if (c.startsWith('kick:')) return `<span style="color: #53fc18; font-weight: 700;"><i class="fas fa-bolt"></i> @${escapeHtml(c.split(':')[1])}</span>`;
-                  return escapeHtml(c);
-                }).join(' ')
-              : '<span style="color: #64748b; font-size: 12px;">Sin canales vinculados</span>';
-            const dateStr = s.updatedAt ? new Date(s.updatedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
+            const twitch = s.twitchChannel || (Array.isArray(s.channels) && s.channels.find(c => c.startsWith('twitch:'))?.split(':')[1]?.trim()) || '';
+            const kick = s.kickChannel || (Array.isArray(s.channels) && s.channels.find(c => c.startsWith('kick:'))?.split(':')[1]?.trim()) || '';
+            const email = s.email || (s.streamerId && s.streamerId.includes('@') ? s.streamerId : '');
+
+            const badges = [];
+            if (twitch) {
+              badges.push(`<span style="display: inline-flex; align-items: center; gap: 5px; background: rgba(145, 70, 255, 0.18); border: 1px solid rgba(145, 70, 255, 0.45); color: #c4b5fd; padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 12px;"><i class="fab fa-twitch" style="color:#a78bfa;"></i> @${escapeHtml(twitch)}</span>`);
+            }
+            if (kick) {
+              badges.push(`<span style="display: inline-flex; align-items: center; gap: 5px; background: rgba(83, 252, 24, 0.15); border: 1px solid rgba(83, 252, 24, 0.45); color: #86efac; padding: 3px 9px; border-radius: 6px; font-weight: 700; font-size: 12px;"><i class="fas fa-bolt" style="color:#53fc18;"></i> @${escapeHtml(kick)}</span>`);
+            }
+            if (email && email !== twitch && email !== kick) {
+              badges.push(`<span style="display: inline-flex; align-items: center; gap: 5px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.14); color: #94a3b8; padding: 3px 8px; border-radius: 6px; font-size: 11px;"><i class="fas fa-envelope"></i> ${escapeHtml(email)}</span>`);
+            }
+
+            const channelsStr = badges.length > 0 ? badges.join(' ') : '<span style="color: #64748b; font-size: 12px;">Sin canales vinculados</span>';
+            const dateStr = s.updatedAt && s.updatedAt !== new Date(0).toISOString() ? new Date(s.updatedAt).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }) : 'Reciente';
 
             return `
               <tr>
                 <td>
                   <div style="display: flex; align-items: center; gap: 10px;">
-                    <div style="width: 32px; height: 32px; border-radius: 50%; background: rgba(145,70,255,0.2); border: 1px solid rgba(145,70,255,0.4); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #c4b5fd; font-size: 13px;">
+                    <div style="width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, rgba(145,70,255,0.3), rgba(0,242,254,0.3)); border: 1px solid rgba(145,70,255,0.45); display: flex; align-items: center; justify-content: center; font-weight: 800; color: #fff; font-size: 13px;">
                       ${(displayName[0] || 'U').toUpperCase()}
                     </div>
                     <div>
@@ -9681,7 +9809,7 @@ function renderAdminStreamersList(streamers) {
                 <td>${channelsStr}</td>
                 <td style="font-size: 12px; color: #94a3b8;">${dateStr}</td>
                 <td style="text-align: right;">
-                  <button class="btn btn-sm" onclick="enterStreamerSupportMode('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                  <button class="btn btn-sm" onclick="enterStreamerSupportMode('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 14px; border-radius: 8px; font-size: 12px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 2px 8px rgba(124,58,237,0.35);">
                     <i class="fas fa-tools"></i> Asistir / Ver Config
                   </button>
                 </td>
@@ -9704,6 +9832,9 @@ function filterAdminStreamersList(query) {
   const filtered = adminStreamersCache.filter(s => {
     return (s.streamerId && s.streamerId.toLowerCase().includes(q)) ||
            (s.displayName && s.displayName.toLowerCase().includes(q)) ||
+           (s.email && s.email.toLowerCase().includes(q)) ||
+           (s.twitchChannel && s.twitchChannel.toLowerCase().includes(q)) ||
+           (s.kickChannel && s.kickChannel.toLowerCase().includes(q)) ||
            (s.channels && s.channels.some(c => c.toLowerCase().includes(q)));
   });
   renderAdminStreamersList(filtered);
@@ -9726,10 +9857,12 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   let targetTts = [];
   let targetToken = null;
   let targetSongRequest = null;
+  let targetTwitchAuth = null;
+  let targetKickAuth = null;
 
   // 1. Consulta al backend vía API
   try {
-    const res = await fetch(`/api/admin/streamer/${encodeURIComponent(streamerId)}?email=${encodeURIComponent(session.email)}&userId=${encodeURIComponent(session.id)}`);
+    const res = await fetch(`/api/admin/streamer/${encodeURIComponent(streamerId)}?email=${encodeURIComponent(session?.email || '')}&userId=${encodeURIComponent(session?.id || '')}`);
     if (res.ok) {
       const resData = await res.json();
       const sData = resData.data || resData;
@@ -9741,27 +9874,55 @@ async function enterStreamerSupportMode(streamerId, displayName) {
         targetTts = sData.ttsCommands || sData.tts_commands || [];
         targetToken = sData.widget_token || sData.widgetToken || null;
         targetSongRequest = sData.songRequest || sData.sr_state || null;
+        targetTwitchAuth = sData.twitch_auth || null;
+        targetKickAuth = sData.kick_auth || null;
       }
     }
   } catch (e) { }
 
-  // 2. Fallback directo a Supabase orbibot_settings (GitHub Pages)
-  if (!targetCfg && supabaseClient) {
+  // 2. Fallback directo a Supabase orbibot_settings con búsqueda de cuentas relacionadas
+  if (supabaseClient) {
     try {
       const { data, error } = await supabaseClient
         .from('orbibot_settings')
-        .select('*')
-        .eq('streamer_id', streamerId);
+        .select('*');
 
       if (!error && data && data.length > 0) {
+        // Encontrar token o email de la cuenta si existe
+        let discoveredToken = targetToken;
         data.forEach(item => {
-          if (item.key === 'config') targetCfg = item.value;
-          if (item.key === 'commands' && Array.isArray(item.value)) targetCmds = item.value;
-          if (item.key === 'channel_points' && Array.isArray(item.value)) targetRws = item.value;
-          if (item.key === 'goals' && Array.isArray(item.value)) targetGls = item.value;
-          if (item.key === 'tts_commands' && Array.isArray(item.value)) targetTts = item.value;
-          if (item.key === 'widget_token' && item.value) targetToken = item.value;
-          if (item.key === 'sr_state' && item.value) targetSongRequest = item.value;
+          if (item.streamer_id === streamerId) {
+            let val = item.value;
+            if (typeof val === 'string') {
+              try { val = JSON.parse(val); } catch(e) {}
+            }
+            if (item.key === 'widget_token' && typeof val === 'string') discoveredToken = val;
+            if (val?.widgetToken) discoveredToken = val.widgetToken;
+            if (val?.security?.widgetToken) discoveredToken = val.security.widgetToken;
+          }
+        });
+
+        data.forEach(item => {
+          let val = item.value;
+          if (typeof val === 'string') {
+            try { val = JSON.parse(val); } catch(e) {}
+          }
+
+          const itemToken = item.key === 'widget_token' ? val : (val?.widgetToken || val?.security?.widgetToken);
+          const isDirectMatch = item.streamer_id === streamerId;
+          const isTokenMatch = discoveredToken && itemToken && itemToken === discoveredToken;
+
+          if (isDirectMatch || isTokenMatch) {
+            if (item.key === 'config' && val) targetCfg = targetCfg ? { ...val, ...targetCfg } : val;
+            if (item.key === 'commands' && Array.isArray(val) && val.length > 0) targetCmds = val;
+            if (item.key === 'channel_points' && Array.isArray(val) && val.length > 0) targetRws = val;
+            if (item.key === 'goals' && Array.isArray(val) && val.length > 0) targetGls = val;
+            if (item.key === 'tts_commands' && Array.isArray(val) && val.length > 0) targetTts = val;
+            if (item.key === 'widget_token' && val) targetToken = val;
+            if (item.key === 'sr_state' && val) targetSongRequest = val;
+            if (item.key === 'twitch_auth' && val) targetTwitchAuth = val;
+            if (item.key === 'kick_auth' && val) targetKickAuth = val;
+          }
         });
       }
     } catch (e) { }
@@ -9770,12 +9931,28 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   // Si no había configuración previa, inicializar plantilla limpia para este streamer
   if (!targetCfg) {
     targetCfg = getFreshDefaultConfig();
-    targetCfg.twitch = {
-      channel: streamerId.includes('@') ? '' : streamerId,
-      displayName: displayName || streamerId,
-      botUsername: streamerId.includes('@') ? '' : streamerId,
-      connected: !streamerId.includes('@')
-    };
+  }
+
+  // Enriquecer configuración con Twitch / Kick si se encontraron credenciales vinculadas
+  if (!targetCfg.twitch) targetCfg.twitch = {};
+  if (targetTwitchAuth) {
+    targetCfg.twitch.channel = targetTwitchAuth.channel || targetTwitchAuth.login || targetCfg.twitch.channel || streamerId;
+    targetCfg.twitch.displayName = targetTwitchAuth.displayName || targetCfg.twitch.displayName || displayName || streamerId;
+    targetCfg.twitch.userId = targetTwitchAuth.userId || targetCfg.twitch.userId || '';
+    targetCfg.twitch.oauthToken = targetTwitchAuth.oauthToken || targetCfg.twitch.oauthToken || '';
+    targetCfg.twitch.clientId = targetTwitchAuth.clientId || targetCfg.twitch.clientId || '';
+    targetCfg.twitch.connected = true;
+  } else if (!targetCfg.twitch.channel && !streamerId.includes('@')) {
+    targetCfg.twitch.channel = streamerId;
+    targetCfg.twitch.displayName = displayName || streamerId;
+    targetCfg.twitch.connected = true;
+  }
+
+  if (targetKickAuth) {
+    if (!targetCfg.kick) targetCfg.kick = {};
+    targetCfg.kick.channel = targetKickAuth.channel || targetKickAuth.username || targetCfg.kick.channel || '';
+    targetCfg.kick.username = targetKickAuth.username || targetCfg.kick.username || '';
+    targetCfg.kick.connected = true;
   }
 
   // Respaldar estado original del Superadmin
@@ -9833,7 +10010,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
 
   bindConfigToUI(appConfig);
   updatePlatformLinkingUI();
-  populateWidgetUrls();
+  updateWidgetUrls();
   if (typeof initWidgetCustomization === 'function') initWidgetCustomization();
 
   switchTab('tab-dashboard');

@@ -1717,53 +1717,79 @@ class StorageService {
   }
 
   /**
-   * Obtiene la lista de todos los streamers registrados y sus resúmenes de configuración
+   * Obtiene la lista de todos los streamers registrados y sus resúmenes de configuración (Unificación inteligente de cuentas)
    */
   async getAllStreamers() {
-    const streamersMap = new Map();
+    const rawStreamerData = new Map();
 
     // 1. Consultar Supabase orbibot_settings
     if (this.supabase) {
       try {
         const { data, error } = await this.supabase.from('orbibot_settings').select('*');
         if (!error && data && data.length > 0) {
-          data.forEach(item => {
-            const sId = item.streamer_id;
-            if (!sId || sId === 'system' || sId === 'global') return;
-            if (!streamersMap.has(sId)) {
-              streamersMap.set(sId, {
-                streamerId: sId,
-                twitchChannel: '',
-                kickChannel: '',
-                updatedAt: item.updated_at || new Date().toISOString(),
-                hasConfig: false,
-                commandsCount: 0,
+          data.forEach(row => {
+            const sId = row.streamer_id;
+            if (!sId || sId === 'system' || sId === 'global' || sId === 'default') return;
+
+            if (!rawStreamerData.has(sId)) {
+              rawStreamerData.set(sId, {
+                id: sId,
+                tokens: new Set(),
+                emails: new Set(sId.includes('@') ? [sId.toLowerCase()] : []),
+                twitches: new Set(!sId.includes('@') && !sId.includes('-') ? [sId.toLowerCase()] : []),
+                kicks: new Set(),
+                displayNames: new Set(),
+                updatedAt: new Date(0).toISOString(),
                 rewardsCount: 0,
+                commandsCount: 0,
+                ttsCount: 0,
                 goalsCount: 0,
                 soundsCount: 0
               });
             }
-            const current = streamersMap.get(sId);
-            if (item.updated_at && (!current.updatedAt || new Date(item.updated_at) > new Date(current.updatedAt))) {
-              current.updatedAt = item.updated_at;
+
+            const st = rawStreamerData.get(sId);
+            let val = row.value;
+            if (typeof val === 'string') {
+              try { val = JSON.parse(val); } catch(e) {}
             }
-            if (item.key === 'config' && item.value) {
-              current.hasConfig = true;
-              if (item.value.twitch?.channel) current.twitchChannel = item.value.twitch.channel;
-              if (item.value.kick?.channel || item.value.kick?.username) current.kickChannel = item.value.kick.channel || item.value.kick.username;
+
+            if (row.updated_at && new Date(row.updated_at) > new Date(st.updatedAt)) {
+              st.updatedAt = row.updated_at;
             }
-            if (item.key === 'twitch_auth' && item.value) {
-              const val = typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
-              if (val.channel || val.login || val.displayName) current.twitchChannel = val.channel || val.login || val.displayName;
+
+            if (row.key === 'widget_token' && typeof val === 'string') {
+              st.tokens.add(val);
             }
-            if (item.key === 'kick_auth' && item.value) {
-              const val = typeof item.value === 'string' ? JSON.parse(item.value) : item.value;
-              if (val.channel || val.username) current.kickChannel = val.channel || val.username;
+            if (val?.widgetToken || val?.security?.widgetToken) {
+              st.tokens.add(val.widgetToken || val.security.widgetToken);
             }
-            if (item.key === 'commands' && Array.isArray(item.value)) current.commandsCount = item.value.length;
-            if (item.key === 'channel_points' && Array.isArray(item.value)) current.rewardsCount = item.value.length;
-            if (item.key === 'goals' && Array.isArray(item.value)) current.goalsCount = item.value.length;
-            if (item.key === 'custom_sounds' && Array.isArray(item.value)) current.soundsCount = item.value.length;
+
+            if (row.key === 'twitch_auth' && val) {
+              const ch = val.channel || val.login || val.displayName;
+              if (ch) {
+                st.twitches.add(ch.toLowerCase());
+                if (val.displayName) st.displayNames.add(val.displayName);
+              }
+            }
+            if (row.key === 'config' && val) {
+              if (val.twitch?.channel) {
+                st.twitches.add(val.twitch.channel.toLowerCase());
+                if (val.twitch.displayName) st.displayNames.add(val.twitch.displayName);
+              }
+              if (val.kick?.channel || val.kick?.username) {
+                st.kicks.add((val.kick.channel || val.kick.username).toLowerCase());
+              }
+            }
+            if (row.key === 'kick_auth' && val) {
+              const ch = val.channel || val.username;
+              if (ch) st.kicks.add(ch.toLowerCase());
+            }
+            if (row.key === 'channel_points' && Array.isArray(val)) st.rewardsCount = Math.max(st.rewardsCount, val.length);
+            if (row.key === 'commands' && Array.isArray(val)) st.commandsCount = Math.max(st.commandsCount, val.length);
+            if (row.key === 'tts_commands' && Array.isArray(val)) st.ttsCount = Math.max(st.ttsCount, val.length);
+            if (row.key === 'goals' && Array.isArray(val)) st.goalsCount = Math.max(st.goalsCount, val.length);
+            if (row.key === 'custom_sounds' && Array.isArray(val)) st.soundsCount = Math.max(st.soundsCount, val.length);
           });
         }
       } catch (e) {
@@ -1774,29 +1800,35 @@ class StorageService {
     // 2. Consultar MongoDB settings
     if (this.isMongoReady && this.mongoDb) {
       try {
-        const records = await this.mongoDb.collection('settings').find({ streamer_id: { $nin: ['system', 'global'] } }).toArray();
+        const records = await this.mongoDb.collection('settings').find({ streamer_id: { $nin: ['system', 'global', 'default'] } }).toArray();
         if (records && records.length > 0) {
-          records.forEach(item => {
-            const sId = item.streamer_id;
+          records.forEach(row => {
+            const sId = row.streamer_id;
             if (!sId) return;
-            if (!streamersMap.has(sId)) {
-              streamersMap.set(sId, {
-                streamerId: sId,
-                twitchChannel: '',
-                kickChannel: '',
-                updatedAt: item.updated_at || new Date().toISOString(),
-                hasConfig: false,
-                commandsCount: 0,
+            if (!rawStreamerData.has(sId)) {
+              rawStreamerData.set(sId, {
+                id: sId,
+                tokens: new Set(),
+                emails: new Set(sId.includes('@') ? [sId.toLowerCase()] : []),
+                twitches: new Set(!sId.includes('@') && !sId.includes('-') ? [sId.toLowerCase()] : []),
+                kicks: new Set(),
+                displayNames: new Set(),
+                updatedAt: new Date(0).toISOString(),
                 rewardsCount: 0,
+                commandsCount: 0,
+                ttsCount: 0,
                 goalsCount: 0,
                 soundsCount: 0
               });
             }
-            const current = streamersMap.get(sId);
-            if (item.key === 'config' && item.value) {
-              current.hasConfig = true;
-              if (item.value.twitch?.channel) current.twitchChannel = item.value.twitch.channel;
-              if (item.value.kick?.channel || item.value.kick?.username) current.kickChannel = item.value.kick.channel || item.value.kick.username;
+            const st = rawStreamerData.get(sId);
+            let val = row.value;
+            if (typeof val === 'string') {
+              try { val = JSON.parse(val); } catch(e) {}
+            }
+            if (row.key === 'config' && val) {
+              if (val.twitch?.channel) st.twitches.add(val.twitch.channel.toLowerCase());
+              if (val.kick?.channel || val.kick?.username) st.kicks.add((val.kick.channel || val.kick.username).toLowerCase());
             }
           });
         }
@@ -1805,22 +1837,114 @@ class StorageService {
 
     // 3. Incluir streamer local si no está ya
     const localId = this.getStreamerId();
-    if (localId && localId !== 'default' && !streamersMap.has(localId)) {
+    if (localId && localId !== 'default' && !rawStreamerData.has(localId)) {
       const cfg = this.getConfig();
-      streamersMap.set(localId, {
-        streamerId: localId,
-        twitchChannel: cfg.twitch?.channel || '',
-        kickChannel: cfg.kick?.channel || cfg.kick?.username || '',
+      const localSt = {
+        id: localId,
+        tokens: new Set(cfg.security?.widgetToken ? [cfg.security.widgetToken] : []),
+        emails: new Set(localId.includes('@') ? [localId.toLowerCase()] : []),
+        twitches: new Set(cfg.twitch?.channel ? [cfg.twitch.channel.toLowerCase()] : (!localId.includes('@') && !localId.includes('-') ? [localId.toLowerCase()] : [])),
+        kicks: new Set(cfg.kick?.channel ? [cfg.kick.channel.toLowerCase()] : []),
+        displayNames: new Set(cfg.twitch?.displayName ? [cfg.twitch.displayName] : []),
         updatedAt: new Date().toISOString(),
-        hasConfig: true,
-        commandsCount: this.getCommands().length,
         rewardsCount: this.getRewards().length,
+        commandsCount: this.getCommands().length,
+        ttsCount: this.getTtsCommands().length,
         goalsCount: this.getGoals().length,
         soundsCount: this.getCustomSounds().length
+      };
+      rawStreamerData.set(localId, localSt);
+    }
+
+    // 4. Unificar entidades usando Disjoint Set / Claves compartidas (tokens, emails, twitches, kicks)
+    const unifiedGroups = [];
+    const visitedIds = new Set();
+
+    for (const [id, st] of rawStreamerData.entries()) {
+      if (visitedIds.has(id)) continue;
+
+      const cluster = [st];
+      visitedIds.add(id);
+
+      let expanded = true;
+      while (expanded) {
+        expanded = false;
+        for (const [otherId, otherSt] of rawStreamerData.entries()) {
+          if (visitedIds.has(otherId)) continue;
+
+          const sharesToken = Array.from(otherSt.tokens).some(t => cluster.some(c => c.tokens.has(t)));
+          const sharesEmail = Array.from(otherSt.emails).some(e => cluster.some(c => c.emails.has(e)));
+          const sharesTwitch = Array.from(otherSt.twitches).some(tw => cluster.some(c => c.twitches.has(tw)));
+          const sharesKick = Array.from(otherSt.kicks).some(k => cluster.some(c => c.kicks.has(k)));
+
+          if (sharesToken || sharesEmail || sharesTwitch || sharesKick) {
+            cluster.push(otherSt);
+            visitedIds.add(otherId);
+            expanded = true;
+          }
+        }
+      }
+
+      const combinedTokens = new Set();
+      const combinedEmails = new Set();
+      const combinedTwitches = new Set();
+      const combinedKicks = new Set();
+      const combinedNames = new Set();
+      const relatedIds = [];
+      let latestUpdate = new Date(0).toISOString();
+      let maxRewards = 0, maxCommands = 0, maxTTS = 0, maxGoals = 0, maxSounds = 0;
+
+      cluster.forEach(c => {
+        relatedIds.push(c.id);
+        c.tokens.forEach(t => combinedTokens.add(t));
+        c.emails.forEach(e => combinedEmails.add(e));
+        c.twitches.forEach(t => combinedTwitches.add(t));
+        c.kicks.forEach(k => combinedKicks.add(k));
+        c.displayNames.forEach(n => combinedNames.add(n));
+        if (new Date(c.updatedAt) > new Date(latestUpdate)) latestUpdate = c.updatedAt;
+        maxRewards = Math.max(maxRewards, c.rewardsCount);
+        maxCommands = Math.max(maxCommands, c.commandsCount);
+        maxTTS = Math.max(maxTTS, c.ttsCount);
+        maxGoals = Math.max(maxGoals, c.goalsCount);
+        maxSounds = Math.max(maxSounds, c.soundsCount);
+      });
+
+      const twitchList = Array.from(combinedTwitches);
+      const kickList = Array.from(combinedKicks);
+      const emailList = Array.from(combinedEmails);
+      const namesList = Array.from(combinedNames);
+
+      const primaryTwitch = twitchList[0] || '';
+      const primaryKick = kickList[0] || '';
+      const primaryEmail = emailList[0] || '';
+
+      const primaryId = primaryTwitch || primaryKick || primaryEmail || relatedIds.find(rid => !rid.includes('-')) || relatedIds[0];
+      const displayName = namesList[0] || primaryTwitch || primaryKick || (primaryEmail ? primaryEmail.split('@')[0] : primaryId);
+
+      const channels = [];
+      twitchList.forEach(t => channels.push(`twitch: ${t}`));
+      kickList.forEach(k => channels.push(`kick: ${k}`));
+
+      unifiedGroups.push({
+        streamerId: primaryId,
+        displayName: displayName,
+        email: primaryEmail,
+        twitchChannel: primaryTwitch,
+        kickChannel: primaryKick,
+        channels: channels,
+        widgetToken: Array.from(combinedTokens)[0] || '',
+        updatedAt: latestUpdate,
+        relatedIds: relatedIds,
+        hasConfig: true,
+        rewardsCount: maxRewards,
+        commandsCount: maxCommands,
+        ttsCommandsCount: maxTTS,
+        goalsCount: maxGoals,
+        soundsCount: maxSounds
       });
     }
 
-    return Array.from(streamersMap.values()).sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+    return unifiedGroups.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
   }
 
   /**
@@ -1840,20 +1964,49 @@ class StorageService {
       goals: null,
       custom_sounds: null,
       custom_images: null,
-      widget_token: null
+      widget_token: null,
+      sr_state: null,
+      twitch_auth: null,
+      kick_auth: null
     };
 
-    // 1. Supabase
+    // 1. Supabase: buscar filas por cleanId y por IDs relacionados / token
     if (this.supabase) {
       try {
-        const { data, error } = await this.supabase
-          .from('orbibot_settings')
-          .select('*')
-          .eq('streamer_id', cleanId);
+        const { data, error } = await this.supabase.from('orbibot_settings').select('*');
         if (!error && data && data.length > 0) {
+          // Identificar todas las filas que pertenecen a este streamer
+          let targetToken = null;
           data.forEach(item => {
-            if (result.hasOwnProperty(item.key) || item.key === 'widget_token') {
-              result[item.key] = item.value;
+            if (item.streamer_id === cleanId) {
+              if (item.key === 'widget_token' && typeof item.value === 'string') targetToken = item.value;
+              if (item.value?.widgetToken) targetToken = item.value.widgetToken;
+              if (item.value?.security?.widgetToken) targetToken = item.value.security.widgetToken;
+            }
+          });
+
+          data.forEach(item => {
+            let val = item.value;
+            if (typeof val === 'string') {
+              try { val = JSON.parse(val); } catch(e) {}
+            }
+
+            const itemToken = item.key === 'widget_token' ? val : (val?.widgetToken || val?.security?.widgetToken);
+            const matchesId = item.streamer_id === cleanId;
+            const matchesToken = targetToken && itemToken && itemToken === targetToken;
+
+            if (matchesId || matchesToken) {
+              if (item.key === 'config' && val) {
+                result.config = result.config ? { ...val, ...result.config } : val;
+              } else if (item.key === 'twitch_auth' && val) {
+                result.twitch_auth = val;
+              } else if (item.key === 'kick_auth' && val) {
+                result.kick_auth = val;
+              } else if (result.hasOwnProperty(item.key) || item.key === 'widget_token' || item.key === 'sr_state') {
+                if (!result[item.key] || (Array.isArray(val) && val.length > 0)) {
+                  result[item.key] = val;
+                }
+              }
             }
           });
         }
@@ -1872,6 +2025,16 @@ class StorageService {
           });
         }
       } catch (e) {}
+    }
+
+    // Si tenemos twitch_auth pero en config falta twitch, enriquecerlo automáticamente
+    if (result.twitch_auth && result.config) {
+      if (!result.config.twitch) result.config.twitch = {};
+      if (result.twitch_auth.channel && !result.config.twitch.channel) result.config.twitch.channel = result.twitch_auth.channel;
+      if (result.twitch_auth.userId && !result.config.twitch.userId) result.config.twitch.userId = result.twitch_auth.userId;
+      if (result.twitch_auth.oauthToken && !result.config.twitch.oauthToken) result.config.twitch.oauthToken = result.twitch_auth.oauthToken;
+      if (result.twitch_auth.clientId && !result.config.twitch.clientId) result.config.twitch.clientId = result.twitch_auth.clientId;
+      result.config.twitch.connected = true;
     }
 
     // Si es el streamer local actual, rellenar lo que falte
