@@ -405,10 +405,10 @@ app.post('/api/auth/login', async (req, res) => {
 // ================= 👑 RUTAS DE ADMINISTRACIÓN GENERAL & SOPORTE =================
 
 // Verificar si el usuario actual es Administrador General
-app.get('/api/admin/check', async (req, res) => {
+app.all('/api/admin/check', async (req, res) => {
   try {
-    const email = req.query.email || req.headers['x-admin-email'];
-    const userId = req.query.userId || req.headers['x-admin-userid'];
+    const email = req.query.email || req.body?.email || req.headers['x-admin-email'];
+    const userId = req.query.userId || req.body?.userId || req.headers['x-admin-userid'];
     const adminCheck = await storage.isUserAdmin(email, userId);
     res.json(adminCheck);
   } catch (err) {
@@ -426,22 +426,26 @@ app.get('/api/admin/streamers', async (req, res) => {
   }
 });
 
-// Obtener toda la configuración de un streamer para asistencia/soporte
+// Obtener o Guardar configuración de un streamer para asistencia/soporte
 app.get('/api/admin/streamer/:streamerId', async (req, res) => {
   try {
     const { streamerId } = req.params;
     const fullConfig = await storage.getStreamerFullConfig(streamerId);
-    res.json({ success: true, data: fullConfig });
+    res.json({ success: true, data: fullConfig, config: fullConfig.config });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// Guardar o reparar la configuración de un streamer desde el panel de soporte
 app.post('/api/admin/streamer/:streamerId', async (req, res) => {
   try {
     const { streamerId } = req.params;
-    const bundle = req.body;
+    const bundle = req.body || {};
+    // Si la petición es solo para consultar (no tiene config ni commands ni rewards)
+    if (!bundle.config && !bundle.commands && !bundle.rewards && !bundle.goals && !bundle.ttsCommands) {
+      const fullConfig = await storage.getStreamerFullConfig(streamerId);
+      return res.json({ success: true, data: fullConfig, config: fullConfig.config });
+    }
     const result = await storage.saveStreamerFullConfig(streamerId, bundle);
     broadcast('config_updated', bundle.config || {});
     res.json({ success: true, message: `Configuración guardada para @${streamerId}`, result });

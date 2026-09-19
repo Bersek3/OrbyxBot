@@ -976,12 +976,43 @@ function updatePlatformLinkingUI() {
   const session = getUserSession();
   const userLoggedInEmail = document.getElementById('userLoggedInEmail');
   if (userLoggedInEmail && session) {
-    userLoggedInEmail.textContent = session.username || 'Sesión activa';
+    if (adminTargetStreamerId) {
+      userLoggedInEmail.textContent = `Asistiendo a: @${adminTargetStreamerId}`;
+    } else {
+      userLoggedInEmail.textContent = session.username || session.email || 'Sesión activa';
+    }
   }
 
   // 1. Twitch Status
-  const isTwitchConn = isStreamerLoggedIn();
-  const twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '');
+  let isTwitchConn = false;
+  let twitchChannel = '';
+  let twitchDisplayName = '';
+  let twitchAvatar = '';
+
+  if (adminTargetStreamerId) {
+    twitchChannel = (appConfig?.twitch?.channel || appConfig?.twitch?.login || '').toLowerCase().replace(/^#/, '');
+    isTwitchConn = Boolean(twitchChannel && appConfig?.twitch?.connected !== false);
+    twitchDisplayName = appConfig?.twitch?.displayName || twitchChannel;
+    twitchAvatar = appConfig?.twitch?.profileImage || '';
+  } else {
+    isTwitchConn = isStreamerLoggedIn();
+    twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '');
+    if (!twitchChannel) {
+      try {
+        const local = localStorage.getItem('orbibot_twitch_auth');
+        if (local) {
+          const p = JSON.parse(local);
+          twitchChannel = (p.channel || p.login || '').replace(/^#/, '');
+          twitchDisplayName = p.displayName || twitchChannel;
+          twitchAvatar = p.profileImage || p.profile_image_url || '';
+        }
+      } catch (e) { }
+    } else {
+      twitchDisplayName = appConfig?.twitch?.displayName || twitchChannel;
+      twitchAvatar = appConfig?.twitch?.profileImage || '';
+    }
+  }
+
   const twitchStatusText = document.getElementById('dashTwitchStatusText');
   const twitchStatusBadge = document.getElementById('dashTwitchStatusBadge');
   const twitchDiscView = document.getElementById('dashTwitchDisconnectedView');
@@ -999,15 +1030,20 @@ function updatePlatformLinkingUI() {
     }
     if (twitchDiscView) twitchDiscView.style.display = 'none';
     if (twitchConnView) twitchConnView.style.display = 'flex';
-    if (dashUserName) dashUserName.textContent = `@${twitchChannel}`;
+    if (dashUserName) dashUserName.textContent = `@${twitchDisplayName || twitchChannel}`;
 
-    // Get stored avatar if available
-    const authData = localStorage.getItem('orbibot_twitch_auth');
-    if (authData && dashUserAvatar) {
-      try {
-        const parsed = JSON.parse(authData);
-        if (parsed.profile_image_url) dashUserAvatar.src = parsed.profile_image_url;
-      } catch (e) { }
+    if (dashUserAvatar) {
+      if (twitchAvatar) {
+        dashUserAvatar.src = twitchAvatar;
+      } else if (!adminTargetStreamerId) {
+        const authData = localStorage.getItem('orbibot_twitch_auth');
+        if (authData) {
+          try {
+            const parsed = JSON.parse(authData);
+            if (parsed.profile_image_url) dashUserAvatar.src = parsed.profile_image_url;
+          } catch (e) { }
+        }
+      }
     }
   } else {
     if (twitchStatusText) twitchStatusText.textContent = 'No conectado';
@@ -1022,13 +1058,14 @@ function updatePlatformLinkingUI() {
   }
 
   // 2. Kick Status
-  const kickConfig = appConfig?.kick || (() => {
-    try { return JSON.parse(localStorage.getItem('orbibot_kick_auth') || '{}'); } catch (e) { return {}; }
-  })();
-  const kickChannel = (kickConfig.channel || kickConfig.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').trim();
+  let kickConfig = appConfig?.kick || {};
+  if (!adminTargetStreamerId && (!kickConfig.channel && !kickConfig.username)) {
+    try { kickConfig = JSON.parse(localStorage.getItem('orbibot_kick_auth') || '{}'); } catch (e) { kickConfig = {}; }
+  }
+  const kickChannel = (kickConfig.channel || kickConfig.username || (!adminTargetStreamerId ? localStorage.getItem('orbibot_kick_channel') : '') || '').toLowerCase().replace(/^@/, '').trim();
   const isKickConn = Boolean(kickChannel && (kickConfig.connected !== false));
   const kickDisplayName = kickConfig.username || kickChannel;
-  const kickAvatar = kickConfig.profile_picture || '';
+  const kickAvatar = kickConfig.profile_picture || kickConfig.avatar || '';
 
   const kickStatusText = document.getElementById('dashKickStatusText');
   const kickStatusBadge = document.getElementById('dashKickStatusBadge');
@@ -1070,9 +1107,9 @@ function updatePlatformLinkingUI() {
   }
 
   // 3. Multi-Chat Platform Toggles & Status
-  let chatPlatforms = appConfig?.chatPlatforms || (() => {
+  let chatPlatforms = appConfig?.chatPlatforms || (adminTargetStreamerId ? { twitch: true, kick: true } : (() => {
     try { return JSON.parse(localStorage.getItem('orbibot_chat_platforms') || '{"twitch":true,"kick":true}'); } catch (e) { return { twitch: true, kick: true }; }
-  })();
+  })());
 
   const toggleTwitch = document.getElementById('toggleChatTwitch');
   const toggleKick = document.getElementById('toggleChatKick');
@@ -1092,20 +1129,22 @@ function updatePlatformLinkingUI() {
       multiChatBadge.style.background = 'linear-gradient(90deg, rgba(145, 70, 255, 0.25), rgba(83, 252, 24, 0.25))';
       multiChatBadge.style.border = '1px solid rgba(83, 252, 24, 0.5)';
       multiChatBadge.style.color = '#fff';
+      if (multiChatIcon) multiChatIcon.textContent = '⚡';
+      multiChatText.textContent = 'Multi-Chat Activo (Twitch & Kick)';
     } else if (twitchActive) {
       multiChatBadge.style.display = 'inline-flex';
       multiChatBadge.style.background = 'rgba(145, 70, 255, 0.15)';
       multiChatBadge.style.border = '1px solid rgba(145, 70, 255, 0.4)';
       multiChatBadge.style.color = '#c4b5fd';
       if (multiChatIcon) multiChatIcon.textContent = '🟣';
-      multiChatText.textContent = 'Chat OBS: Solo Twitch';
+      multiChatText.textContent = 'Chat Twitch Activo';
     } else if (kickActive) {
       multiChatBadge.style.display = 'inline-flex';
       multiChatBadge.style.background = 'rgba(83, 252, 24, 0.15)';
       multiChatBadge.style.border = '1px solid rgba(83, 252, 24, 0.4)';
       multiChatBadge.style.color = '#53fc18';
       if (multiChatIcon) multiChatIcon.textContent = '🟢';
-      multiChatText.textContent = 'Chat OBS: Solo Kick';
+      multiChatText.textContent = 'Chat Kick Activo';
     } else {
       multiChatBadge.style.display = 'none';
     }
@@ -1509,6 +1548,11 @@ let dashboardMqttClient = null;
 let isMqttConnected = false;
 
 function isStreamerLoggedIn() {
+  if (adminTargetStreamerId) {
+    const twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '');
+    const kickChannel = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').replace(/^#/, '');
+    return Boolean(twitchChannel || kickChannel || adminTargetStreamerId);
+  }
   const session = getUserSession();
   const twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '');
   const kickChannel = (appConfig?.kick?.channel || appConfig?.kick?.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').replace(/^#/, '');
@@ -1519,6 +1563,13 @@ function isStreamerLoggedIn() {
 }
 
 function getActiveStreamerRoom() {
+  if (adminTargetStreamerId) {
+    const twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+    const kickChannel = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
+    if (twitchChannel) return twitchChannel;
+    if (kickChannel) return kickChannel;
+    return adminTargetStreamerId.toLowerCase();
+  }
   const twitchChannel = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
   const kickChannel = (appConfig?.kick?.channel || appConfig?.kick?.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
   const session = getUserSession();
@@ -2948,7 +2999,7 @@ function connectInBrowserKickBot(kickData) {
 // ================= UI BINDING =================
 function bindConfigToUI(cfg) {
   if (!cfg) return;
-  if (!cfg.twitch) {
+  if (!cfg.twitch && !adminTargetStreamerId) {
     try {
       const local = localStorage.getItem('orbibot_twitch_auth');
       if (local) cfg.twitch = JSON.parse(local);
@@ -2977,10 +3028,10 @@ function bindConfigToUI(cfg) {
     const dashUserTag = document.getElementById('dashUserTag');
 
     const avatar = cfg.twitch.profileImage || 'https://static-cdn.jtvnw.net/user-default-pictures-uv/75305d54-c7cc-40d1-bb60-aee8f1560db5-profile_image-300x300.png';
-    const dName = cfg.twitch.displayName || channel || 'Streamer';
-    const login = channel;
+    const dName = cfg.twitch.displayName || channel || (adminTargetStreamerId ? `@${adminTargetStreamerId}` : 'Streamer');
+    const login = channel || (adminTargetStreamerId ? adminTargetStreamerId : '');
 
-    if (isConn) {
+    if (isConn || adminTargetStreamerId) {
       if (topTwitchLoginBtn) topTwitchLoginBtn.style.display = 'none';
       if (topUserPill) {
         topUserPill.style.display = 'inline-flex';
@@ -3014,7 +3065,7 @@ function bindConfigToUI(cfg) {
       document.getElementById('cfgTwitchClientId').value = cfg.twitch.clientId || 'yw1vr664ichms8an2x5lhji58v7ozk';
     }
     if (document.getElementById('statChannelName')) {
-      document.getElementById('statChannelName').innerText = channel ? `#${channel}` : 'Ninguno';
+      document.getElementById('statChannelName').innerText = channel ? `#${channel}` : (adminTargetStreamerId ? `#${adminTargetStreamerId}` : 'Ninguno');
     }
     populateWidgetUrls();
   }
@@ -3910,6 +3961,17 @@ async function removeSongFromQueue(songId) {
 
 // ================= WIDGET SECURITY & PRIVATE TOKENS =================
 function getEffectiveWidgetToken() {
+  if (adminTargetStreamerId) {
+    if (appConfig?.security?.widgetToken) {
+      return appConfig.security.widgetToken;
+    }
+    const token = 'sec_' + adminTargetStreamerId.toLowerCase().replace(/[^a-z0-9_]/g, '') + '_tkn';
+    if (appConfig) {
+      if (!appConfig.security) appConfig.security = {};
+      appConfig.security.widgetToken = token;
+    }
+    return token;
+  }
   if (appConfig?.security?.widgetToken) {
     return appConfig.security.widgetToken;
   }
@@ -3988,7 +4050,9 @@ async function regenerateWidgetTokenUI() {
     }
   }
 
-  localStorage.setItem('orbibot_widget_token', newToken);
+  if (!adminTargetStreamerId) {
+    localStorage.setItem('orbibot_widget_token', newToken);
+  }
   populateWidgetUrls();
   showToast('🛡️ ¡Nueva Clave Secreta generada! Enlaces de OBS actualizados.', 'success');
 }
@@ -4004,7 +4068,7 @@ function populateWidgetUrls() {
   if (appConfig && appConfig.twitch && appConfig.twitch.channel) {
     channel = appConfig.twitch.channel.trim().toLowerCase().replace(/^#/, '');
   }
-  if (!channel) {
+  if (!channel && !adminTargetStreamerId) {
     try {
       const localTwitch = localStorage.getItem('orbibot_twitch_auth');
       if (localTwitch) {
@@ -4013,7 +4077,7 @@ function populateWidgetUrls() {
       }
     } catch (e) { }
   }
-  if (!channel) {
+  if (!channel && !adminTargetStreamerId) {
     const inputCh = document.getElementById('cfgTwitchChannel');
     if (inputCh && inputCh.value) {
       channel = inputCh.value.trim().toLowerCase().replace(/^#/, '');
@@ -4024,7 +4088,7 @@ function populateWidgetUrls() {
   if (appConfig && appConfig.kick) {
     kickChannel = (appConfig.kick.channel || appConfig.kick.username || '').trim().toLowerCase().replace(/^@/, '');
   }
-  if (!kickChannel) {
+  if (!kickChannel && !adminTargetStreamerId) {
     try {
       const localKick = localStorage.getItem('orbibot_kick_auth');
       if (localKick) {
@@ -4033,7 +4097,7 @@ function populateWidgetUrls() {
       }
     } catch (e) { }
   }
-  if (!kickChannel) {
+  if (!kickChannel && !adminTargetStreamerId) {
     kickChannel = (localStorage.getItem('orbibot_kick_channel') || '').trim().toLowerCase().replace(/^@/, '');
   }
 
@@ -4043,7 +4107,7 @@ function populateWidgetUrls() {
     tokenDisplay.value = token;
   }
 
-  const effectiveChannel = (channel || kickChannel || getActiveStreamerRoom() || 'streamer').toLowerCase().replace(/^#/, '');
+  const effectiveChannel = (channel || kickChannel || (adminTargetStreamerId ? adminTargetStreamerId.toLowerCase() : getActiveStreamerRoom()) || 'streamer').toLowerCase().replace(/^#/, '');
 
   const channelParam = `channel=${encodeURIComponent(effectiveChannel)}`;
   const kickParam = kickChannel ? `kick=${encodeURIComponent(kickChannel)}` : '';
@@ -9631,58 +9695,44 @@ function filterAdminStreamersList(query) {
   renderAdminStreamersList(filtered);
 }
 
-// 5. enterStreamerSupportMode(streamerId, displayName)
-async function enterStreamerSupportMode(streamerId, displayName = '') {
-  if (!streamerId) return;
+// 5. enterStreamerSupportMode()
+async function enterStreamerSupportMode(streamerId, displayName) {
   const session = getUserSession();
   if (!session || !isUserSuperAdmin) {
-    showToast('Acceso denegado: solo Superadministradores.', 'error');
+    showToast('Acceso denegado. Se requieren permisos de Super Administrador.', 'error');
     return;
   }
 
-  showToast(`🛡️ Cargando cuenta de streamer ${displayName || streamerId}...`, 'info');
+  showToast(`🛡️ Cargando entorno completo de @${displayName || streamerId}...`, 'info');
 
+  let targetCfg = null;
+  let targetCmds = [];
+  let targetRws = [];
+  let targetGls = [];
+  let targetTts = [];
+  let targetToken = null;
+  let targetSongRequest = null;
+
+  // 1. Consulta al backend vía API
   try {
-    const res = await fetch(`/api/admin/streamer/${encodeURIComponent(streamerId)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: session.email, userId: session.id })
-    });
-
+    const res = await fetch(`/api/admin/streamer/${encodeURIComponent(streamerId)}?email=${encodeURIComponent(session.email)}&userId=${encodeURIComponent(session.id)}`);
     if (res.ok) {
-      const data = await res.json();
-      if (data.success && data.config) {
-        if (!adminOriginalConfig) {
-          adminOriginalConfig = JSON.parse(JSON.stringify(appConfig || {}));
-        }
-
-        adminTargetStreamerId = streamerId;
-        appConfig = data.config;
-
-        const banner = document.getElementById('adminSupportModeBanner');
-        const nameEl = document.getElementById('adminTargetStreamerName');
-        if (banner) banner.style.display = 'flex';
-        if (nameEl) nameEl.textContent = displayName ? `@${displayName} (${streamerId})` : streamerId;
-
-        bindConfigToUI(appConfig);
-        if (Array.isArray(data.commands)) renderCommands(data.commands);
-        if (Array.isArray(data.rewards)) renderRewards(data.rewards);
-        if (Array.isArray(data.goals)) renderGoals(data.goals);
-        if (Array.isArray(data.ttsCommands)) {
-          cachedTTSCommands = data.ttsCommands;
-          renderTTSCommands(cachedTTSCommands);
-        }
-        if (data.songRequest) updateSongRequestUI(data.songRequest);
-
-        switchTab('tab-dashboard');
-        showToast(`✅ Ahora estás en Modo Asistencia para ${displayName || streamerId}`, 'success');
-        return;
+      const resData = await res.json();
+      const sData = resData.data || resData;
+      if (resData.success && (sData.config || sData.streamerId || sData.commands || sData.channel_points)) {
+        targetCfg = sData.config;
+        targetCmds = sData.commands || [];
+        targetRws = sData.rewards || sData.channel_points || [];
+        targetGls = sData.goals || [];
+        targetTts = sData.ttsCommands || sData.tts_commands || [];
+        targetToken = sData.widget_token || sData.widgetToken || null;
+        targetSongRequest = sData.songRequest || null;
       }
     }
   } catch (e) { }
 
-  // Fallback directo a Supabase orbibot_settings (GitHub Pages)
-  if (supabaseClient) {
+  // 2. Fallback directo a Supabase orbibot_settings (GitHub Pages)
+  if (!targetCfg && supabaseClient) {
     try {
       const { data, error } = await supabaseClient
         .from('orbibot_settings')
@@ -9690,49 +9740,82 @@ async function enterStreamerSupportMode(streamerId, displayName = '') {
         .eq('streamer_id', streamerId);
 
       if (!error && data && data.length > 0) {
-        if (!adminOriginalConfig) {
-          adminOriginalConfig = JSON.parse(JSON.stringify(appConfig || {}));
-        }
-        adminTargetStreamerId = streamerId;
-
-        let loadedCfg = null;
-        let loadedCmds = [];
-        let loadedRws = [];
-        let loadedGls = [];
-        let loadedTts = [];
-
         data.forEach(item => {
-          if (item.key === 'config') loadedCfg = item.value;
-          if (item.key === 'commands' && Array.isArray(item.value)) loadedCmds = item.value;
-          if (item.key === 'channel_points' && Array.isArray(item.value)) loadedRws = item.value;
-          if (item.key === 'goals' && Array.isArray(item.value)) loadedGls = item.value;
-          if (item.key === 'tts_commands' && Array.isArray(item.value)) loadedTts = item.value;
+          if (item.key === 'config') targetCfg = item.value;
+          if (item.key === 'commands' && Array.isArray(item.value)) targetCmds = item.value;
+          if (item.key === 'channel_points' && Array.isArray(item.value)) targetRws = item.value;
+          if (item.key === 'goals' && Array.isArray(item.value)) targetGls = item.value;
+          if (item.key === 'tts_commands' && Array.isArray(item.value)) targetTts = item.value;
+          if (item.key === 'widget_token' && item.value) targetToken = item.value;
         });
-
-        appConfig = loadedCfg || getFreshDefaultConfig();
-
-        const banner = document.getElementById('adminSupportModeBanner');
-        const nameEl = document.getElementById('adminTargetStreamerName');
-        if (banner) banner.style.display = 'flex';
-        if (nameEl) nameEl.textContent = displayName ? `@${displayName} (${streamerId})` : streamerId;
-
-        bindConfigToUI(appConfig);
-        if (loadedCmds.length > 0) renderCommands(loadedCmds);
-        if (loadedRws.length > 0) renderRewards(loadedRws);
-        if (loadedGls.length > 0) renderGoals(loadedGls);
-        if (loadedTts.length > 0) {
-          cachedTTSCommands = loadedTts;
-          renderTTSCommands(cachedTTSCommands);
-        }
-
-        switchTab('tab-dashboard');
-        showToast(`✅ Ahora estás en Modo Asistencia para ${displayName || streamerId}`, 'success');
-        return;
       }
     } catch (e) { }
   }
 
-  showToast('No se pudo cargar la configuración completa del streamer.', 'error');
+  // Si no había configuración previa, inicializar plantilla limpia para este streamer
+  if (!targetCfg) {
+    targetCfg = getFreshDefaultConfig();
+    targetCfg.twitch = {
+      channel: streamerId.includes('@') ? '' : streamerId,
+      displayName: displayName || streamerId,
+      botUsername: streamerId.includes('@') ? '' : streamerId,
+      connected: !streamerId.includes('@')
+    };
+  }
+
+  // Respaldar estado original del Superadmin
+  if (!adminOriginalConfig) {
+    adminOriginalConfig = JSON.parse(JSON.stringify(appConfig || {}));
+    adminOriginalCommands = (typeof cachedCommands !== 'undefined') ? JSON.parse(JSON.stringify(cachedCommands)) : [];
+    adminOriginalRewards = (typeof cachedRewards !== 'undefined') ? JSON.parse(JSON.stringify(cachedRewards)) : [];
+    adminOriginalTTS = (typeof cachedTTSCommands !== 'undefined') ? JSON.parse(JSON.stringify(cachedTTSCommands)) : [];
+    adminOriginalGoals = (typeof appConfig?.goals !== 'undefined') ? JSON.parse(JSON.stringify(appConfig.goals)) : [];
+  }
+
+  // Activar contexto del streamer asistido
+  adminTargetStreamerId = streamerId;
+  appConfig = targetCfg;
+
+  if (!appConfig.security) appConfig.security = {};
+  if (targetToken) {
+    appConfig.security.widgetToken = targetToken;
+  } else if (!appConfig.security.widgetToken) {
+    appConfig.security.widgetToken = 'sec_' + streamerId.toLowerCase().replace(/[^a-z0-9_]/g, '') + '_tkn';
+  }
+
+  // Actualizar banner de asistencia
+  const banner = document.getElementById('adminSupportModeBanner');
+  const nameEl = document.getElementById('adminTargetStreamerName');
+  if (banner) banner.style.display = 'flex';
+  if (nameEl) nameEl.textContent = displayName ? `@${displayName} (${streamerId})` : `@${streamerId}`;
+
+  // Renderizar componentes y listas con datos del streamer
+  if (Array.isArray(targetCmds) && targetCmds.length > 0) {
+    cachedCommands = targetCmds;
+    if (typeof renderCommands === 'function') renderCommands(cachedCommands);
+  }
+  if (Array.isArray(targetRws) && targetRws.length > 0) {
+    cachedRewards = targetRws;
+    if (typeof renderRewards === 'function') renderRewards(cachedRewards);
+  }
+  if (Array.isArray(targetGls) && targetGls.length > 0) {
+    if (typeof renderGoals === 'function') renderGoals(targetGls);
+  }
+  if (Array.isArray(targetTts) && targetTts.length > 0) {
+    cachedTTSCommands = targetTts;
+    if (typeof renderTTSCommands === 'function') renderTTSCommands(cachedTTSCommands);
+  }
+  if (targetSongRequest && typeof updateSongRequestUI === 'function') {
+    updateSongRequestUI(targetSongRequest);
+  }
+
+  bindConfigToUI(appConfig);
+  updatePlatformLinkingUI();
+  populateWidgetUrls();
+  if (typeof initWidgetCustomization === 'function') initWidgetCustomization();
+
+  switchTab('tab-dashboard');
+  showToast(`✅ Modo Asistencia Activo para @${displayName || streamerId}. Viendo el panel y widgets exactamente como el streamer.`, 'success');
 }
 
 // 6. saveAdminSupportChanges()
@@ -9753,7 +9836,8 @@ async function saveAdminSupportChanges() {
     commands: (typeof cachedCommands !== 'undefined') ? cachedCommands : [],
     rewards: (typeof cachedRewards !== 'undefined') ? cachedRewards : [],
     goals: (typeof appConfig?.goals !== 'undefined') ? appConfig.goals : [],
-    ttsCommands: (typeof cachedTTSCommands !== 'undefined') ? cachedTTSCommands : []
+    ttsCommands: (typeof cachedTTSCommands !== 'undefined') ? cachedTTSCommands : [],
+    widget_token: appConfig?.security?.widgetToken || getEffectiveWidgetToken()
   };
 
   try {
@@ -9780,6 +9864,7 @@ async function saveAdminSupportChanges() {
       await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'channel_points', value: payload.rewards });
       await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'goals', value: payload.goals });
       await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'tts_commands', value: payload.ttsCommands });
+      await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'widget_token', value: payload.widget_token });
 
       showToast('🎉 ¡Configuración guardada directamente en Supabase para el streamer!', 'success');
       return;
@@ -9796,7 +9881,21 @@ function exitAdminSupportMode() {
   if (adminOriginalConfig) {
     appConfig = adminOriginalConfig;
     adminOriginalConfig = null;
-    bindConfigToUI(appConfig);
+  }
+  if (typeof adminOriginalCommands !== 'undefined' && adminOriginalCommands) {
+    cachedCommands = adminOriginalCommands;
+    if (typeof renderCommands === 'function') renderCommands(cachedCommands);
+    adminOriginalCommands = null;
+  }
+  if (typeof adminOriginalRewards !== 'undefined' && adminOriginalRewards) {
+    cachedRewards = adminOriginalRewards;
+    if (typeof renderRewards === 'function') renderRewards(cachedRewards);
+    adminOriginalRewards = null;
+  }
+  if (typeof adminOriginalTTS !== 'undefined' && adminOriginalTTS) {
+    cachedTTSCommands = adminOriginalTTS;
+    if (typeof renderTTSCommands === 'function') renderTTSCommands(cachedTTSCommands);
+    adminOriginalTTS = null;
   }
 
   adminTargetStreamerId = null;
