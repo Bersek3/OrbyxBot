@@ -1127,27 +1127,28 @@
 
         <!-- ================= TAB 4: TEXT-TO-SPEECH (TTS MULTI-VOCES) ================= -->
         <section id="tab-tts" class="tab-pane">
-          <!-- Master Chat TTS Activation / Deactivation Banner -->
-          <div style="background: linear-gradient(135deg, rgba(20, 26, 42, 0.9), rgba(15, 20, 32, 0.95)); border: 1.5px solid rgba(163, 230, 53, 0.35); border-radius: 14px; padding: 18px 24px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);">
-            <div style="display: flex; align-items: center; gap: 16px;">
-              <div style="width: 46px; height: 46px; border-radius: 12px; background: rgba(163, 230, 53, 0.15); display: flex; align-items: center; justify-content: center; font-size: 24px; color: #a3e635; border: 1px solid rgba(163, 230, 53, 0.4);">
-                🎙️
+
+          <!-- Master Banner: Estado de TTS para el Chat -->
+          <div class="tts-master-toggle-banner" style="background: linear-gradient(135deg, rgba(20, 26, 44, 0.95), rgba(15, 20, 35, 0.98)); border: 1px solid rgba(0, 242, 254, 0.35); border-radius: 14px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
+            <div style="display: flex; align-items: center; gap: 14px;">
+              <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(0, 242, 254, 0.12); border: 1px solid rgba(0, 242, 254, 0.3); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #00f2fe;">
+                🗣️
               </div>
               <div>
-                <div style="display: flex; align-items: center; gap: 10px;">
-                  <h3 style="font-size: 16px; font-weight: 800; color: #fff; margin: 0;">Activación General de TTS en Chat</h3>
-                  <span id="ttsMasterStatusBadge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 11px; font-weight: 800; padding: 2px 10px; border-radius: 999px;">ACTIVO EN CHAT</span>
-                </div>
-                <p style="font-size: 13px; color: var(--text-secondary); margin: 4px 0 0 0;">
-                  Interruptor maestro: Si lo apagas, ningún comando de voz (<code style="color: #a3e635;">!tts</code>, <code style="color: #a3e635;">!messi</code>, <code style="color: #a3e635;">!homero</code>, etc.) se reproducirá en directo desde el chat de Twitch o Kick.
+                <h3 style="font-size: 16px; font-weight: 800; color: #fff; margin: 0 0 3px 0; display: flex; align-items: center; gap: 8px;">
+                  <span>TTS en Vivo para el Chat</span>
+                  <span id="ttsMasterStatusBadge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 11px; padding: 2px 10px; border-radius: 999px; font-weight: 700;">● ACTIVO</span>
+                </h3>
+                <p style="font-size: 12.5px; color: var(--text-secondary); margin: 0;">
+                  Activa o desactiva la lectura de voz para comandos de espectadores en Twitch y Kick (<code style="color: #a3e635;">!tts</code>, <code style="color: #00f2fe;">!messi</code>, <code style="color: #facc15;">!homero</code>, etc.).
                 </p>
               </div>
             </div>
-            <div style="display: flex; align-items: center; gap: 14px;">
-              <label class="switch-label" style="display: flex; align-items: center; gap: 12px; cursor: pointer; margin: 0;">
-                <span id="ttsMasterToggleLabel" style="font-size: 13px; font-weight: 700; color: #fff;">TTS Habilitado</span>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span id="ttsMasterToggleLabel" style="font-size: 13px; font-weight: 700; color: #10b981;">TTS ACTIVADO</span>
+              <label class="switch-label" style="margin: 0;">
                 <input type="checkbox" id="toggleTtsMasterChat" class="switch-input" checked onchange="handleTtsGlobalChatToggle(this.checked)">
-                <span class="switch-slider" style="position: relative; width: 48px; height: 26px; border-radius: 999px;"></span>
+                <span class="switch-slider" style="width: 44px; height: 24px;"></span>
               </label>
             </div>
           </div>
@@ -2700,7 +2701,8 @@ console.log('Widget personalizado cargado');"></textarea>
   <div id="toastContainer" class="toast-container"></div>
 
   <!-- TMI.js for browser-based Twitch connection (GitHub Pages fallback) -->
-  <script src="https://cdn.jsdelivr.net/npm/tmi.js@1.8.5/dist/tmi.min.js"></script>
+  <script src="./js/tmi.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tmi.js/dist/tmi.min.js"></script>
   <!-- Paho MQTT for real-time cloud relay to OBS Studio overlays -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
   <script src="./js/dashboard.js"></script>
