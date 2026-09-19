@@ -78,6 +78,9 @@
     }
 
     function isPlatformAllowed(platform) {
+      if (channel || kickChannel) {
+        return true;
+      }
       if (platform === 'kick') {
         return chatPlatformsConfig.kick !== false;
       }
@@ -356,9 +359,15 @@
     }
 
     const urlParams = new URLSearchParams(window.location.search);
-    const channel = (urlParams.get('channel') || '').toLowerCase().replace(/^#/, '');
-    const kickChannel = (urlParams.get('kick') || '').toLowerCase().replace(/^@/, '');
+    const rawChannelParam = urlParams.get('channel') || urlParams.get('streamer') || urlParams.get('twitch') || '';
+    const rawKickParam = urlParams.get('kick') || urlParams.get('kickChannel') || '';
     const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
+
+    let channel = (rawChannelParam || '').toLowerCase().replace(/^#/, '').trim();
+    if (channel.includes('@')) channel = '';
+
+    let kickChannel = (rawKickParam || '').toLowerCase().replace(/^@/, '').trim();
+    if (kickChannel.includes('@')) kickChannel = '';
 
     function handleIncomingMessage(msg) {
       if (!msg) return;
@@ -380,8 +389,6 @@
         if (myToken && targetToken && targetToken !== myToken) {
           return;
         }
-      } else {
-        return;
       }
 
       if (msg.event === 'chat_message') {
@@ -406,13 +413,20 @@
       // 1. Direct Twitch IRC
       if (channel && window.tmi) {
         try {
+          console.log(`🟢 [Chat Overlay] Conectando a Twitch IRC #${channel}...`);
           const tmiClient = new window.tmi.Client({
+            options: { debug: false },
             connection: { reconnect: true, secure: true },
             channels: [channel]
           });
-          tmiClient.connect().catch(console.error);
+          tmiClient.connect().then(() => {
+            console.log(`✅ [Chat Overlay] Conectado exitosamente a Twitch IRC #${channel}`);
+          }).catch(err => {
+            console.warn(`⚠️ [Chat Overlay] Error conectando a Twitch IRC #${channel}:`, err);
+          });
 
           tmiClient.on('message', (ch, tags, message, self) => {
+            console.log(`📩 [Chat Overlay Twitch Msg] #${ch}:`, tags.username, message);
             const username = tags['display-name'] || tags.username;
             const isMod = tags.mod || tags.badges?.broadcaster === '1';
             const isSub = tags.subscriber || tags.badges?.subscriber !== undefined;
