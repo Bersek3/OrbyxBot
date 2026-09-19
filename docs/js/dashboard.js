@@ -10,27 +10,34 @@ let adminTargetStreamerId = null;
 
 // ================= INITIALIZATION =================
 document.addEventListener('DOMContentLoaded', async () => {
-  initSupabaseAuth();
-  initLandingPage();
-  setupNavigation();
-  setupRangeInputs();
-  setupEventListeners();
-  setupAutoSaveListeners();
-  populateWidgetUrls();
-  await checkAdminStatus();
-  const savedSupportStreamer = getSupportModeId();
-  const savedSupportName = getSupportModeName();
-  if (savedSupportStreamer && isUserSuperAdmin) {
-    await enterStreamerSupportMode(savedSupportStreamer, savedSupportName || savedSupportStreamer);
-  } else {
-    await loadInitialData();
+  try {
+    initSupabaseAuth();
+    initLandingPage();
+    setupNavigation();
+    setupRangeInputs();
+    setupEventListeners();
+    setupAutoSaveListeners();
+    populateWidgetUrls();
+    await checkAdminStatus();
+    const savedSupportStreamer = getSupportModeId();
+    const savedSupportName = getSupportModeName();
+    if (savedSupportStreamer && isUserSuperAdmin) {
+      await enterStreamerSupportMode(savedSupportStreamer, savedSupportName || savedSupportStreamer);
+    } else {
+      await loadInitialData();
+    }
+    populateWidgetUrls();
+    connectWebSocket();
+    initDashboardMqtt();
+    updatePlatformLinkingUI();
+  } catch (initErr) {
+    console.error('⚠️ [DOMContentLoaded] Error en la inicialización principal:', initErr);
+  } finally {
+    // Siempre inicializar TTS aunque haya habido un error antes
+    try { initTTSMultiVoiceSystem(); } catch(e) { console.warn('[TTS] init error:', e); }
   }
-  populateWidgetUrls();
-  connectWebSocket();
-  initDashboardMqtt();
-  updatePlatformLinkingUI();
-  initTTSMultiVoiceSystem();
 });
+
 
 // ================= SUPABASE AUTH & CONFIGURATION =================
 const SUPABASE_URL = 'https://pzrlfuzjkwkrnmqkoaue.supabase.co';
@@ -1598,6 +1605,9 @@ function setupNavigation() {
 
       if (targetTabId === 'tab-admin' && typeof loadAdminStreamersList === 'function') {
         loadAdminStreamersList();
+      }
+      if (targetTabId === 'tab-tts' && typeof initTTSMultiVoiceSystem === 'function') {
+        initTTSMultiVoiceSystem();
       }
     });
   });
@@ -5576,40 +5586,28 @@ let activeVoiceCategory = 'popular';
 let activeTTSPreviewAudio = null;
 
 function initTTSMultiVoiceSystem() {
-  // 1. Sub-tabs switching
-  const subtabBtns = document.querySelectorAll('.tts-subtab-btn');
-  subtabBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const targetSubtab = btn.getAttribute('data-subtab');
-      subtabBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-
-      document.querySelectorAll('.tts-subtab-content').forEach(pane => {
-        pane.classList.remove('active');
-      });
-      const targetPane = document.getElementById(targetSubtab);
-      if (targetPane) targetPane.classList.add('active');
-
-      if (targetSubtab === 'tts-subtab-library') {
-        loadVoiceLibrary('', activeVoiceCategory);
-      } else if (targetSubtab === 'tts-subtab-queue') {
-        loadTTSQueue();
-      }
+  // 1. Sub-tabs switching via event delegation (más robusto)
+  const subtabsNav = document.querySelector('.tts-subtabs-nav');
+  if (subtabsNav && !subtabsNav._ttsInitialized) {
+    subtabsNav._ttsInitialized = true;
+    subtabsNav.addEventListener('click', (e) => {
+      const btn = e.target.closest('.tts-subtab-btn');
+      if (!btn) return;
+      switchTtsSubTab(btn.getAttribute('data-subtab'));
     });
-  });
+  }
 
   // 2. Switch to Voice Library button in header
   const btnSwitch = document.getElementById('btnSwitchToVoiceLib');
-  if (btnSwitch) {
-    btnSwitch.addEventListener('click', () => {
-      const libTabBtn = document.querySelector('.tts-subtab-btn[data-subtab="tts-subtab-library"]');
-      if (libTabBtn) libTabBtn.click();
-    });
+  if (btnSwitch && !btnSwitch._ttsInitialized) {
+    btnSwitch._ttsInitialized = true;
+    btnSwitch.addEventListener('click', () => switchTtsSubTab('tts-subtab-library'));
   }
 
   // 3. Voice Library Search
   const searchInput = document.getElementById('voiceLibrarySearch');
-  if (searchInput) {
+  if (searchInput && !searchInput._ttsInitialized) {
+    searchInput._ttsInitialized = true;
     let debounceTimer;
     searchInput.addEventListener('input', () => {
       clearTimeout(debounceTimer);
@@ -5622,26 +5620,81 @@ function initTTSMultiVoiceSystem() {
   // 4. Voice Library Category Filters
   const filterBtns = document.querySelectorAll('.voice-filter-btn');
   filterBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      filterBtns.forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeVoiceCategory = btn.getAttribute('data-category') || 'all';
-      const q = searchInput ? searchInput.value.trim() : '';
-      loadVoiceLibrary(q, activeVoiceCategory);
-    });
+    if (!btn._ttsFilterInitialized) {
+      btn._ttsFilterInitialized = true;
+      btn.addEventListener('click', () => {
+        handleVoiceCategoryFilter(btn, btn.getAttribute('data-category') || 'all');
+      });
+    }
   });
 
   // 5. Sort Select for Commands
   const sortSelect = document.getElementById('ttsSortSelect');
-  if (sortSelect) {
+  if (sortSelect && !sortSelect._ttsInitialized) {
+    sortSelect._ttsInitialized = true;
     sortSelect.addEventListener('change', () => {
       renderTTSCommands(cachedTTSCommands);
     });
   }
 
   // 6. Cargar comandos iniciales
-  loadTTSCommands();
+  try {
+    loadTTSCommands();
+  } catch (err) {
+    console.warn('[TTS] Error loading commands:', err);
+  }
 }
+
+// Función global para cambiar subtab TTS — usada también desde onclick en HTML
+function switchTtsSubTab(targetSubtab) {
+  if (!targetSubtab) return;
+  try {
+    // Actualizar botones
+    document.querySelectorAll('.tts-subtab-btn').forEach(b => {
+      b.classList.toggle('active', b.getAttribute('data-subtab') === targetSubtab);
+    });
+    // Actualizar paneles
+    document.querySelectorAll('.tts-subtab-content').forEach(pane => {
+      pane.classList.toggle('active', pane.id === targetSubtab);
+    });
+  } catch (err) {
+    console.error('Error al alternar paneles de subtab TTS:', err);
+  }
+
+  try {
+    // Cargar datos del sub-tab si es necesario
+    if (targetSubtab === 'tts-subtab-library') {
+      loadVoiceLibrary('', activeVoiceCategory);
+    } else if (targetSubtab === 'tts-subtab-queue') {
+      loadTTSQueue();
+    } else if (targetSubtab === 'tts-subtab-commands') {
+      if (typeof cachedTTSCommands !== 'undefined' && cachedTTSCommands && cachedTTSCommands.length > 0) {
+        renderTTSCommands(cachedTTSCommands);
+      } else {
+        loadTTSCommands();
+      }
+    }
+  } catch (err) {
+    console.error('Error al cargar datos de subtab TTS:', err);
+  }
+}
+window.switchTtsSubTab = switchTtsSubTab;
+
+function handleVoiceCategoryFilter(btn, category) {
+  if (!btn || !category) return;
+  try {
+    document.querySelectorAll('.voice-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeVoiceCategory = category;
+    const searchInput = document.getElementById('voiceLibrarySearch');
+    const q = searchInput ? searchInput.value.trim() : '';
+    loadVoiceLibrary(q, activeVoiceCategory);
+  } catch (err) {
+    console.error('Error al filtrar categorías de voz:', err);
+  }
+}
+window.handleVoiceCategoryFilter = handleVoiceCategoryFilter;
+
 
 function mergeDefaultTTSCommands(userCmds = []) {
   const map = new Map();

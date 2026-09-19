@@ -1155,10 +1155,10 @@
 
           <!-- Sub-pestañas de Navegación TTS (Estilo TTS Monster / SoundAlerts) -->
           <div class="tts-subtabs-nav">
-            <button class="tts-subtab-btn active" data-subtab="tts-subtab-commands">Comandos</button>
-            <button class="tts-subtab-btn" data-subtab="tts-subtab-library">Biblioteca de voces</button>
-            <button class="tts-subtab-btn" data-subtab="tts-subtab-queue">Cola de solicitudes</button>
-            <button class="tts-subtab-btn" data-subtab="tts-subtab-moderation">Moderación</button>
+            <button class="tts-subtab-btn active" data-subtab="tts-subtab-commands" onclick="switchTtsSubTab('tts-subtab-commands')">Comandos</button>
+            <button class="tts-subtab-btn" data-subtab="tts-subtab-library" onclick="switchTtsSubTab('tts-subtab-library')">Biblioteca de voces</button>
+            <button class="tts-subtab-btn" data-subtab="tts-subtab-queue" onclick="switchTtsSubTab('tts-subtab-queue')">Cola de solicitudes</button>
+            <button class="tts-subtab-btn" data-subtab="tts-subtab-moderation" onclick="switchTtsSubTab('tts-subtab-moderation')">Moderación</button>
           </div>
 
           <!-- 1. SUB-PESTAÑA: COMANDOS (TUS COMANDOS DE TTS) -->
@@ -1175,7 +1175,7 @@
                   <option value="recent">Más recientes</option>
                   <option value="enabled">Solo activos</option>
                 </select>
-                <button id="btnSwitchToVoiceLib" class="btn-tts-action btn-accent">
+                <button id="btnSwitchToVoiceLib" class="btn-tts-action btn-accent" onclick="switchTtsSubTab('tts-subtab-library')">
                   <i class="fas fa-plus"></i> Añadir voz
                 </button>
               </div>
@@ -1200,10 +1200,10 @@
 
               <div class="voice-filter-wrap">
                 <div class="voice-filter-pills">
-                  <button class="voice-filter-btn active" data-category="popular">Más populares</button>
-                  <button class="voice-filter-btn" data-category="recent">Añadidas recientemente</button>
-                  <button class="voice-filter-btn" data-category="trending">En tendencia</button>
-                  <button class="voice-filter-btn" data-category="all">Todas</button>
+                  <button class="voice-filter-btn active" data-category="popular" onclick="handleVoiceCategoryFilter(this, 'popular')">Más populares</button>
+                  <button class="voice-filter-btn" data-category="recent" onclick="handleVoiceCategoryFilter(this, 'recent')">Añadidas recientemente</button>
+                  <button class="voice-filter-btn" data-category="trending" onclick="handleVoiceCategoryFilter(this, 'trending')">En tendencia</button>
+                  <button class="voice-filter-btn" data-category="all" onclick="handleVoiceCategoryFilter(this, 'all')">Todas</button>
                 </div>
                 <span id="voiceLibraryTotalCount" class="voice-total-count">0 voces</span>
               </div>
