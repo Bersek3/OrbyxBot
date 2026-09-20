@@ -1,5 +1,18 @@
 [
   {
+    "id": "tts_cmd_1789890612951_sfnz",
+    "voiceId": "es_xokas",
+    "name": "El Xokas",
+    "command": "!xokas",
+    "permissions": [
+      "todos"
+    ],
+    "enabled": true,
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1
+  },
+  {
     "id": "tts_cmd_1789437015375_2rhb",
     "voiceId": "es_auronplay",
     "name": "Auronplay",
@@ -43,19 +56,6 @@
     "voiceId": "es_illojuan",
     "name": "IlloJuan",
     "command": "!illojuan",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1
-  },
-  {
-    "id": "tts_cmd_1789434872789_5anp",
-    "voiceId": "es_xokas",
-    "name": "El Xokas",
-    "command": "!xokas",
     "permissions": [
       "todos"
     ],

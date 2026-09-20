@@ -28,7 +28,7 @@
   },
   "songRequest": {
     "prefix": "!sr",
-    "enabled": false,
+    "enabled": true,
     "maxDurationMinutes": 8,
     "maxPerUser": 5,
     "userLevel": "all",
