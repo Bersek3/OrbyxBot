@@ -2087,6 +2087,15 @@ function handleSocketMessage(msg) {
           cachedTTSQueue.queue.shift();
           renderTTSQueue(cachedTTSQueue);
         }
+      } else if (data.action === 'finish' || data.action === 'complete') {
+        if (cachedTTSQueue.queue && cachedTTSQueue.queue.length > 0) {
+          if (data.id) {
+            cachedTTSQueue.queue = cachedTTSQueue.queue.filter(i => i.id !== data.id);
+          } else {
+            cachedTTSQueue.queue.shift();
+          }
+          renderTTSQueue(cachedTTSQueue);
+        }
       } else if (data.action === 'item_removed' && data.id) {
         if (cachedTTSQueue.queue) {
           cachedTTSQueue.queue = cachedTTSQueue.queue.filter(i => i.id !== data.id);
@@ -6446,6 +6455,24 @@ window.handleTtsSkip = handleTtsSkip;
 window.handleTtsReset = handleTtsReset;
 window.handleTtsClear = handleTtsClear;
 window.handleTtsRemoveItem = handleTtsRemoveItem;
+
+// Auto-sincronización periódica de la cola de TTS en segundo plano (cada 4 segundos cuando la pestaña de TTS o la sección de cola está visible)
+setInterval(() => {
+  try {
+    const queuePane = document.getElementById('tts-subtab-queue');
+    const queueContainer = document.getElementById('ttsQueueContainer');
+    const ttsTab = document.getElementById('tab-tts') || document.querySelector('.tab-content.active#tab-tts');
+    
+    // Verificar si la pestaña TTS o la cola están visibles
+    const isTtsVisible = (ttsTab && ttsTab.classList.contains('active')) || 
+                         (queuePane && (queuePane.classList.contains('active') || queuePane.offsetParent !== null)) ||
+                         (queueContainer && queueContainer.offsetParent !== null);
+                         
+    if (isTtsVisible && !document.hidden) {
+      loadTTSQueue(false);
+    }
+  } catch (e) {}
+}, 4000);
 
 // ================= CUSTOM GOALS MANAGER (OBS WIDGETS) =================
 let currentGoalsList = [];

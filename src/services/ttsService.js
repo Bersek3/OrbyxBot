@@ -517,6 +517,45 @@ class TTSService {
     return { success: true, queue: currentQueue };
   }
 
+  finishItem(id, channel = null) {
+    const key = channel ? this.normalizeChannelKey(channel) : null;
+    const raw = channel ? channel.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() : null;
+
+    if (id) {
+      const idx = this.queue.findIndex(item => item.id === id);
+      if (idx !== -1) {
+        this.queue.splice(idx, 1);
+      } else if (key && key !== 'default') {
+        const chanIdx = this.queue.findIndex(q => {
+          if (!q.channel || q.channel === 'default') return true;
+          const qNorm = this.normalizeChannelKey(q.channel);
+          const qRaw = (q.channel || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+          return qNorm === key || qRaw === raw || qRaw === key || qNorm === raw;
+        });
+        if (chanIdx !== -1) this.queue.splice(chanIdx, 1);
+      } else if (this.queue.length > 0) {
+        this.queue.shift();
+      }
+    } else {
+      if (key && key !== 'default') {
+        const chanIdx = this.queue.findIndex(q => {
+          if (!q.channel || q.channel === 'default') return true;
+          const qNorm = this.normalizeChannelKey(q.channel);
+          const qRaw = (q.channel || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+          return qNorm === key || qRaw === raw || qRaw === key || qNorm === raw;
+        });
+        if (chanIdx !== -1) this.queue.splice(chanIdx, 1);
+      } else if (this.queue.length > 0) {
+        this.queue.shift();
+      }
+    }
+
+    const currentQueue = this.getQueueState(key || channel);
+    const payload = { action: 'finish', id, channel: key || channel, room: key || channel, queue: currentQueue, timestamp: Date.now() };
+    this.emitTTSControl(payload);
+    return { success: true, queue: currentQueue };
+  }
+
   getVoices() {
     return voiceCatalog.getAllVoices();
   }

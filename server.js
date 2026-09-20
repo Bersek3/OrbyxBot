@@ -185,6 +185,9 @@ wss.on('connection', (ws, req) => {
         if (destRoom && destRoom !== 'default') {
           broadcast(data.event, data.data !== undefined ? data.data : data, destRoom);
         }
+      } else if (data.action === 'finish' || data.action === 'complete' || data.action === 'tts_finish') {
+        const targetChan = (data.channel || data.streamer || data.room || ws.room || '').toLowerCase().replace(/^#/, '').trim();
+        ttsService.finishItem(data.id, targetChan);
       }
       handleClientMessage(ws, data);
     } catch (err) {
@@ -1300,6 +1303,8 @@ app.post('/api/tts/control', (req, res) => {
     result = ttsService.clearQueue(targetChannel, targetUser);
   } else if (action === 'remove') {
     result = ttsService.removeItem(id, targetChannel);
+  } else if (action === 'finish' || action === 'complete') {
+    result = ttsService.finishItem(id, targetChannel);
   } else {
     return res.status(400).json({ success: false, message: 'Acción inválida' });
   }

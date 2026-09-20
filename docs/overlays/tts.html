@@ -87,12 +87,71 @@
     const ttsIndicator = document.getElementById('ttsIndicator');
     const ttsUser = document.getElementById('ttsUser');
 
+    // Extraer parámetros de URL del overlay globalmente
+    const urlParams = new URLSearchParams(window.location.search);
+    const channel = (urlParams.get('channel') || urlParams.get('kick') || urlParams.get('streamer') || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+    const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
+    const myStreamerKey = channel || '';
+    const myToken = token || '';
+    const linkedChannels = new Set([myStreamerKey]);
+
     // Cola estricta y control de reproducción único (FIFO)
     const queue = [];
     let isSpeaking = false;
     let currentActiveAudio = null;
     let currentSegmentTimer = null;
     let currentFinalizeTimer = null;
+    let wsInstance = null;
+
+    function notifyTTSFinished(item) {
+      if (!item) return;
+      const itemId = item.id || (item.data && item.data.id) || null;
+      const payload = {
+        action: 'finish',
+        id: itemId,
+        channel: myStreamerKey || 'default',
+        room: myStreamerKey || 'default',
+        streamer: myStreamerKey || '',
+        token: myToken || '',
+        timestamp: Date.now()
+      };
+
+      // 1. Notificar al backend HTTP
+      fetch('/api/tts/control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      }).catch(() => {});
+
+      // 2. Notificar vía WebSocket si está conectado
+      if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+        try {
+          wsInstance.send(JSON.stringify(payload));
+        } catch(e) {}
+      }
+
+      // 3. BroadcastChannel para sincronizar pestañas del dashboard de inmediato
+      if (typeof BroadcastChannel !== 'undefined') {
+        const bcNames = ['orbibot_stream_channel', 'orbyxbot_stream_default'];
+        if (myStreamerKey) bcNames.push('orbyxbot_stream_' + myStreamerKey);
+        if (myToken) bcNames.push('orbyxbot_stream_' + myToken);
+        bcNames.forEach(name => {
+          try {
+            const bc = new BroadcastChannel(name);
+            bc.postMessage({ event: 'tts_control', data: payload, room: myStreamerKey || 'default', channel: myStreamerKey || 'default', token: myToken });
+            bc.close();
+          } catch(e) {}
+        });
+      }
+
+      // 4. Storage event para redundancia local instantánea
+      try {
+        const evtObj = { event: 'tts_control', data: payload, room: myStreamerKey || 'default', channel: myStreamerKey || 'default', token: myToken, timestamp: Date.now() };
+        localStorage.setItem('orbibot_last_event', JSON.stringify(evtObj));
+        if (myStreamerKey) localStorage.setItem('orbibot_last_event_' + myStreamerKey, JSON.stringify(evtObj));
+        if (myToken) localStorage.setItem('orbibot_last_event_' + myToken, JSON.stringify(evtObj));
+      } catch(e) {}
+    }
 
     const VOICE_PROFILES = {
       // Voces IA & Famosas (Fish Audio)
@@ -398,6 +457,11 @@
         stopCurrentAudio();
         ttsIndicator.classList.remove('active');
 
+        // Notificar inmediatamente al dashboard y backend que este mensaje concluyó
+        try {
+          notifyTTSFinished(item);
+        } catch(e) {}
+
         // Pausa de 350ms antes de avanzar al siguiente mensaje de la cola
         if (currentFinalizeTimer) clearTimeout(currentFinalizeTimer);
         currentFinalizeTimer = setTimeout(() => {
@@ -588,13 +652,6 @@
       }
     } catch(e) {}
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const channel = (urlParams.get('channel') || urlParams.get('kick') || urlParams.get('streamer') || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
-    const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
-    const myStreamerKey = channel || '';
-    const myToken = token || '';
-    const linkedChannels = new Set([myStreamerKey]);
-
     fetch('/api/config')
       .then(r => r.json())
       .then(cfg => {
@@ -776,7 +833,6 @@
       }
     }
 
-    let wsInstance = null;
     let wsReconnectTimeout = null;
 
     function connectChannels() {
