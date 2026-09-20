@@ -505,7 +505,26 @@
 
     // Deduplicación robusta de eventos TTS para prevenir que se añadan dos veces a la cola
     const recentTtsMap = new Map();
-    const playedTtsIds = new Set();
+
+    // Persistir IDs reproducidos en sessionStorage para sobrevivir reconexiones WS/MQTT sin olvidar el historial
+    const PLAYED_IDS_KEY = 'orbibot_tts_played_ids';
+    function loadPlayedIds() {
+      try {
+        const raw = sessionStorage.getItem(PLAYED_IDS_KEY);
+        return raw ? new Set(JSON.parse(raw)) : new Set();
+      } catch(e) { return new Set(); }
+    }
+    function savePlayedId(id) {
+      try {
+        const ids = loadPlayedIds();
+        ids.add(id);
+        // Mantener máximo 500 IDs para no llenar sessionStorage
+        const arr = [...ids];
+        if (arr.length > 500) arr.splice(0, arr.length - 500);
+        sessionStorage.setItem(PLAYED_IDS_KEY, JSON.stringify(arr));
+      } catch(e) {}
+    }
+    const playedTtsIds = loadPlayedIds();
 
     function isDuplicateTts(msg) {
       if (!msg) return true;
@@ -515,14 +534,14 @@
       const rawId = msg.id || data.id || '';
       const now = Date.now();
 
-      // Descartar mensajes viejos (más de 25 segundos) procedentes de reconexión o re-lectura de localStorage
+      // Descartar mensajes viejos (más de 10 segundos) procedentes de reconexión, init_state o re-lectura de localStorage
       const msgTimestamp = data.timestamp || msg.timestamp;
-      if (msgTimestamp && (now - Number(msgTimestamp)) > 25000) {
-        console.log('[TTS Overlay] Mensaje ignorado por antigüedad (>25s):', text.substring(0, 30));
+      if (msgTimestamp && (now - Number(msgTimestamp)) > 10000) {
+        console.log('[TTS Overlay] Mensaje ignorado por antigüedad (>10s):', text.substring(0, 30));
         return true;
       }
 
-      // Si el ID ya fue reproducido en esta sesión, descartar
+      // Si el ID ya fue reproducido en esta sesión (persistido en sessionStorage), descartar
       if (rawId && playedTtsIds.has(rawId)) {
         return true;
       }
@@ -551,6 +570,7 @@
       if (rawId) {
         recentTtsMap.set('id_' + rawId, now);
         playedTtsIds.add(rawId);
+        savePlayedId(rawId);
       }
       if (user && (normalizedText || text)) recentTtsMap.set(contentKey, now);
 
@@ -644,6 +664,20 @@
         const cfg = msg.data?.config || msg.data;
         if (cfg?.tts && cfg.tts.enabled !== undefined) {
           ttsEnabled = cfg.tts.enabled !== false;
+        }
+        // Al recibir init_state, registrar todos los IDs de TTS pendientes como ya reproducidos
+        // para evitar que mensajes del historial del servidor se vuelvan a encolar
+        if (msg.event === 'init_state') {
+          const pendingQueue = msg.data?.ttsQueue || msg.data?.queue || [];
+          pendingQueue.forEach(item => {
+            const itemId = item.id || item.data?.id;
+            if (itemId) {
+              playedTtsIds.add(itemId);
+              savePlayedId(itemId);
+              recentTtsMap.set('id_' + itemId, Date.now());
+            }
+          });
+          console.log(`[TTS Overlay] init_state recibido — ${pendingQueue.length} item(s) del historial marcados como ya procesados (no se repetirán).`);
         }
       }
     }
