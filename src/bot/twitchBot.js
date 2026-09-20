@@ -81,8 +81,16 @@ class TwitchBot {
     }
 
     const channelName = twitchCfg.channel.toLowerCase().replace(/^#/, '');
-    const botUser = twitchCfg.botUsername ? twitchCfg.botUsername.toLowerCase() : channelName;
-    const token = twitchCfg.oauthToken ? (twitchCfg.oauthToken.startsWith('oauth:') ? twitchCfg.oauthToken : `oauth:${twitchCfg.oauthToken}`) : null;
+    
+    // Si no se especifica un botUsername personalizado, usar la cuenta global 'orbyxbot'
+    const botUser = (twitchCfg.botUsername || process.env.TWITCH_BOT_USERNAME || 'orbyxbot').toLowerCase();
+    
+    // Token del bot: si se definió para la cuenta del bot o en variables de entorno, usarlo
+    const rawToken = (twitchCfg.botUsername && twitchCfg.botUsername.toLowerCase() === botUser && twitchCfg.oauthToken)
+      ? twitchCfg.oauthToken
+      : (process.env.TWITCH_BOT_OAUTH_TOKEN || twitchCfg.oauthToken || 'z8m5cv2q9052kpdh928sqnero3e33q');
+    
+    const token = rawToken ? (rawToken.startsWith('oauth:') ? rawToken : `oauth:${rawToken}`) : null;
 
     const tmiOptions = {
       options: { debug: false },
