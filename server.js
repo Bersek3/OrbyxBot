@@ -324,6 +324,13 @@ app.get('/api/config', (req, res) => {
 
 app.post('/api/config', (req, res) => {
   const updated = storage.saveConfig(req.body);
+  if (req.body.twitch) {
+    if (req.body.twitch.connected !== false && req.body.twitch.channel) {
+      twitchBot.connect().catch(e => console.warn('TwitchBot connect warning:', e.message));
+    } else if (req.body.twitch.connected === false) {
+      twitchBot.disconnect().catch(e => console.warn('TwitchBot disconnect warning:', e.message));
+    }
+  }
   if (req.body.kick) {
     if (req.body.kick.connected !== false && (req.body.kick.channel || req.body.kick.username)) {
       kickBot.connect().catch(e => console.warn('KickBot connect warning:', e.message));

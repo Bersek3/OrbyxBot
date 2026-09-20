@@ -819,7 +819,7 @@
                     Desconectado</span>
                 </div>
 
-                <div id="dashTwitchDisconnectedView" style="display: flex; gap: 10px;">
+                <div id="dashTwitchDisconnectedView" style="display: flex; gap: 10px; flex-wrap: wrap;">
                   <button id="heroTwitchLoginBtn" class="btn" onclick="triggerTwitchOAuthLogin()"
                     style="background: #9146ff; color: #fff; font-weight: 700; font-size: 13px; padding: 10px 18px; border-radius: 10px; border: none; cursor: pointer; flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; box-shadow: 0 4px 15px rgba(145, 70, 255, 0.35);">
                     <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
@@ -827,6 +827,11 @@
                         d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714Z" />
                     </svg>
                     <span>Vincular Twitch</span>
+                  </button>
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="openTwitchBotAccountModal()"
+                    title="Configurar una cuenta propia para que el bot responda en el chat"
+                    style="border-radius: 10px; padding: 10px 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px;">
+                    <span>🤖 Usuario de Bot</span>
                   </button>
                 </div>
 
@@ -836,12 +841,24 @@
                     <img id="dashUserAvatar" src=""
                       style="width: 32px; height: 32px; border-radius: 50%; border: 2px solid #9146ff; object-fit: cover;"
                       alt="Twitch Avatar">
-                    <span id="dashUserName" style="font-weight: 700; color: #fff; font-size: 13.5px;">@streamer</span>
+                    <div>
+                      <span id="dashUserName" style="font-weight: 700; color: #fff; font-size: 13.5px; display: block;">@streamer</span>
+                      <span id="dashTwitchBotBadge" style="font-size: 11px; color: #a78bfa; display: none; align-items: center; gap: 4px;">
+                        <span>🤖 Responde como:</span> <strong id="dashTwitchBotName" style="color: #00f2fe;">@bot</strong>
+                      </span>
+                    </div>
                   </div>
-                  <button id="dashLogoutBtn" class="btn btn-danger btn-sm" onclick="disconnectTwitchAccount()"
-                    style="padding: 6px 14px; font-size: 12px; border-radius: 8px;">
-                    Desvincular
-                  </button>
+                  <div style="display: flex; align-items: center; gap: 8px;">
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="openTwitchBotAccountModal()"
+                      title="Configurar o cambiar la cuenta de bot que habla en el chat"
+                      style="padding: 6px 12px; font-size: 12px; border-radius: 8px; display: inline-flex; align-items: center; gap: 5px;">
+                      <span>🤖 Usuario de Bot</span>
+                    </button>
+                    <button id="dashLogoutBtn" class="btn btn-danger btn-sm" onclick="disconnectTwitchAccount()"
+                      style="padding: 6px 14px; font-size: 12px; border-radius: 8px;">
+                      Desvincular
+                    </button>
+                  </div>
                 </div>
 
                 <!-- Chat Multi-Platform Toggle Switch for Twitch -->
@@ -2700,6 +2717,108 @@ console.log('Widget personalizado cargado');"></textarea>
           </svg>
           <span>Sí, Cerrar Sesión</span>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL: CONFIGURAR CUENTA DE BOT DE TWITCH ================= -->
+  <div id="twitchBotAccountModal" class="modal-overlay" style="display: none;">
+    <div class="modal-backdrop" onclick="closeTwitchBotAccountModal()"></div>
+    <div class="modal-card" style="max-width: 580px; width: 90%; background: #131726; border: 1.5px solid rgba(145, 70, 255, 0.4); border-radius: 18px; box-shadow: 0 16px 48px rgba(0,0,0,0.8), 0 0 24px rgba(145, 70, 255, 0.2); overflow: hidden;">
+      <!-- Header -->
+      <div style="background: linear-gradient(135deg, rgba(145, 70, 255, 0.25), rgba(0, 242, 254, 0.1)); padding: 20px 24px; border-bottom: 1px solid rgba(255, 255, 255, 0.08); display: flex; align-items: center; justify-content: space-between;">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <div style="width: 42px; height: 42px; border-radius: 12px; background: #9146ff; display: flex; align-items: center; justify-content: center; font-size: 22px; color: #fff; box-shadow: 0 4px 16px rgba(145, 70, 255, 0.4);">
+            🤖
+          </div>
+          <div>
+            <h3 style="font-size: 17px; font-weight: 800; color: #fff; margin: 0;">Usuario de Bot Propio en Twitch</h3>
+            <p style="font-size: 12px; color: #cbd5e1; margin: 2px 0 0 0;">Haz que el bot responda con su propia cuenta en tu chat</p>
+          </div>
+        </div>
+        <button type="button" onclick="closeTwitchBotAccountModal()" style="background: rgba(255,255,255,0.06); border: none; color: #94a3b8; width: 32px; height: 32px; border-radius: 8px; font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;">✕</button>
+      </div>
+
+      <!-- Body / Pasos -->
+      <div style="padding: 22px 24px; display: flex; flex-direction: column; gap: 18px; max-height: 75vh; overflow-y: auto;">
+        
+        <!-- Paso 1: Nombre de Usuario del Bot -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="background: #9146ff; color: #fff; font-size: 11px; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;">1</span>
+            <strong style="color: #fff; font-size: 13.5px;">Nombre de la cuenta de tu Bot</strong>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0;">
+            Crea una cuenta en <a href="https://twitch.tv" target="_blank" style="color: #a78bfa; text-decoration: underline;">Twitch</a> (ejemplo: <code>orbyxbot</code>) e ingresa su nombre exacto:
+          </p>
+          <div style="position: relative;">
+            <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: #94a3b8; font-weight: 700;">@</span>
+            <input type="text" id="cfgTwitchBotUsernameInput" class="form-control" placeholder="Ej: orbyxbot" style="padding-left: 30px; font-weight: 600; font-size: 14px;" oninput="updateModCommandPreview()">
+          </div>
+        </div>
+
+        <!-- Paso 2: Otorgar Moderador en Twitch -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+            <span style="background: #00f2fe; color: #000; font-size: 11px; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;">2</span>
+            <strong style="color: #fff; font-size: 13.5px;">Darle permiso de Moderador en tu canal</strong>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0;">
+            Escribe este comando en el chat de tu stream para que Twitch permita que tu bot responda sin bloqueos por spam:
+          </p>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <div style="flex: 1; background: rgba(0,0,0,0.5); border: 1px dashed rgba(0, 242, 254, 0.4); border-radius: 8px; padding: 8px 14px; font-family: monospace; font-size: 14px; color: #a3e635; font-weight: 700;" id="twitchModCommandText">
+              /mod orbyxbot
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="copyTwitchModCommand()" style="font-size: 12px; white-space: nowrap;">
+              📋 Copiar
+            </button>
+            <a id="btnOpenStreamerChat" href="https://twitch.tv/popout/streamer/chat" target="_blank" class="btn btn-primary btn-sm" style="font-size: 12px; white-space: nowrap; background: #9146ff; border: none;">
+              💬 Abrir Chat ↗
+            </a>
+          </div>
+        </div>
+
+        <!-- Paso 3: Token OAuth de la cuenta del Bot -->
+        <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 14px 16px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <span style="background: #10b981; color: #fff; font-size: 11px; font-weight: 800; width: 22px; height: 22px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;">3</span>
+              <strong style="color: #fff; font-size: 13.5px;">Token de acceso del Bot</strong>
+            </div>
+            <a href="https://twitchtokengenerator.com" target="_blank" style="font-size: 11.5px; color: #00f2fe; text-decoration: underline;">
+              Generador de Token ↗
+            </a>
+          </div>
+          <p style="font-size: 12px; color: var(--text-secondary); margin: 0 0 10px 0;">
+            Inicia sesión con la cuenta de tu bot y pega su <strong>Access Token</strong> aquí:
+          </p>
+          <div style="position: relative;">
+            <input type="password" id="cfgTwitchBotTokenInput" class="form-control" placeholder="oauth:xxxxxx o z8m5cv2..." style="font-family: monospace; font-size: 13px; padding-right: 42px;">
+            <button type="button" onclick="toggleBotTokenVisibility()" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 14px;" title="Ver/Ocultar Token">
+              👁️
+            </button>
+          </div>
+          <div style="margin-top: 8px; font-size: 11px; color: #94a3b8;">
+            💡 Requiere los scopes de Twitch: <code>chat:read</code>, <code>chat:edit</code>, <code>user:read:chat</code>.
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer Actions -->
+      <div style="background: rgba(0,0,0,0.3); border-top: 1px solid rgba(255,255,255,0.08); padding: 14px 24px; display: flex; justify-content: space-between; align-items: center; gap: 10px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="resetToStreamerBotAccount()" style="font-size: 12px;">
+          Restablecer a cuenta del Streamer
+        </button>
+        <div style="display: flex; gap: 10px;">
+          <button type="button" class="btn btn-secondary" onclick="closeTwitchBotAccountModal()">
+            Cancelar
+          </button>
+          <button type="button" id="btnSaveTwitchBotAccount" class="btn btn-primary" onclick="saveTwitchBotAccountUI()" style="background: #10b981; border: none; font-weight: 700;">
+            💾 Guardar y Conectar Bot
+          </button>
+        </div>
       </div>
     </div>
   </div>

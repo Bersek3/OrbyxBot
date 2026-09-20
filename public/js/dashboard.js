@@ -1132,6 +1132,19 @@ function updatePlatformLinkingUI() {
         }
       }
     }
+
+    // Bot Account Indicator Badge
+    const botBadge = document.getElementById('dashTwitchBotBadge');
+    const botNameEl = document.getElementById('dashTwitchBotName');
+    const customBotUser = appConfig?.twitch?.botUsername || '';
+    if (botBadge && botNameEl) {
+      if (customBotUser && customBotUser.toLowerCase() !== twitchChannel.toLowerCase()) {
+        botBadge.style.display = 'inline-flex';
+        botNameEl.textContent = `@${customBotUser}`;
+      } else {
+        botBadge.style.display = 'none';
+      }
+    }
   } else {
     if (twitchStatusText) twitchStatusText.textContent = 'No conectado';
     if (twitchStatusBadge) {
@@ -1142,6 +1155,8 @@ function updatePlatformLinkingUI() {
     }
     if (twitchDiscView) twitchDiscView.style.display = 'flex';
     if (twitchConnView) twitchConnView.style.display = 'none';
+    const botBadge = document.getElementById('dashTwitchBotBadge');
+    if (botBadge) botBadge.style.display = 'none';
   }
 
   // 2. Kick Status
@@ -1479,6 +1494,153 @@ window.triggerKickOAuthLogin = triggerKickOAuthLogin;
 window.handleKickAuthSuccess = handleKickAuthSuccess;
 window.disconnectKickAccount = disconnectKickAccount;
 window.disconnectTwitchAccount = disconnectTwitchAccount;
+
+// ================= ASISTENTE / MODAL DE USUARIO DE BOT DE TWITCH =================
+function openTwitchBotAccountModal() {
+  const modal = document.getElementById('twitchBotAccountModal');
+  if (!modal) return;
+
+  const currentChannel = (appConfig?.twitch?.channel || localStorage.getItem('orbibot_twitch_channel') || '').replace(/^#/, '').trim();
+  const currentBotUser = (appConfig?.twitch?.botUsername || currentChannel || '').replace(/^@/, '').trim();
+  const currentToken = appConfig?.twitch?.oauthToken || '';
+
+  const botInput = document.getElementById('cfgTwitchBotUsernameInput');
+  const tokenInput = document.getElementById('cfgTwitchBotTokenInput');
+  const chatLink = document.getElementById('btnOpenStreamerChat');
+
+  if (botInput) botInput.value = currentBotUser;
+  if (tokenInput) tokenInput.value = currentToken;
+
+  if (chatLink && currentChannel) {
+    chatLink.href = `https://twitch.tv/popout/${encodeURIComponent(currentChannel)}/chat`;
+  }
+
+  updateModCommandPreview();
+  modal.style.display = 'flex';
+}
+
+function closeTwitchBotAccountModal() {
+  const modal = document.getElementById('twitchBotAccountModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function updateModCommandPreview() {
+  const botInput = document.getElementById('cfgTwitchBotUsernameInput');
+  const modPreview = document.getElementById('twitchModCommandText');
+  const raw = (botInput?.value || '').replace(/^@/, '').trim();
+  const botName = raw || 'orbyxbot';
+  if (modPreview) {
+    modPreview.textContent = `/mod ${botName}`;
+  }
+}
+
+function copyTwitchModCommand() {
+  const botInput = document.getElementById('cfgTwitchBotUsernameInput');
+  const raw = (botInput?.value || '').replace(/^@/, '').trim();
+  const botName = raw || 'orbyxbot';
+  const cmd = `/mod ${botName}`;
+  navigator.clipboard.writeText(cmd).then(() => {
+    showToast(`📋 Comando copiado: "${cmd}". Pégalo en tu chat de Twitch`, 'success');
+  }).catch(() => {
+    showToast(`Copia manualmente: ${cmd}`, 'info');
+  });
+}
+
+function toggleBotTokenVisibility() {
+  const tokenInput = document.getElementById('cfgTwitchBotTokenInput');
+  if (!tokenInput) return;
+  tokenInput.type = tokenInput.type === 'password' ? 'text' : 'password';
+}
+
+async function resetToStreamerBotAccount() {
+  const currentChannel = (appConfig?.twitch?.channel || '').replace(/^#/, '').trim();
+  const botInput = document.getElementById('cfgTwitchBotUsernameInput');
+  if (botInput) botInput.value = currentChannel;
+  updateModCommandPreview();
+  showToast('Restablecido al nombre de tu propio canal', 'info');
+}
+
+async function saveTwitchBotAccountUI() {
+  const botInput = document.getElementById('cfgTwitchBotUsernameInput');
+  const tokenInput = document.getElementById('cfgTwitchBotTokenInput');
+
+  const botUsername = (botInput?.value || '').replace(/^@/, '').replace(/[^a-zA-Z0-9_]/g, '').trim().toLowerCase();
+  let token = (tokenInput?.value || '').trim();
+
+  if (!botUsername) {
+    showToast('Ingresa el nombre de usuario de la cuenta del bot', 'warn');
+    return;
+  }
+
+  if (token) {
+    token = token.replace(/^oauth:/i, '').trim();
+  }
+
+  const currentChannel = (appConfig?.twitch?.channel || localStorage.getItem('orbibot_twitch_channel') || botUsername).replace(/^#/, '').trim().toLowerCase();
+
+  if (!appConfig) appConfig = {};
+  if (!appConfig.twitch) appConfig.twitch = {};
+
+  appConfig.twitch.channel = currentChannel;
+  appConfig.twitch.botUsername = botUsername;
+  if (token) {
+    appConfig.twitch.oauthToken = token;
+  }
+  appConfig.twitch.connected = true;
+
+  // 1. Guardar localmente
+  try {
+    let localAuth = JSON.parse(localStorage.getItem('orbibot_twitch_auth') || '{}');
+    localAuth.channel = currentChannel;
+    localAuth.botUsername = botUsername;
+    if (token) localAuth.oauthToken = token;
+    localAuth.connected = true;
+    localStorage.setItem('orbibot_twitch_auth', JSON.stringify(localAuth));
+
+    let cfg = JSON.parse(localStorage.getItem('orbibot_config') || '{}');
+    cfg.twitch = { ...(cfg.twitch || {}), channel: currentChannel, botUsername, oauthToken: token || cfg.twitch?.oauthToken, connected: true };
+    localStorage.setItem('orbibot_config', JSON.stringify(cfg));
+  } catch (e) {}
+
+  // 2. Guardar en backend si está corriendo
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        twitch: {
+          channel: currentChannel,
+          botUsername,
+          oauthToken: token || appConfig.twitch.oauthToken,
+          connected: true
+        }
+      })
+    });
+  } catch (e) {}
+
+  // 3. Sincronizar en Supabase
+  if (typeof saveToAllSupabaseScopes === 'function') {
+    saveToAllSupabaseScopes('config', appConfig).catch(() => {});
+    saveToAllSupabaseScopes('twitch_auth', appConfig.twitch).catch(() => {});
+  }
+
+  // 4. Reconectar cliente IRC en navegador
+  if (window.tmi && currentChannel) {
+    connectInBrowserTwitchBot(appConfig.twitch);
+  }
+
+  closeTwitchBotAccountModal();
+  updatePlatformLinkingUI();
+  showToast(`✅ Cuenta del bot @${botUsername} configurada y conectada exitosamente`, 'success');
+}
+
+window.openTwitchBotAccountModal = openTwitchBotAccountModal;
+window.closeTwitchBotAccountModal = closeTwitchBotAccountModal;
+window.updateModCommandPreview = updateModCommandPreview;
+window.copyTwitchModCommand = copyTwitchModCommand;
+window.toggleBotTokenVisibility = toggleBotTokenVisibility;
+window.resetToStreamerBotAccount = resetToStreamerBotAccount;
+window.saveTwitchBotAccountUI = saveTwitchBotAccountUI;
 
 // Export Custom Goals Manager functions to window
 window.renderGoals = renderGoals;
