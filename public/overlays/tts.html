@@ -734,6 +734,9 @@
             if (!trimmed) return;
 
             const firstWord = trimmed.split(' ')[0].toLowerCase();
+            if (firstWord === '!sr' || firstWord === '!song' || firstWord === '!cancion' || firstWord === '!queue' || firstWord === '!cola' || firstWord === '!skip' || firstWord === '!saltar' || firstWord === '!parar' || firstWord === '!stop' || firstWord === '!srpausa' || firstWord === '!srplay') {
+              return;
+            }
             let matchedVoice = null;
 
             if (firstWord.startsWith('!')) {

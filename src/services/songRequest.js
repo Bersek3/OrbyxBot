@@ -3,6 +3,7 @@ const storage = require('./storage');
 class SongRequestService {
   constructor() {
     this.sessions = new Map();
+    this.recentRequests = new Map();
     this.eventListeners = [];
   }
 
@@ -178,6 +179,38 @@ class SongRequestService {
       return { success: false, message: 'Debes indicar el nombre o enlace de una canción.' };
     }
 
+    // Deduplicación en ventana de 15 segundos para evitar adición múltiple
+    const now = Date.now();
+    const cleanUser = (requester || 'anon').toLowerCase().trim();
+    const dedupeKey = `${cleanChan}:${cleanUser}:${cleanQuery.toLowerCase()}`;
+    const lastRequestTime = this.recentRequests.get(dedupeKey);
+    if (lastRequestTime && (now - lastRequestTime) < 15000) {
+      // Petición duplicada dentro de 15 segundos: retornar canción ya existente o estado actual sin reinsertar
+      const existingSong = (session.currentSong && (session.currentSong.query === cleanQuery || session.currentSong.title.toLowerCase() === cleanQuery.toLowerCase()))
+        ? session.currentSong
+        : session.queue.find(s => s.query === cleanQuery || s.title.toLowerCase() === cleanQuery.toLowerCase());
+      if (existingSong) {
+        const position = session.currentSong === existingSong ? 0 : (session.queue.indexOf(existingSong) + 1);
+        return {
+          success: true,
+          song: existingSong,
+          position,
+          message: position === 0
+            ? `▶️ Reproduciendo ahora: ${existingSong.title}`
+            : `🎵 Ya está en la cola en posición #${position}: ${existingSong.title}`
+        };
+      }
+      return {
+        success: false,
+        message: `@${requester}, esa canción ya está siendo procesada.`
+      };
+    }
+    this.recentRequests.set(dedupeKey, now);
+    // Limpiar caché vieja (>60 segundos)
+    for (const [key, timestamp] of this.recentRequests.entries()) {
+      if (now - timestamp > 60000) this.recentRequests.delete(key);
+    }
+
     // Check user permission level (bypassed if priority/channel points)
     if (!isPriority) {
       if (config.userLevel === 'mod' && !isMod) {
@@ -320,8 +353,13 @@ class SongRequestService {
 
     const count = session.queue.length;
     session.queue = [];
+    session.skipVotes.clear();
+    const state = this.getState(cleanChan);
     this.emitUpdate('queue_clear', { count }, cleanChan);
-    return { success: true, count };
+    try {
+      storage.syncToSupabase('sr_state', state);
+    } catch(e) {}
+    return { success: true, count, state };
   }
 
   setCurrent(channelOrUser = 'default', song) {

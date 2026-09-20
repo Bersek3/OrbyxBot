@@ -1,50 +1,32 @@
 {
   "tts": {
     "rate": 1,
-    "pitch": 0.8,
+    "pitch": 1,
     "voice": "es_tiktok",
     "volume": 90,
     "enabled": true,
-    "minBits": 50,
+    "minBits": 0,
     "maxLength": 250,
     "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI",
     "bannedWords": [],
-    "chatCommand": "!tts",
+    "chatCommand": "!decir",
     "allowChatCommand": true
   },
-  "kick": {
-    "userId": "2984464",
-    "channel": "bersek",
-    "clientId": "01M0VT0JC58YQEVGRHM8JFXQX3",
-    "username": "Bersek",
-    "connected": true,
-    "accessToken": "MJI4YZEXZWQTYWFHMS0ZMZM2LTGYZWITZGNJZGRIMJHMZTK4",
-    "refreshToken": "YMY3NTGZZJETNWNMMY01ZTFKLWEWNJETZJFMZDQ4YZY2ZTRK",
-    "profile_picture": "https://files.kick.com/images/user/2984464/profile_image/conversion/8b4e7fba-64d9-469b-b1eb-da87178f4fab-medium.webp"
-  },
-  "goals": [],
   "twitch": {
-    "userId": "226055830",
-    "channel": "bersek___",
+    "userId": "173938343",
+    "channel": "plantasi",
     "clientId": "yw1vr664ichms8an2x5lhji58v7ozk",
     "connected": true,
-    "oauthToken": "jutbd9jjk91qw965w4scfpx5a7ondj",
-    "botUsername": "bersek___",
-    "displayName": "Bersek___",
-    "profileImage": "https://static-cdn.jtvnw.net/jtv_user_pictures/92a6561b-8e64-4f5f-a5fe-af7782347288-profile_image-300x300.jpeg"
-  },
-  "security": {
-    "widgetToken": "sec_fad6498233b149ad3af8aea3df4f6e57"
+    "oauthToken": "787zxk5aqbabiw6p5lraahj8rnaome",
+    "botUsername": "plantasi",
+    "displayName": "plantasi",
+    "profileImage": "https://static-cdn.jtvnw.net/jtv_user_pictures/1dd23e12-87f9-4c5d-a130-678ce7281e7e-profile_image-300x300.png"
   },
   "songRequest": {
     "prefix": "!sr",
-    "enabled": true,
+    "enabled": false,
     "userLevel": "all",
     "maxPerUser": 5,
-    "maxDurationMinutes": 10
-  },
-  "chatPlatforms": {
-    "kick": true,
-    "twitch": true
+    "maxDurationMinutes": 8
   }
 }

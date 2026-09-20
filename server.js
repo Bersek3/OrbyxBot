@@ -252,6 +252,8 @@ songRequest.onUpdate((payload) => {
     broadcast('sr_play', payload, room);
   } else if (payload.action === 'stop') {
     broadcast('sr_stop', payload, room);
+  } else if (payload.action === 'queue_clear') {
+    broadcast('sr_clear', payload, room);
   }
 });
 

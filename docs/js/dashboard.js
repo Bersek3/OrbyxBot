@@ -2411,7 +2411,22 @@ function connectInBrowserTwitchBot(twitchData) {
         const firstWord = message.trim().split(' ')[0].toLowerCase();
         const trimmed = message.trim();
 
-        if (ttsCfg.enabled !== false) {
+        // Comandos de Song Request e información de música
+        const srCfg = currentCfg.songRequest || {};
+        const srPrefix = (srCfg.prefix || '!sr').toLowerCase();
+        const isSongCommand = (
+          trimmed.toLowerCase().startsWith(srPrefix) ||
+          firstWord === '!sr' || firstWord === '!song' || firstWord === '!cancion' ||
+          firstWord === '!queue' || firstWord === '!cola' ||
+          firstWord === '!skip' || firstWord === '!saltar' ||
+          firstWord === '!parar' || firstWord === '!stop' ||
+          firstWord === '!srparar' || firstWord === '!srstop' ||
+          firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause' ||
+          firstWord === '!srplay' || firstWord === '!srresume' || firstWord === '!srreanudar' || firstWord === '!reanudar' || firstWord === '!resume'
+        );
+
+        // NUNCA procesar comandos de música a través de TTS
+        if (!isSongCommand && ttsCfg.enabled !== false) {
           const ttsCmd = (ttsCfg.chatCommand || '!tts').toLowerCase();
           const matchedVoiceCmd = findVoiceCommandOrAlias(firstWord);
 
@@ -2506,9 +2521,6 @@ function connectInBrowserTwitchBot(twitchData) {
         }
 
         // Procesamiento de comandos de Song Request desde el chat en cliente de navegador
-        const srCfg = currentCfg.songRequest || {};
-        const srPrefix = (srCfg.prefix || '!sr').toLowerCase();
-
         if (srCfg.enabled !== false) {
           if (firstWord === '!srpausa' || firstWord === '!srpause' || firstWord === '!pausa' || firstWord === '!pause') {
             if (isModOrBroadcaster) {
@@ -2550,22 +2562,26 @@ function connectInBrowserTwitchBot(twitchData) {
           if (message.trim().toLowerCase().startsWith(srPrefix)) {
             const q = message.trim().slice(srPrefix.length).trim();
             if (q) {
-              let handledLocally = false;
-              fetch('/api/sr/add', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ query: q, requester: username, isMod: isModOrBroadcaster, isSub, channel })
-              }).then(r => {
-                if (!r.ok && typeof handleClientSongRequest === 'function' && !handledLocally) {
-                  handledLocally = true;
-                  handleClientSongRequest(q, username, false);
-                }
-              }).catch(() => {
-                if (typeof handleClientSongRequest === 'function' && !handledLocally) {
-                  handledLocally = true;
-                  handleClientSongRequest(q, username, false);
-                }
-              });
+              // Si el WebSocket local está conectado al backend, el bot del servidor (twitchBot.js) ya procesa !sr
+              const isBackendConnected = Boolean(socket && socket.readyState === 1);
+              if (!isBackendConnected) {
+                let handledLocally = false;
+                fetch('/api/sr/add', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ query: q, requester: username, isMod: isModOrBroadcaster, isSub, channel })
+                }).then(r => {
+                  if (!r.ok && typeof handleClientSongRequest === 'function' && !handledLocally) {
+                    handledLocally = true;
+                    handleClientSongRequest(q, username, false);
+                  }
+                }).catch(() => {
+                  if (typeof handleClientSongRequest === 'function' && !handledLocally) {
+                    handledLocally = true;
+                    handleClientSongRequest(q, username, false);
+                  }
+                });
+              }
             }
           }
         }
@@ -4130,6 +4146,11 @@ async function removeSongFromQueue(songId) {
     if (res.ok) {
       const data = await res.json();
       if (data.success) {
+        const state = getLocalSrState();
+        state.queue = (state.queue || []).filter(s => s.id !== songId);
+        saveLocalSrState(state);
+        updateSongRequestUI(state);
+        broadcastEvent('sr_update', { action: 'queue_remove', data: data.song || { id: songId }, state });
         showToast('Canción eliminada de la cola');
         return;
       }
@@ -8644,6 +8665,7 @@ function setupEventListeners() {
   document.getElementById('btnSrClear').addEventListener('click', async () => {
     if (confirm('¿Seguro que deseas vaciar toda la cola de canciones?')) {
       const myRoom = getActiveStreamerRoom();
+      let clearedCount = 0;
       try {
         const res = await fetch('/api/sr/clear', {
           method: 'POST',
@@ -8652,17 +8674,19 @@ function setupEventListeners() {
         });
         if (res.ok) {
           const data = await res.json();
-          showToast(`Cola vaciada (${data.count} canciones eliminadas)`);
-          return;
+          clearedCount = data.count || 0;
         }
       } catch (e) { }
+
       const state = getLocalSrState();
-      const count = (state.queue || []).length;
+      const localCount = (state.queue || []).length;
+      const count = clearedCount || localCount;
       state.queue = [];
-      saveLocalSrState(state);
+      saveLocalSrState(state, true);
       updateSongRequestUI(state);
       broadcastEvent('sr_update', { action: 'queue_clear', data: { count }, state });
-      showToast(`Cola vaciada (${count} canciones eliminadas)`);
+      broadcastEvent('sr_clear', { count, channel: myRoom });
+      showToast(`Cola vaciada (${count} canciones eliminadas)`, 'success');
     }
   });
 

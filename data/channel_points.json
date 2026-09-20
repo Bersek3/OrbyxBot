@@ -1,12 +1,10 @@
 [
   {
-    "id": "reward-1789441511698",
-    "action": "tts",
+    "id": "reward-1789254410697",
+    "action": "song_request",
     "enabled": true,
-    "voiceId": "es_cr7",
-    "rewardId": "3c3fbdab-bf7d-45ff-9c99-5126d46b5f89",
+    "rewardId": "cf78df7d-b7e7-4af1-803b-8ace9bc9f76b",
     "soundUrl": null,
-    "rewardName": "SONIDO CAMPANA",
-    "customMessage": "TOME AGUA SEÑORA."
+    "rewardName": "Pide una canción"
   }
 ]

@@ -513,6 +513,9 @@
       }
     }
 
+    let wsInstance = null;
+    let wsReconnectTimeout = null;
+
     function initTwitchChatIRC(targetChan, retries = 0) {
       if (!targetChan) return;
       if (window.tmi && window.tmi.Client) {
@@ -530,6 +533,11 @@
           });
 
           tmiClient.on('message', async (ch, tags, message, self) => {
+            // Si el WebSocket del servidor está conectado, el bot de OrbiBot ya gestiona y emite los eventos del chat
+            if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+              return;
+            }
+
             const username = tags['display-name'] || tags.username || 'Espectador';
             const trimmed = (message || '').trim();
             if (!trimmed) return;
@@ -660,9 +668,6 @@
       }
 
       // 1. Local WebSocket con reconexión automática en segundo plano
-      let wsInstance = null;
-      let wsReconnectTimeout = null;
-
       function connectLocalWs(url) {
         if (wsReconnectTimeout) clearTimeout(wsReconnectTimeout);
         try {
