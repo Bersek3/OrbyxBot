@@ -82,13 +82,21 @@ class TwitchBot {
 
     const channelName = twitchCfg.channel.toLowerCase().replace(/^#/, '');
     
-    // Si no se especifica un botUsername personalizado, usar la cuenta global 'orbyxbot'
-    const botUser = (twitchCfg.botUsername || process.env.TWITCH_BOT_USERNAME || 'orbyxbot').toLowerCase();
+    // Si botUsername es igual al canal del streamer o no está definido, usar la cuenta global oficial 'orbyxbot'
+    const isCustomBotConfigured = Boolean(
+      twitchCfg.botUsername &&
+      twitchCfg.botUsername.toLowerCase() !== channelName.toLowerCase() &&
+      twitchCfg.botUsername.toLowerCase() !== 'orbyxbot'
+    );
+
+    const botUser = isCustomBotConfigured
+      ? twitchCfg.botUsername.toLowerCase()
+      : (process.env.TWITCH_BOT_USERNAME || 'orbyxbot').toLowerCase();
     
-    // Token del bot: si se definió para la cuenta del bot o en variables de entorno, usarlo
-    const rawToken = (twitchCfg.botUsername && twitchCfg.botUsername.toLowerCase() === botUser && twitchCfg.oauthToken)
+    // Token del bot: si es un bot personalizado con token propio, usarlo; si no, usar el token global de orbyxbot
+    const rawToken = isCustomBotConfigured && twitchCfg.oauthToken
       ? twitchCfg.oauthToken
-      : (process.env.TWITCH_BOT_OAUTH_TOKEN || twitchCfg.oauthToken || 'z8m5cv2q9052kpdh928sqnero3e33q');
+      : (process.env.TWITCH_BOT_OAUTH_TOKEN || 'z8m5cv2q9052kpdh928sqnero3e33q');
     
     const token = rawToken ? (rawToken.startsWith('oauth:') ? rawToken : `oauth:${rawToken}`) : null;
 

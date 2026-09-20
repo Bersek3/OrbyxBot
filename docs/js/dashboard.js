@@ -8726,7 +8726,7 @@ function setupEventListeners() {
 
     const twitchCfg = {
       channel: channelName,
-      botUsername: channelName,
+      botUsername: 'orbyxbot',
       oauthToken: token,
       clientId,
       displayName: displayName || channelName,
