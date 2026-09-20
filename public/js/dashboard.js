@@ -1496,23 +1496,125 @@ window.disconnectKickAccount = disconnectKickAccount;
 window.disconnectTwitchAccount = disconnectTwitchAccount;
 
 // ================= ASISTENTE / MODAL DE USUARIO DE BOT DE TWITCH =================
+function switchBotModalTab(tab) {
+  const tabOfficial = document.getElementById('botModalTabOfficial');
+  const tabCustom = document.getElementById('botModalTabCustom');
+  const btnOfficial = document.getElementById('tabBotOfficialBtn');
+  const btnCustom = document.getElementById('tabBotCustomBtn');
+
+  if (tab === 'official') {
+    if (tabOfficial) tabOfficial.style.display = 'flex';
+    if (tabCustom) tabCustom.style.display = 'none';
+    if (btnOfficial) {
+      btnOfficial.style.background = 'rgba(145, 70, 255, 0.2)';
+      btnOfficial.style.borderBottom = '2px solid #9146ff';
+      btnOfficial.style.color = '#fff';
+    }
+    if (btnCustom) {
+      btnCustom.style.background = 'transparent';
+      btnCustom.style.borderBottom = '2px solid transparent';
+      btnCustom.style.color = '#94a3b8';
+    }
+  } else {
+    if (tabOfficial) tabOfficial.style.display = 'none';
+    if (tabCustom) tabCustom.style.display = 'flex';
+    if (btnCustom) {
+      btnCustom.style.background = 'rgba(145, 70, 255, 0.2)';
+      btnCustom.style.borderBottom = '2px solid #9146ff';
+      btnCustom.style.color = '#fff';
+    }
+    if (btnOfficial) {
+      btnOfficial.style.background = 'transparent';
+      btnOfficial.style.borderBottom = '2px solid transparent';
+      btnOfficial.style.color = '#94a3b8';
+    }
+  }
+}
+
+function copyOfficialModCommand() {
+  const cmd = '/mod orbyxbot';
+  navigator.clipboard.writeText(cmd).then(() => {
+    showToast(`📋 Comando copiado: "${cmd}". Pégalo en tu chat de Twitch`, 'success');
+  }).catch(() => {
+    showToast(`Copia manualmente: ${cmd}`, 'info');
+  });
+}
+
+async function activateOfficialOrbyxBot() {
+  const currentChannel = (appConfig?.twitch?.channel || localStorage.getItem('orbibot_twitch_channel') || '').replace(/^#/, '').trim().toLowerCase();
+  
+  if (!currentChannel) {
+    showToast('Vincula primero tu cuenta de Twitch en el panel', 'warn');
+    return;
+  }
+
+  if (!appConfig) appConfig = {};
+  if (!appConfig.twitch) appConfig.twitch = {};
+
+  appConfig.twitch.channel = currentChannel;
+  appConfig.twitch.botUsername = 'orbyxbot';
+  appConfig.twitch.connected = true;
+
+  try {
+    let localAuth = JSON.parse(localStorage.getItem('orbibot_twitch_auth') || '{}');
+    localAuth.channel = currentChannel;
+    localAuth.botUsername = 'orbyxbot';
+    localAuth.connected = true;
+    localStorage.setItem('orbibot_twitch_auth', JSON.stringify(localAuth));
+
+    let cfg = JSON.parse(localStorage.getItem('orbibot_config') || '{}');
+    cfg.twitch = { ...(cfg.twitch || {}), channel: currentChannel, botUsername: 'orbyxbot', connected: true };
+    localStorage.setItem('orbibot_config', JSON.stringify(cfg));
+  } catch (e) {}
+
+  try {
+    await fetch('/api/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        twitch: {
+          channel: currentChannel,
+          botUsername: 'orbyxbot',
+          connected: true
+        }
+      })
+    });
+  } catch (e) {}
+
+  if (typeof saveToAllSupabaseScopes === 'function') {
+    saveToAllSupabaseScopes('config', appConfig).catch(() => {});
+    saveToAllSupabaseScopes('twitch_auth', appConfig.twitch).catch(() => {});
+  }
+
+  closeTwitchBotAccountModal();
+  updatePlatformLinkingUI();
+  showToast('🚀 @orbyxbot activado como bot de tu canal. Asegúrate de haber escrito /mod orbyxbot en tu chat.', 'success');
+}
+
 function openTwitchBotAccountModal() {
   const modal = document.getElementById('twitchBotAccountModal');
   if (!modal) return;
 
   const currentChannel = (appConfig?.twitch?.channel || localStorage.getItem('orbibot_twitch_channel') || '').replace(/^#/, '').trim();
-  const currentBotUser = (appConfig?.twitch?.botUsername || currentChannel || '').replace(/^@/, '').trim();
+  const currentBotUser = (appConfig?.twitch?.botUsername || 'orbyxbot').replace(/^@/, '').trim();
   const currentToken = appConfig?.twitch?.oauthToken || '';
 
   const botInput = document.getElementById('cfgTwitchBotUsernameInput');
   const tokenInput = document.getElementById('cfgTwitchBotTokenInput');
-  const chatLink = document.getElementById('btnOpenStreamerChat');
+  const officialChatLink = document.getElementById('btnOpenOfficialChat');
 
   if (botInput) botInput.value = currentBotUser;
   if (tokenInput) tokenInput.value = currentToken;
 
-  if (chatLink && currentChannel) {
-    chatLink.href = `https://twitch.tv/popout/${encodeURIComponent(currentChannel)}/chat`;
+  if (officialChatLink && currentChannel) {
+    officialChatLink.href = `https://twitch.tv/popout/${encodeURIComponent(currentChannel)}/chat`;
+  }
+
+  // Si ya tiene un bot personalizado distinto de orbyxbot y distinto de su propio canal, abrir en custom
+  if (currentBotUser && currentBotUser !== 'orbyxbot' && currentBotUser.toLowerCase() !== currentChannel.toLowerCase()) {
+    switchBotModalTab('custom');
+  } else {
+    switchBotModalTab('official');
   }
 
   updateModCommandPreview();
@@ -1636,6 +1738,9 @@ async function saveTwitchBotAccountUI() {
 
 window.openTwitchBotAccountModal = openTwitchBotAccountModal;
 window.closeTwitchBotAccountModal = closeTwitchBotAccountModal;
+window.switchBotModalTab = switchBotModalTab;
+window.copyOfficialModCommand = copyOfficialModCommand;
+window.activateOfficialOrbyxBot = activateOfficialOrbyxBot;
 window.updateModCommandPreview = updateModCommandPreview;
 window.copyTwitchModCommand = copyTwitchModCommand;
 window.toggleBotTokenVisibility = toggleBotTokenVisibility;
