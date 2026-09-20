@@ -72,10 +72,11 @@ class SongRequestService {
     if (!input || typeof input !== 'string') return null;
     const str = input.trim();
 
-    // Standard YouTube Watch URL: https://www.youtube.com/watch?v=VIDEO_ID
-    const watchMatch = str.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-    if (watchMatch && watchMatch[1]) {
-      return watchMatch[1];
+    // Standard YouTube and YouTube Music URLs (music.youtube.com, youtube.com, youtu.be)
+    const watchMatch = str.match(/(?:(?:music|www|m)\.)?youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)([^"&?\/\s]{11})|youtu\.be\/([^"&?\/\s]{11})/i);
+    if (watchMatch) {
+      const vid = watchMatch[1] || watchMatch[2];
+      if (vid && vid.length === 11) return vid;
     }
 
     // Direct 11 char ID
@@ -86,7 +87,42 @@ class SongRequestService {
     return null;
   }
 
+  async resolveSpotifyTrack(urlOrTrack) {
+    if (!urlOrTrack || typeof urlOrTrack !== 'string') return null;
+    const str = urlOrTrack.trim();
+    // Detect Spotify track URL: https://open.spotify.com/track/... or https://open.spotify.com/intl-es/track/...
+    if (/spotify\.com\/(?:[a-zA-Z-]+\/)?track\/([a-zA-Z0-9]+)/i.test(str)) {
+      try {
+        const oembedUrl = `https://open.spotify.com/oembed?url=${encodeURIComponent(str)}`;
+        const res = await fetch(oembedUrl);
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.title) {
+            return {
+              title: data.title,
+              thumbnail: data.thumbnail_url || null
+            };
+          }
+        }
+      } catch (e) {
+        console.warn('Spotify oEmbed fetch error:', e.message);
+      }
+    }
+    return null;
+  }
+
   async fetchVideoDetails(videoIdOrQuery) {
+    // Si es un enlace de Spotify, resolver el título mediante oEmbed y buscarlo en YouTube
+    const spotifyData = await this.resolveSpotifyTrack(videoIdOrQuery);
+    if (spotifyData && spotifyData.title) {
+      console.log(`🟢 [Song Request] Enlace de Spotify detectado: "${spotifyData.title}". Buscando en YouTube...`);
+      const ytSong = await this.fetchVideoDetails(spotifyData.title + ' audio');
+      if (ytSong) {
+        if (spotifyData.thumbnail) ytSong.thumbnail = spotifyData.thumbnail;
+        return ytSong;
+      }
+    }
+
     const videoId = this.extractVideoId(videoIdOrQuery);
 
     if (videoId) {

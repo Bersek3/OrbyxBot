@@ -13,75 +13,10 @@
     "pitch": 1
   },
   {
-    "id": "tts_cmd_peruano",
-    "voiceId": "es_peruano",
-    "name": "Peruano",
-    "command": "!peruano",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1
-  },
-  {
-    "id": "tts_cmd_closs",
-    "voiceId": "es_marianocloss",
-    "name": "Mariano Closs",
-    "command": "!closs",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1
-  },
-  {
-    "id": "tts_cmd_lacobra",
-    "voiceId": "es_lacobra",
-    "name": "La Cobra",
-    "command": "!lacobra",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1
-  },
-  {
-    "id": "tts_cmd_davo",
-    "voiceId": "es_davo",
-    "name": "Davo Xeneize",
-    "command": "!davo",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1
-  },
-  {
     "id": "tts_cmd_1789434879749_xsvy",
     "voiceId": "es_farid",
     "name": "Farid Dieck",
     "command": "!farid",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1
-  },
-  {
-    "id": "tts_cmd_cr7",
-    "voiceId": "es_cr7",
-    "name": "Cristiano Ronaldo",
-    "command": "!cr7",
     "permissions": [
       "todos"
     ],
@@ -104,19 +39,6 @@
     "pitch": 1
   },
   {
-    "id": "tts_cmd_1789434872789_5anp",
-    "voiceId": "es_xokas",
-    "name": "El Xokas",
-    "command": "!xokas",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1
-  },
-  {
     "id": "tts_cmd_1789434875926_1oti",
     "voiceId": "es_illojuan",
     "name": "IlloJuan",
@@ -130,10 +52,10 @@
     "pitch": 1
   },
   {
-    "id": "tts_cmd_maradona",
-    "voiceId": "es_maradona",
-    "name": "Diego Maradona",
-    "command": "!maradona",
+    "id": "tts_cmd_1789434872789_5anp",
+    "voiceId": "es_xokas",
+    "name": "El Xokas",
+    "command": "!xokas",
     "permissions": [
       "todos"
     ],
@@ -141,19 +63,6 @@
     "volume": 90,
     "rate": 1,
     "pitch": 1
-  },
-  {
-    "id": "tts_cmd_messi",
-    "voiceId": "es_ar_messi",
-    "name": "Lionel Messi",
-    "command": "!messi",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 0.98,
-    "pitch": 0.78
   },
   {
     "id": "tts_cmd_homero",
@@ -182,19 +91,6 @@
     "pitch": 0.7
   },
   {
-    "id": "tts_cmd_badbunny",
-    "voiceId": "es_badbunny",
-    "name": "Bad Bunny",
-    "command": "!badbunny",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 0.95,
-    "pitch": 0.75
-  },
-  {
     "id": "tts_cmd_rubius",
     "voiceId": "es_rubius",
     "name": "ElRubius",
@@ -206,57 +102,5 @@
     "volume": 90,
     "rate": 1.05,
     "pitch": 1.05
-  },
-  {
-    "id": "tts_cmd_maduro",
-    "voiceId": "es_ve_maduro",
-    "name": "Nicolás Maduro",
-    "command": "!maduro",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 0.95,
-    "pitch": 0.72
-  },
-  {
-    "id": "tts_cmd_tiktok",
-    "voiceId": "es_tiktok",
-    "name": "Voz TikTok",
-    "command": "!tiktok",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1.05,
-    "pitch": 1.2
-  },
-  {
-    "id": "tts_cmd_mia",
-    "voiceId": "es_mx_mia",
-    "name": "Mia (Español Latino)",
-    "command": "!mia",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 1,
-    "pitch": 1.15
-  },
-  {
-    "id": "tts_cmd_brian",
-    "voiceId": "en_brian",
-    "name": "Brian (English Classic)",
-    "command": "!brian",
-    "permissions": [
-      "todos"
-    ],
-    "enabled": true,
-    "volume": 90,
-    "rate": 0.95,
-    "pitch": 0.7
   }
 ]

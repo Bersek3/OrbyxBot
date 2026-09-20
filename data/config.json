@@ -1,32 +1,55 @@
 {
-  "tts": {
-    "rate": 1,
-    "pitch": 1,
-    "voice": "es_tiktok",
-    "volume": 90,
-    "enabled": true,
-    "minBits": 0,
-    "maxLength": 250,
-    "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI",
-    "bannedWords": [],
-    "chatCommand": "!decir",
-    "allowChatCommand": true
+  "security": {
+    "widgetToken": "sec_1405777fa9222aedbf12fd1139e30421"
   },
   "twitch": {
-    "userId": "173938343",
     "channel": "plantasi",
+    "botUsername": "plantasi",
+    "oauthToken": "787zxk5aqbabiw6p5lraahj8rnaome",
     "clientId": "yw1vr664ichms8an2x5lhji58v7ozk",
     "connected": true,
-    "oauthToken": "787zxk5aqbabiw6p5lraahj8rnaome",
-    "botUsername": "plantasi",
+    "userId": "173938343",
     "displayName": "plantasi",
     "profileImage": "https://static-cdn.jtvnw.net/jtv_user_pictures/1dd23e12-87f9-4c5d-a130-678ce7281e7e-profile_image-300x300.png"
+  },
+  "kick": {
+    "channel": "",
+    "username": "",
+    "profile_picture": "",
+    "userId": "",
+    "accessToken": "",
+    "refreshToken": "",
+    "clientId": "01M0VT0JC58YQEVGRHM8JFXQX3",
+    "connected": false
+  },
+  "chatPlatforms": {
+    "twitch": true,
+    "kick": true
   },
   "songRequest": {
     "prefix": "!sr",
     "enabled": false,
-    "userLevel": "all",
+    "maxDurationMinutes": 8,
     "maxPerUser": 5,
-    "maxDurationMinutes": 8
-  }
+    "userLevel": "all",
+    "volume": 75,
+    "autoplay": true
+  },
+  "tts": {
+    "enabled": true,
+    "engine": "streamelements",
+    "voice": "es_tiktok",
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1,
+    "minBits": 0,
+    "allowChatCommand": true,
+    "chatCommand": "!decir",
+    "bannedWords": [],
+    "maxLength": 250,
+    "channelPointsRewardName": "TTS",
+    "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI"
+  },
+  "goals": [],
+  "widgetStyles": {}
 }

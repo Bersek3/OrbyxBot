@@ -3788,15 +3788,32 @@ function saveLocalSrState(state, syncCloud = true) {
 function extractYouTubeVideoId(input) {
   if (!input || typeof input !== 'string') return null;
   const str = input.trim();
-  const watchMatch = str.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-  if (watchMatch && watchMatch[1]) return watchMatch[1];
+  const watchMatch = str.match(/(?:(?:music|www|m)\.)?youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)([^"&?\/\s]{11})|youtu\.be\/([^"&?\/\s]{11})/i);
+  if (watchMatch) {
+    const vid = watchMatch[1] || watchMatch[2];
+    if (vid && vid.length === 11) return vid;
+  }
   if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str;
   return null;
 }
 
-function handleClientSongRequest(query, requester, isPriority = false) {
-  const cleanQuery = (query || '').trim();
+async function handleClientSongRequest(query, requester, isPriority = false) {
+  let cleanQuery = (query || '').trim();
   if (!cleanQuery) return;
+
+  let spotifyThumb = null;
+  if (/spotify\.com\/(?:[a-zA-Z-]+\/)?track\/([a-zA-Z0-9]+)/i.test(cleanQuery)) {
+    try {
+      const oembedRes = await fetch(`https://open.spotify.com/oembed?url=${encodeURIComponent(cleanQuery)}`);
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json();
+        if (oembedData && oembedData.title) {
+          cleanQuery = oembedData.title;
+          spotifyThumb = oembedData.thumbnail_url || null;
+        }
+      }
+    } catch(e) {}
+  }
 
   const videoId = extractYouTubeVideoId(cleanQuery);
   const song = {
@@ -3805,7 +3822,7 @@ function handleClientSongRequest(query, requester, isPriority = false) {
     query: cleanQuery,
     title: cleanQuery,
     author: 'YouTube',
-    thumbnail: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : DEFAULT_SONG_THUMB,
+    thumbnail: spotifyThumb || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : DEFAULT_SONG_THUMB),
     durationSeconds: 210,
     durationFormatted: '3:30',
     requester: requester || 'Anónimo',
