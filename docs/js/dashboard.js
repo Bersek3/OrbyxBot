@@ -1606,8 +1606,9 @@ function setupNavigation() {
       if (targetTabId === 'tab-admin' && typeof loadAdminStreamersList === 'function') {
         loadAdminStreamersList();
       }
-      if (targetTabId === 'tab-tts' && typeof initTTSMultiVoiceSystem === 'function') {
-        initTTSMultiVoiceSystem();
+      if (targetTabId === 'tab-tts') {
+        if (typeof initTTSMultiVoiceSystem === 'function') initTTSMultiVoiceSystem();
+        if (typeof loadTTSQueue === 'function') loadTTSQueue();
       }
     });
   });
@@ -1637,6 +1638,9 @@ function switchTab(tabId) {
     if (target) {
       target.classList.add('active');
       saveActiveDashboardTab(tabId);
+      if (tabId === 'tab-tts' && typeof loadTTSQueue === 'function') {
+        loadTTSQueue();
+      }
     }
   }
 }
@@ -2008,7 +2012,17 @@ function handleSocketMessage(msg) {
   const targetRoom = (room || channel || data?.channel || data?.room || '').toLowerCase().replace(/^#/, '').trim();
   const targetToken = (msg.token || data?.token || '').trim();
 
-  if (targetRoom && targetRoom !== 'default' && myRoom && myRoom !== 'default' && targetRoom !== myRoom && targetRoom !== myToken) {
+  const allowedRooms = new Set([myRoom]);
+  if (myToken) allowedRooms.add(myToken.toLowerCase());
+  if (adminTargetStreamerId) allowedRooms.add(adminTargetStreamerId.toLowerCase());
+  if (appConfig?.twitch?.channel) allowedRooms.add(appConfig.twitch.channel.toLowerCase().replace(/^#/, ''));
+  if (appConfig?.kick?.channel || appConfig?.kick?.username) {
+    allowedRooms.add((appConfig.kick.channel || appConfig.kick.username).toLowerCase().replace(/^@/, '').replace(/^#/, ''));
+  }
+
+  const isRoomAllowed = !targetRoom || targetRoom === 'default' || allowedRooms.has(targetRoom);
+
+  if (targetRoom && targetRoom !== 'default' && myRoom && myRoom !== 'default' && !isRoomAllowed) {
     return;
   }
   if (targetRoom === 'default' && myRoom && myRoom !== 'default') {
@@ -6206,7 +6220,10 @@ async function loadTTSQueue(showFeedback = false) {
   try {
     const room = getActiveStreamerRoom();
     const token = getEffectiveWidgetToken();
-    const qs = room && room !== 'default' ? `?channel=${encodeURIComponent(room)}&token=${encodeURIComponent(token || '')}` : '';
+    const streamerParam = adminTargetStreamerId ? `&streamer=${encodeURIComponent(adminTargetStreamerId)}` : '';
+    const qs = room && room !== 'default'
+      ? `?channel=${encodeURIComponent(room)}&token=${encodeURIComponent(token || '')}${streamerParam}`
+      : (adminTargetStreamerId ? `?streamer=${encodeURIComponent(adminTargetStreamerId)}&token=${encodeURIComponent(token || '')}` : '');
     const res = await fetch(`/api/tts/queue${qs}`);
     if (res.ok) {
       const data = await res.json();
@@ -6322,94 +6339,113 @@ function renderTTSQueue(queueState) {
 }
 
 async function handleTtsStop() {
+  const room = getActiveStreamerRoom();
+  const streamer = adminTargetStreamerId || room;
   try {
     await fetch('/api/tts/control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'stop' })
+      body: JSON.stringify({ action: 'stop', channel: room, streamer })
     });
-    broadcastEvent('tts_control', { action: 'stop' });
+    broadcastEvent('tts_control', { action: 'stop', channel: room, room });
     showToast('⏹️ TTS detenido', 'info');
   } catch (e) {
-    broadcastEvent('tts_control', { action: 'stop' });
+    broadcastEvent('tts_control', { action: 'stop', channel: room, room });
     showToast('⏹️ TTS detenido', 'info');
   }
 }
 
 async function handleTtsSkip() {
+  const room = getActiveStreamerRoom();
+  const streamer = adminTargetStreamerId || room;
   try {
     await fetch('/api/tts/control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'skip' })
+      body: JSON.stringify({ action: 'skip', channel: room, streamer })
     });
-    broadcastEvent('tts_control', { action: 'skip' });
+    broadcastEvent('tts_control', { action: 'skip', channel: room, room });
     showToast('⏭️ Mensaje TTS saltado', 'info');
     loadTTSQueue();
   } catch (e) {
     if (cachedTTSQueue.queue.length > 0) cachedTTSQueue.queue.shift();
     renderTTSQueue(cachedTTSQueue);
-    broadcastEvent('tts_control', { action: 'skip' });
+    broadcastEvent('tts_control', { action: 'skip', channel: room, room });
     showToast('⏭️ Mensaje TTS saltado', 'info');
   }
 }
 
 async function handleTtsReset() {
+  const room = getActiveStreamerRoom();
+  const streamer = adminTargetStreamerId || room;
   try {
     await fetch('/api/tts/control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'reset' })
+      body: JSON.stringify({ action: 'reset', channel: room, streamer })
     });
-    broadcastEvent('tts_control', { action: 'reset' });
+    broadcastEvent('tts_control', { action: 'reset', channel: room, room });
     cachedTTSQueue.queue = [];
     renderTTSQueue(cachedTTSQueue);
     showToast('🔄 Cola de TTS reiniciada y reproductor restablecido', 'success');
   } catch (e) {
     cachedTTSQueue.queue = [];
     renderTTSQueue(cachedTTSQueue);
-    broadcastEvent('tts_control', { action: 'reset' });
+    broadcastEvent('tts_control', { action: 'reset', channel: room, room });
     showToast('🔄 Cola de TTS reiniciada', 'success');
   }
 }
 
 async function handleTtsClear() {
+  const room = getActiveStreamerRoom();
+  const streamer = adminTargetStreamerId || room;
   try {
     await fetch('/api/tts/control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'clear' })
+      body: JSON.stringify({ action: 'clear', channel: room, streamer })
     });
-    broadcastEvent('tts_control', { action: 'clear' });
+    broadcastEvent('tts_control', { action: 'clear', channel: room, room });
     cachedTTSQueue.queue = [];
     renderTTSQueue(cachedTTSQueue);
     showToast('🗑️ Cola de TTS vaciada', 'success');
   } catch (e) {
     cachedTTSQueue.queue = [];
     renderTTSQueue(cachedTTSQueue);
-    broadcastEvent('tts_control', { action: 'clear' });
+    broadcastEvent('tts_control', { action: 'clear', channel: room, room });
     showToast('🗑️ Cola de TTS vaciada', 'success');
   }
 }
 
 async function handleTtsRemoveItem(id) {
   if (!id) return;
+  const room = getActiveStreamerRoom();
+  const streamer = adminTargetStreamerId || room;
   try {
     await fetch('/api/tts/control', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'remove', id })
+      body: JSON.stringify({ action: 'remove', id, channel: room, streamer })
     });
-    broadcastEvent('tts_control', { action: 'item_removed', id });
+    broadcastEvent('tts_control', { action: 'item_removed', id, channel: room, room });
     cachedTTSQueue.queue = cachedTTSQueue.queue.filter(i => i.id !== id);
     renderTTSQueue(cachedTTSQueue);
     showToast('Mensaje eliminado de la cola', 'info');
   } catch (e) {
     cachedTTSQueue.queue = cachedTTSQueue.queue.filter(i => i.id !== id);
     renderTTSQueue(cachedTTSQueue);
-    broadcastEvent('tts_control', { action: 'item_removed', id });
+    broadcastEvent('tts_control', { action: 'item_removed', id, channel: room, room });
   }
 }
+
+// Exportar funciones de TTS al objeto global window para uso desde HTML y otros módulos
+window.loadTTSQueue = loadTTSQueue;
+window.renderTTSQueue = renderTTSQueue;
+window.handleTtsStop = handleTtsStop;
+window.handleTtsSkip = handleTtsSkip;
+window.handleTtsReset = handleTtsReset;
+window.handleTtsClear = handleTtsClear;
+window.handleTtsRemoveItem = handleTtsRemoveItem;
 
 // ================= CUSTOM GOALS MANAGER (OBS WIDGETS) =================
 let currentGoalsList = [];
@@ -10581,7 +10617,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
 
   // Limpiar cola TTS para no mostrar la del admin
   cachedTTSQueue = { current: null, queue: [] };
-  if (typeof renderTTSQueueUI === 'function') renderTTSQueueUI();
+  if (typeof renderTTSQueue === 'function') renderTTSQueue(cachedTTSQueue);
 
   // Reset / Load Song Request
   // Paso 1: mostrar datos de Supabase inmediatamente como preview rápido (puede ser obsoleto)

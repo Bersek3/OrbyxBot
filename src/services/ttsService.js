@@ -419,56 +419,102 @@ class TTSService {
   }
 
   emitQueueUpdate(channel = null) {
+    const key = channel ? this.normalizeChannelKey(channel) : null;
     this.emitTTSControl({
       action: 'queue_update',
-      channel,
-      queue: this.queue
+      channel: key || channel,
+      room: key || channel,
+      queue: this.getQueueState(key || channel)
     });
   }
 
   getQueueState(channel = null) {
-    if (channel) {
-      const clean = channel.toLowerCase().replace(/^#/, '').trim();
-      return this.queue.filter(q => !q.channel || q.channel === clean);
+    if (channel && channel !== 'default') {
+      const clean = this.normalizeChannelKey(channel);
+      const raw = channel.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+      return this.queue.filter(q => {
+        if (!q.channel || q.channel === 'default') return true;
+        const qNorm = this.normalizeChannelKey(q.channel);
+        const qRaw = (q.channel || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+        return qNorm === clean || qRaw === raw || qRaw === clean || qNorm === raw;
+      });
     }
     return this.queue;
   }
 
   stopTTS(channel = null, user = 'Moderador') {
-    const payload = { action: 'stop', channel, user, timestamp: Date.now() };
+    const key = channel ? this.normalizeChannelKey(channel) : null;
+    const payload = { action: 'stop', channel: key || channel, room: key || channel, user, timestamp: Date.now() };
     this.emitTTSControl(payload);
     return { success: true, message: 'TTS detenido' };
   }
 
   skipTTS(channel = null, user = 'Moderador') {
-    if (this.queue.length > 0) {
+    const key = channel ? this.normalizeChannelKey(channel) : null;
+    const raw = channel ? channel.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() : null;
+    if (key && key !== 'default') {
+      const idx = this.queue.findIndex(q => {
+        if (!q.channel || q.channel === 'default') return true;
+        const qNorm = this.normalizeChannelKey(q.channel);
+        const qRaw = (q.channel || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+        return qNorm === key || qRaw === raw || qRaw === key || qNorm === raw;
+      });
+      if (idx >= 0) {
+        this.queue.splice(idx, 1);
+      }
+    } else if (this.queue.length > 0) {
       this.queue.shift();
     }
-    const payload = { action: 'skip', channel, user, timestamp: Date.now(), queue: this.queue };
+    const currentQueue = this.getQueueState(key || channel);
+    const payload = { action: 'skip', channel: key || channel, room: key || channel, user, timestamp: Date.now(), queue: currentQueue };
     this.emitTTSControl(payload);
     return { success: true, message: 'TTS saltado' };
   }
 
   resetTTS(channel = null, user = 'Moderador') {
-    this.queue = [];
-    const payload = { action: 'reset', channel, user, timestamp: Date.now(), queue: [] };
+    const key = channel ? this.normalizeChannelKey(channel) : null;
+    const raw = channel ? channel.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() : null;
+    if (key && key !== 'default') {
+      this.queue = this.queue.filter(q => {
+        if (!q.channel || q.channel === 'default') return false;
+        const qNorm = this.normalizeChannelKey(q.channel);
+        const qRaw = (q.channel || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+        return !(qNorm === key || qRaw === raw || qRaw === key || qNorm === raw);
+      });
+    } else {
+      this.queue = [];
+    }
+    const payload = { action: 'reset', channel: key || channel, room: key || channel, user, timestamp: Date.now(), queue: [] };
     this.emitTTSControl(payload);
     return { success: true, message: 'Cola de TTS reiniciada' };
   }
 
   clearQueue(channel = null, user = 'Moderador') {
-    this.queue = [];
-    const payload = { action: 'clear', channel, user, timestamp: Date.now(), queue: [] };
+    const key = channel ? this.normalizeChannelKey(channel) : null;
+    const raw = channel ? channel.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() : null;
+    if (key && key !== 'default') {
+      this.queue = this.queue.filter(q => {
+        if (!q.channel || q.channel === 'default') return false;
+        const qNorm = this.normalizeChannelKey(q.channel);
+        const qRaw = (q.channel || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+        return !(qNorm === key || qRaw === raw || qRaw === key || qNorm === raw);
+      });
+    } else {
+      this.queue = [];
+    }
+    const payload = { action: 'clear', channel: key || channel, room: key || channel, user, timestamp: Date.now(), queue: [] };
     this.emitTTSControl(payload);
     return { success: true, message: 'Cola de TTS limpiada' };
   }
 
   removeItem(id, channel = null) {
     if (!id) return { success: false };
+    const key = channel ? this.normalizeChannelKey(channel) : null;
     this.queue = this.queue.filter(item => item.id !== id);
-    const payload = { action: 'item_removed', id, channel, queue: this.queue };
+    const currentQueue = this.getQueueState(key || channel);
+    const payload = { action: 'item_removed', id, channel: key || channel, room: key || channel, queue: currentQueue };
     this.emitTTSControl(payload);
-    return { success: true, queue: this.queue };
+    return { success: true, queue: currentQueue };
   }
 
   getVoices() {
