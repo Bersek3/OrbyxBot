@@ -2591,8 +2591,10 @@ async function loadInitialData() {
   }
 }
 
-// In-Browser Twitch Bot for GitHub Pages
 let browserTmiClient = null;
+let currentConnectedTwitchChannel = null;
+let lastTwitchConnectedToastTime = 0;
+
 function connectInBrowserTwitchBot(twitchData) {
   if (!window.tmi || !twitchData) return;
   let rawChannel = twitchData.channel || twitchData.login || (twitchData.displayName ? twitchData.displayName.toLowerCase() : '');
@@ -2612,8 +2614,17 @@ function connectInBrowserTwitchBot(twitchData) {
     return;
   }
 
+  // Evitar reconexiones duplicadas si ya está conectado al mismo canal
+  if (browserTmiClient && currentConnectedTwitchChannel === channel) {
+    const readyState = typeof browserTmiClient.readyState === 'function' ? browserTmiClient.readyState() : null;
+    if (readyState === 'OPEN' || readyState === 'CONNECTING') {
+      return;
+    }
+  }
+
   if (browserTmiClient) {
     try { browserTmiClient.disconnect(); } catch (e) { }
+    browserTmiClient = null;
   }
 
   const opts = {
@@ -2637,6 +2648,7 @@ function connectInBrowserTwitchBot(twitchData) {
 
   function setupClient(client) {
     client.on('connected', () => {
+      currentConnectedTwitchChannel = channel;
       console.log(`🟢 [Dashboard] Conectado al chat de Twitch #${channel}`);
       updateBotStatusUI({ status: 'connected', channel });
       const statChan = document.getElementById('statChannelName');
@@ -2647,7 +2659,12 @@ function connectInBrowserTwitchBot(twitchData) {
       if (chatContainer && (chatContainer.innerText.includes('Conecta tu canal de Twitch') || chatContainer.innerText.includes('Esperando mensajes'))) {
         chatContainer.innerHTML = `<div class="chat-msg-row" style="color: var(--cyan-accent);"><em>🟢 Conectado al chat de Twitch #${channel}. Esperando mensajes...</em></div>`;
       }
-      showToast(`Conectado al chat de #${channel}`, 'success');
+      
+      const now = Date.now();
+      if (now - lastTwitchConnectedToastTime > 10000) {
+        lastTwitchConnectedToastTime = now;
+        showToast(`Conectado al chat de #${channel}`, 'success');
+      }
     });
 
     client.on('message', (ch, tags, message, self) => {
