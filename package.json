@@ -5,7 +5,9 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "db:setup": "node database/mongo_schema_setup.js",
+    "db:health": "node scripts/maintain_databases.js"
   },
   "engines": {
     "node": "20.x"
