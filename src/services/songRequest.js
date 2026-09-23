@@ -319,10 +319,19 @@ class SongRequestService {
   skip(channelOrUser = 'default', byUser = 'Streamer', isMod = false) {
     const cleanChan = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').trim() || 'default';
     const session = this.getSession(cleanChan);
-
     if (!session.currentSong) {
       return { success: false, message: 'No hay ninguna canción reproduciéndose actualmente.' };
     }
+
+    const now = Date.now();
+    if (session.lastSkipTime && (now - session.lastSkipTime) < 1500) {
+      return {
+        success: true,
+        message: session.currentSong ? `⏭️ Saltando: ${session.currentSong.title}...` : '⏭️ Salto en progreso...',
+        current: session.currentSong
+      };
+    }
+    session.lastSkipTime = now;
 
     const skippedSong = session.currentSong;
     session.history.push(skippedSong);

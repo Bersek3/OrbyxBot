@@ -2860,7 +2860,8 @@ function connectInBrowserTwitchBot(twitchData) {
           }
 
           if (firstWord === '!skip' || firstWord === '!saltar') {
-            if (isModOrBroadcaster && typeof skipCurrentSong === 'function') {
+            const isBackendConnected = Boolean(socket && socket.readyState === 1);
+            if (!isBackendConnected && isModOrBroadcaster && typeof skipCurrentSong === 'function') {
               skipCurrentSong();
             }
             return;
@@ -3332,7 +3333,8 @@ function connectInBrowserKickBot(kickData) {
               }
 
               if (firstWord === '!skip' || firstWord === '!saltar') {
-                if (isModOrBroadcaster && typeof skipCurrentSong === 'function') {
+                const isBackendConnected = Boolean(socket && socket.readyState === 1);
+                if (!isBackendConnected && isModOrBroadcaster && typeof skipCurrentSong === 'function') {
                   skipCurrentSong();
                 }
                 return;
@@ -4314,7 +4316,10 @@ window.onYouTubeIframeAPIReady = function () {
       onStateChange: (event) => {
         // YT.PlayerState.ENDED is 0
         if (event.data === YT.PlayerState.ENDED) {
-          skipCurrentSong();
+          const curTime = (event.target && typeof event.target.getCurrentTime === 'function') ? event.target.getCurrentTime() : 0;
+          if (curTime > 5) {
+            skipCurrentSong();
+          }
         }
       }
     }
@@ -4419,7 +4424,12 @@ function playYouTubeSong(videoId) {
   }
 }
 
+let isSkippingSongLock = false;
 async function skipCurrentSong() {
+  if (isSkippingSongLock) return;
+  isSkippingSongLock = true;
+  setTimeout(() => { isSkippingSongLock = false; }, 1500);
+
   const myRoom = getActiveStreamerRoom();
   try {
     const res = await fetch('/api/sr/skip', {

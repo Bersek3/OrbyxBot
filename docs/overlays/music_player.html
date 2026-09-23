@@ -580,7 +580,13 @@
 
             // 2. Comando !skip o !saltar
             if (firstWord === '!skip' || firstWord === '!saltar') {
-              console.log(`⏭️ [Music Player Overlay] Comando !skip recibido de @${username} (#${ch})`);
+              const isBroadcaster = Boolean(tags.badges?.broadcaster === '1' || (tags.username || '').toLowerCase() === targetChan.replace(/^#/, '').toLowerCase());
+              const isMod = Boolean(tags.mod || tags['user-type'] === 'mod' || isBroadcaster);
+              if (!isMod) {
+                console.log(`⚠️ [Music Player Overlay] @${username} intentó saltar canción pero no es moderador.`);
+                return;
+              }
+              console.log(`⏭️ [Music Player Overlay] Comando !skip recibido de mod @${username} (#${ch})`);
               try {
                 const skipRes = await fetch('/api/sr/skip', {
                   method: 'POST',
