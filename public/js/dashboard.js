@@ -3102,10 +3102,12 @@ async function handleBrowserChannelPointRedemption(customRewardId, username, mes
     return;
   }
 
-  const dedupeKey = `${customRewardId || rewardTitle}_${username}_${Math.floor(Date.now() / 2500)}`;
+  const cleanUser = (username || 'espectador').toLowerCase().trim();
+  const cleanRewardKey = (customRewardId || rewardTitle || 'reward').toLowerCase().trim();
+  const dedupeKey = `${cleanRewardKey}_${cleanUser}_${(cleanMsg || '').toLowerCase()}_${Math.floor(Date.now() / 6000)}`;
   if (browserRecentRedemptions.has(dedupeKey)) return;
   browserRecentRedemptions.add(dedupeKey);
-  setTimeout(() => browserRecentRedemptions.delete(dedupeKey), 10000);
+  setTimeout(() => browserRecentRedemptions.delete(dedupeKey), 12000);
 
   if (matchedReward && matchedReward.enabled) {
     console.log(`[Dashboard] 🎁 Canje procesado: "${matchedReward.rewardName}" (${matchedReward.action}) por @${username}`);
@@ -3172,7 +3174,7 @@ async function handleBrowserChannelPointRedemption(customRewardId, username, mes
       }
 
       const activeRoom = getActiveStreamerRoom();
-      let addedViaBackend = false;
+      let handledByApi = false;
       try {
         const res = await fetch('/api/sr/add', {
           method: 'POST',
@@ -3180,16 +3182,16 @@ async function handleBrowserChannelPointRedemption(customRewardId, username, mes
           body: JSON.stringify({ query: songQuery, requester: username, isPriority: true, channel: activeRoom })
         });
         if (res.ok) {
+          handledByApi = true;
           const data = await res.json();
           if (data && data.success) {
-            addedViaBackend = true;
             showToast(`🌟 [VIP] @${username} pidió canción: ${data.song?.title || songQuery}`, 'success');
           }
         }
       } catch(e) {}
 
-      // Si falla la API backend o estamos en GitHub Pages, procesar localmente
-      if (!addedViaBackend && typeof handleClientSongRequest === 'function') {
+      // Solo si la API backend NO responde (error de red o sin servidor), procesar localmente
+      if (!handledByApi && typeof handleClientSongRequest === 'function') {
         handleClientSongRequest(songQuery, username, true);
       }
 
@@ -4160,6 +4162,15 @@ async function handleClientSongRequest(query, requester, isPriority = false) {
 
   const state = getLocalSrState();
   state.queue = state.queue || [];
+
+  // Evitar duplicado en cola o reproducción actual
+  const cleanQ = cleanQuery.toLowerCase();
+  const isDuplicateQueue = state.queue.some(s => (videoId && s.videoId === videoId) || (s.query && s.query.toLowerCase() === cleanQ) || (s.title && s.title.toLowerCase() === cleanQ));
+  const isDuplicateCurrent = state.currentSong && ((videoId && state.currentSong.videoId === videoId) || (state.currentSong.query && state.currentSong.query.toLowerCase() === cleanQ) || (state.currentSong.title && state.currentSong.title.toLowerCase() === cleanQ));
+  if (isDuplicateQueue || isDuplicateCurrent) {
+    console.log(`[handleClientSongRequest] Omitiendo canción duplicada: "${cleanQuery}" (ID: ${videoId})`);
+    return;
+  }
 
   if (!state.currentSong) {
     state.currentSong = song;

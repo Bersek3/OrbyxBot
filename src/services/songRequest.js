@@ -218,13 +218,22 @@ class SongRequestService {
     // Deduplicación en ventana de 15 segundos para evitar adición múltiple
     const now = Date.now();
     const cleanUser = (requester || 'anon').toLowerCase().trim();
-    const dedupeKey = `${sessionKey}:${cleanUser}:${cleanQuery.toLowerCase()}`;
+    const incomingVideoId = this.extractVideoId(cleanQuery);
+    const dedupeKey = `${sessionKey}:${cleanUser}:${(incomingVideoId || cleanQuery).toLowerCase()}`;
     const lastRequestTime = this.recentRequests.get(dedupeKey);
     if (lastRequestTime && (now - lastRequestTime) < 15000) {
       // Petición duplicada dentro de 15 segundos: retornar canción ya existente o estado actual sin reinsertar
-      const existingSong = (session.currentSong && (session.currentSong.query === cleanQuery || session.currentSong.title.toLowerCase() === cleanQuery.toLowerCase()))
+      const existingSong = (session.currentSong && (
+        (incomingVideoId && session.currentSong.videoId === incomingVideoId) ||
+        session.currentSong.query === cleanQuery ||
+        session.currentSong.title.toLowerCase() === cleanQuery.toLowerCase()
+      ))
         ? session.currentSong
-        : session.queue.find(s => s.query === cleanQuery || s.title.toLowerCase() === cleanQuery.toLowerCase());
+        : session.queue.find(s =>
+          (incomingVideoId && s.videoId === incomingVideoId) ||
+          s.query === cleanQuery ||
+          s.title.toLowerCase() === cleanQuery.toLowerCase()
+        );
       if (existingSong) {
         const position = session.currentSong === existingSong ? 0 : (session.queue.indexOf(existingSong) + 1);
         return {
@@ -237,7 +246,7 @@ class SongRequestService {
         };
       }
       return {
-        success: false,
+        success: true,
         message: `@${requester}, esa canción ya está siendo procesada.`
       };
     }
@@ -297,6 +306,7 @@ class SongRequestService {
     const song = {
       id: 'sr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
       channel: sessionKey,
+      query: cleanQuery,
       videoId: videoDetails.videoId,
       title: videoDetails.title,
       author: videoDetails.author,
