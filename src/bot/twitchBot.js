@@ -726,11 +726,13 @@ class TwitchBot {
       return;
     }
 
-    const dedupeKey = `${customRewardId || rewardTitle}_${username}_${Math.floor(Date.now() / 2500)}`;
-    if (this.recentRedemptions && this.recentRedemptions.has(dedupeKey)) return;
+    const cleanUser = (username || 'espectador').toLowerCase().trim();
+    const cleanRewardKey = (customRewardId || rewardTitle || 'reward').toLowerCase().trim();
+    const dedupeKey = `${cleanRewardKey}_${cleanUser}_${(cleanMsg || '').toLowerCase()}_${Math.floor(Date.now() / 6000)}`;
     if (!this.recentRedemptions) this.recentRedemptions = new Set();
+    if (this.recentRedemptions.has(dedupeKey)) return;
     this.recentRedemptions.add(dedupeKey);
-    setTimeout(() => this.recentRedemptions.delete(dedupeKey), 10000);
+    setTimeout(() => this.recentRedemptions.delete(dedupeKey), 12000);
 
     const activeChannel = channel || this.channel || (storage.getConfig().twitch?.channel || '');
 

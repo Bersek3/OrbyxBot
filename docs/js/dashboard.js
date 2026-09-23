@@ -3165,12 +3165,19 @@ async function handleBrowserChannelPointRedemption(customRewardId, username, mes
       const songQuery = cleanMsg;
       if (!songQuery) return;
 
+      // Si el servidor backend está activo, el bot del servidor (twitchBot.js) ya procesa el canje de Song Request
+      if (socket && socket.readyState === 1) {
+        console.log('[Dashboard] Canje de Song Request VIP procesado por el bot del servidor.');
+        return;
+      }
+
+      const activeRoom = getActiveStreamerRoom();
       let addedViaBackend = false;
       try {
         const res = await fetch('/api/sr/add', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: songQuery, requester: username, isPriority: true })
+          body: JSON.stringify({ query: songQuery, requester: username, isPriority: true, channel: activeRoom })
         });
         if (res.ok) {
           const data = await res.json();

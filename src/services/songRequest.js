@@ -197,8 +197,8 @@ class SongRequestService {
   }
 
   async addSong({ channel = 'default', query, requester, isMod = false, isSub = false, isPriority = false }) {
-    const cleanChan = (channel || 'default').toLowerCase().replace(/^#/, '').trim() || 'default';
-    const session = this.getSession(cleanChan);
+    const sessionKey = this.normalizeChannelKey(channel);
+    const session = this.getSession(sessionKey);
 
     let config = { enabled: true, userLevel: 'all', maxPerUser: 5, maxDurationMinutes: 8 };
     try {
@@ -218,7 +218,7 @@ class SongRequestService {
     // Deduplicación en ventana de 15 segundos para evitar adición múltiple
     const now = Date.now();
     const cleanUser = (requester || 'anon').toLowerCase().trim();
-    const dedupeKey = `${cleanChan}:${cleanUser}:${cleanQuery.toLowerCase()}`;
+    const dedupeKey = `${sessionKey}:${cleanUser}:${cleanQuery.toLowerCase()}`;
     const lastRequestTime = this.recentRequests.get(dedupeKey);
     if (lastRequestTime && (now - lastRequestTime) < 15000) {
       // Petición duplicada dentro de 15 segundos: retornar canción ya existente o estado actual sin reinsertar
@@ -272,9 +272,31 @@ class SongRequestService {
       return { success: false, message: `La canción excede el límite máximo de ${config.maxDurationMinutes} minutos.` };
     }
 
+    // Evitar que la misma canción se añada duplicada si ya está sonando o en cola
+    if (session.currentSong && session.currentSong.videoId === videoDetails.videoId) {
+      return {
+        success: true,
+        song: session.currentSong,
+        position: 0,
+        message: `▶️ Reproduciendo ahora: ${session.currentSong.title}`
+      };
+    }
+    const existingQueueSong = session.queue.find(s => s.videoId === videoDetails.videoId);
+    if (existingQueueSong) {
+      const position = session.queue.indexOf(existingQueueSong) + 1;
+      return {
+        success: true,
+        song: existingQueueSong,
+        position,
+        message: existingQueueSong.isPriority
+          ? `🌟 [PRIORIDAD VIP] Ya está en cola en puesto #${position}: ${existingQueueSong.title}`
+          : `🎵 Ya está en la cola en posición #${position}: ${existingQueueSong.title}`
+      };
+    }
+
     const song = {
       id: 'sr-' + Date.now() + '-' + Math.random().toString(36).substr(2, 4),
-      channel: cleanChan,
+      channel: sessionKey,
       videoId: videoDetails.videoId,
       title: videoDetails.title,
       author: videoDetails.author,
@@ -289,7 +311,7 @@ class SongRequestService {
     if (!session.currentSong) {
       session.currentSong = song;
       session.isPlaying = true;
-      this.emitUpdate('play', song, cleanChan);
+      this.emitUpdate('play', song, sessionKey);
     } else if (isPriority) {
       const lastPriorityIdx = session.queue.map(s => !!s.isPriority).lastIndexOf(true);
       if (lastPriorityIdx === -1) {
@@ -297,10 +319,10 @@ class SongRequestService {
       } else {
         session.queue.splice(lastPriorityIdx + 1, 0, song);
       }
-      this.emitUpdate('queue_add', song, cleanChan);
+      this.emitUpdate('queue_add', song, sessionKey);
     } else {
       session.queue.push(song);
-      this.emitUpdate('queue_add', song, cleanChan);
+      this.emitUpdate('queue_add', song, sessionKey);
     }
 
     const position = session.currentSong === song ? 0 : (session.queue.indexOf(song) + 1);
