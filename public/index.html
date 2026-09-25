@@ -681,6 +681,10 @@
           <span class="nav-icon">⚡</span>
           <span>Comandos de Chat</span>
         </li>
+        <li class="nav-item" data-tab="tab-clips">
+          <span class="nav-icon">🎬</span>
+          <span>Clips del Chat</span>
+        </li>
         <li id="navItemAdmin" class="nav-item" data-tab="tab-admin" style="display: none; border-left: 3px solid #facc15; background: rgba(234, 179, 8, 0.08);">
           <span class="nav-icon">👑</span>
           <span style="color: #facc15; font-weight: 700;">Administración & Soporte</span>
@@ -2570,6 +2574,83 @@ console.log('Widget personalizado cargado');"></textarea>
               </div>
             </div>
           </div>
+        </section>
+
+        <!-- ================= TAB: CLIPS DEL CHAT ================= -->
+        <section id="tab-clips" class="tab-pane">
+
+          <!-- Header Banner -->
+          <div style="background: linear-gradient(135deg, rgba(20,26,44,0.97), rgba(13,17,26,0.99)); border: 1px solid rgba(0,242,254,0.3); border-radius: 16px; padding: 22px 26px; margin-bottom: 24px; position: relative; overflow: hidden; box-shadow: 0 4px 24px rgba(0,0,0,0.45);">
+            <div style="position: absolute; top:0; left:0; right:0; height:3px; background: linear-gradient(90deg, #9146ff, #00f2fe, #53fc18);"></div>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px;">
+              <div>
+                <h3 style="font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;">
+                  <span>🎬</span> <span>Clips del Chat</span>
+                  <span id="clipsCountBadge" style="font-size: 12px; background: rgba(0,242,254,0.15); color: #00f2fe; border: 1px solid rgba(0,242,254,0.35); padding: 3px 12px; border-radius: 999px; font-weight: 700;">0 clips</span>
+                </h3>
+                <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
+                  Cualquier espectador puede usar <code style="color:#a3e635;">!clip &lt;URL&gt;</code> en el chat de <strong>Twitch</strong> o <strong>Kick</strong> y el clip aparecerá aquí para visualizarlo directamente.
+                </p>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <button class="btn btn-secondary btn-sm" onclick="loadClips()" title="Recargar lista de clips">
+                  🔄 Actualizar
+                </button>
+                <button class="btn btn-sm" id="btnClearAllClips"
+                  style="background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.4); font-weight: 700;"
+                  onclick="clearAllClips()">
+                  🗑️ Borrar todo
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Guía de uso del comando -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 24px;">
+            <div style="background: rgba(145,70,255,0.07); border: 1px solid rgba(145,70,255,0.3); border-radius: 12px; padding: 14px 18px; display: flex; gap: 12px; align-items: flex-start;">
+              <span style="font-size: 24px; flex-shrink: 0;">📋</span>
+              <div>
+                <div style="font-weight: 800; color: #c084fc; font-size: 13px; margin-bottom: 4px;">Comando para el chat (Twitch)</div>
+                <code style="color: #a3e635; font-size: 13px; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 6px; display: block;">!clip https://clips.twitch.tv/...</code>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 6px;">Cualquier espectador puede enviar clips directamente desde el chat</div>
+              </div>
+            </div>
+            <div style="background: rgba(83,252,24,0.06); border: 1px solid rgba(83,252,24,0.25); border-radius: 12px; padding: 14px 18px; display: flex; gap: 12px; align-items: flex-start;">
+              <span style="font-size: 24px; flex-shrink: 0;">🟢</span>
+              <div>
+                <div style="font-weight: 800; color: #86efac; font-size: 13px; margin-bottom: 4px;">Comando para el chat (Kick)</div>
+                <code style="color: #a3e635; font-size: 13px; background: rgba(0,0,0,0.4); padding: 4px 10px; border-radius: 6px; display: block;">!clip https://kick.com/.../clips/...</code>
+                <div style="font-size: 12px; color: #94a3b8; margin-top: 6px;">También funciona con links de Medal, Streamable y otras plataformas</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Añadir clip manualmente -->
+          <div class="card" style="margin-bottom: 24px; border: 1px solid rgba(0,242,254,0.2);">
+            <div class="card-header">
+              <span class="card-title">➕ Añadir Clip Manualmente</span>
+            </div>
+            <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+              <input type="text" id="clipManualUrl" class="form-control" placeholder="https://clips.twitch.tv/... o https://kick.com/.../clips/..." style="flex: 1; min-width: 240px;">
+              <input type="text" id="clipManualTitle" class="form-control" placeholder="Título del clip (opcional)" style="max-width: 220px;">
+              <button class="btn btn-primary" onclick="addClipManually()" style="flex-shrink: 0;">
+                🎬 Añadir Clip
+              </button>
+            </div>
+          </div>
+
+          <!-- Grid de clips -->
+          <div id="clipsGridContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px;">
+            <!-- Clips se renderizan dinámicamente con renderClips() -->
+            <div id="clipsEmptyState" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+              <div style="font-size: 56px; margin-bottom: 16px;">🎬</div>
+              <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">Sin clips todavía</div>
+              <div style="font-size: 14px; color: #94a3b8; max-width: 420px; margin: 0 auto;">
+                Cuando algún espectador use <code style="color:#a3e635;">!clip &lt;URL&gt;</code> en el chat, el clip aparecerá aquí automáticamente.
+              </div>
+            </div>
+          </div>
+
         </section>
 
         <!-- ================= TAB 8: ADMINISTRACIÓN GENERAL & SOPORTE ================= -->
