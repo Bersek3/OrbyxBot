@@ -38,7 +38,7 @@
   "tts": {
     "enabled": true,
     "engine": "streamelements",
-    "voice": "es_tiktok",
+    "voice": "es_mx_mia",
     "volume": 90,
     "rate": 1,
     "pitch": 1,

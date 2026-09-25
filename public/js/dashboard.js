@@ -11399,20 +11399,140 @@ function loadAdminStreamersList(force) {
 }
 
 
-// ================= 🎬 SISTEMA DE CLIPS DEL CHAT =================
+// ================= 🎬 SISTEMA DE CLIPS DEL CANAL Y CHAT =================
 
 let clipsData = [];
+let allClipsStore = {
+  all: [],
+  twitch: [],
+  kick: [],
+  chat: [],
+  channel: {}
+};
+let currentClipFilter = 'all';
+let currentClipSearch = '';
 
-async function loadClips() {
+async function loadClips(forceRefresh = false) {
+  const syncBtn = document.getElementById('btnSyncChannelClips');
+  const emptyState = document.getElementById('clipsEmptyState');
+
+  if (syncBtn) {
+    syncBtn.disabled = true;
+    syncBtn.innerHTML = '⏳ Sincronizando...';
+  }
+
   try {
     const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
-    const res = await fetch(`${BASE}/api/clips`);
-    if (!res.ok) throw new Error('No se pudieron cargar los clips');
-    clipsData = await res.json();
-    renderClips(clipsData);
+    
+    // Consultar el endpoint de clips del canal (Twitch + Kick + Chat)
+    let res = await fetch(`${BASE}/api/clips/channel?refresh=${forceRefresh ? '1' : '0'}`);
+    let data = null;
+
+    if (res.ok) {
+      data = await res.json();
+    } else {
+      // Fallback a clips guardados
+      res = await fetch(`${BASE}/api/clips`);
+      const list = await res.json();
+      data = {
+        allClips: list,
+        twitchClips: list.filter(c => c.platform === 'twitch'),
+        kickClips: list.filter(c => c.platform === 'kick'),
+        chatClips: list,
+        channel: {}
+      };
+    }
+
+    if (data) {
+      allClipsStore = {
+        all: data.allClips || [],
+        twitch: data.twitchClips || [],
+        kick: data.kickClips || [],
+        chat: data.chatClips || [],
+        channel: data.channel || {}
+      };
+
+      // Actualizar nombres de canal
+      const twNameEl = document.getElementById('clipTwitchName');
+      const kickNameEl = document.getElementById('clipKickName');
+      if (twNameEl) twNameEl.textContent = data.channel?.twitch ? `@${data.channel.twitch}` : 'No vinculado';
+      if (kickNameEl) kickNameEl.textContent = data.channel?.kick ? `@${data.channel.kick}` : 'No vinculado';
+
+      // Actualizar contadores de filtros
+      const cAll = document.getElementById('filterCountAll');
+      const cTw = document.getElementById('filterCountTwitch');
+      const cKick = document.getElementById('filterCountKick');
+      const cChat = document.getElementById('filterCountChat');
+      if (cAll) cAll.textContent = allClipsStore.all.length;
+      if (cTw) cTw.textContent = allClipsStore.twitch.length;
+      if (cKick) cKick.textContent = allClipsStore.kick.length;
+      if (cChat) cChat.textContent = allClipsStore.chat.length;
+
+      applyClipsFilter();
+
+      if (forceRefresh) {
+        showToast(`✅ Se sincronizaron ${allClipsStore.all.length} clips del canal`, 'success');
+      }
+    }
   } catch (e) {
-    console.warn('[Clips] Error al cargar:', e);
+    console.warn('[Clips] Error al cargar clips:', e);
+    if (emptyState) {
+      emptyState.innerHTML = `
+        <div style="font-size: 56px; margin-bottom: 16px;">⚠️</div>
+        <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">No se pudieron cargar los clips</div>
+        <div style="font-size: 14px; color: #94a3b8; max-width: 420px; margin: 0 auto;">Verifica que el bot esté conectado a Twitch o Kick.</div>`;
+      emptyState.style.display = 'block';
+    }
+  } finally {
+    if (syncBtn) {
+      syncBtn.disabled = false;
+      syncBtn.innerHTML = '🔄 Sincronizar Clips del Canal';
+    }
   }
+}
+
+function filterClips(filterType, btnEl) {
+  currentClipFilter = filterType;
+  // Actualizar estilos activos de botones
+  document.querySelectorAll('#clipsFilterGroup .clip-filter-btn').forEach(btn => {
+    btn.classList.remove('active');
+    btn.style.background = '';
+    btn.style.borderColor = '';
+  });
+  if (btnEl) {
+    btnEl.classList.add('active');
+  }
+  applyClipsFilter();
+}
+
+function onClipSearch(query) {
+  currentClipSearch = (query || '').toLowerCase().trim();
+  applyClipsFilter();
+}
+
+function applyClipsFilter() {
+  let list = [];
+  if (currentClipFilter === 'twitch') {
+    list = allClipsStore.twitch;
+  } else if (currentClipFilter === 'kick') {
+    list = allClipsStore.kick;
+  } else if (currentClipFilter === 'chat') {
+    list = allClipsStore.chat;
+  } else {
+    list = allClipsStore.all;
+  }
+
+  // Filtrar por término de búsqueda si existe
+  if (currentClipSearch) {
+    list = list.filter(c => {
+      const title = (c.title || '').toLowerCase();
+      const creator = (c.creator || c.requester || '').toLowerCase();
+      const broadcaster = (c.broadcaster || '').toLowerCase();
+      return title.includes(currentClipSearch) || creator.includes(currentClipSearch) || broadcaster.includes(currentClipSearch);
+    });
+  }
+
+  renderClips(list);
 }
 
 function renderClips(clips) {
@@ -11424,13 +11544,21 @@ function renderClips(clips) {
 
   if (badge) badge.textContent = `${clipsData.length} clip${clipsData.length !== 1 ? 's' : ''}`;
 
-  // Remove old clip cards (keep empty state element)
+  // Eliminar cards anteriores manteniendo el contenedor de empty state
   Array.from(container.children).forEach(el => {
     if (el.id !== 'clipsEmptyState') el.remove();
   });
 
   if (clipsData.length === 0) {
-    if (emptyState) emptyState.style.display = 'block';
+    if (emptyState) {
+      emptyState.style.display = 'block';
+      emptyState.innerHTML = `
+        <div style="font-size: 56px; margin-bottom: 16px;">🎬</div>
+        <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">No se encontraron clips</div>
+        <div style="font-size: 14px; color: #94a3b8; max-width: 420px; margin: 0 auto;">
+          No hay clips que coincidan con el filtro actual. Puedes sincronizar con Twitch/Kick o compartir uno con <code style="color:#a3e635;">!clip &lt;URL&gt;</code> en el chat.
+        </div>`;
+    }
     return;
   }
   if (emptyState) emptyState.style.display = 'none';
@@ -11438,78 +11566,174 @@ function renderClips(clips) {
   clipsData.forEach(clip => {
     const card = document.createElement('div');
     card.id = `clip-card-${clip.id}`;
-    card.style.cssText = 'background: linear-gradient(135deg, rgba(14,18,30,0.97), rgba(10,13,22,0.99)); border: 1px solid rgba(0,242,254,0.15); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.2s, box-shadow 0.2s;';
+    card.style.cssText = 'background: linear-gradient(135deg, rgba(14,18,30,0.97), rgba(10,13,22,0.99)); border: 1px solid rgba(0,242,254,0.15); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s; position: relative;';
 
-    // Platform badge color
     const isTwitch = clip.platform === 'twitch';
     const isKick = clip.platform === 'kick';
     const platformColor = isTwitch ? '#9146ff' : isKick ? '#53fc18' : '#00f2fe';
     const platformLabel = isTwitch ? 'Twitch' : isKick ? 'Kick' : 'Web';
     const platformIcon = isTwitch ? '🟣' : isKick ? '🟢' : '🌐';
 
-    // Embed logic: Twitch clips can be embedded, others show a preview link
-    let embedHtml = '';
-    const twitchClipMatch = clip.url && clip.url.match(/clips\.twitch\.tv\/([A-Za-z0-9_-]+)|twitch\.tv\/\w+\/clip\/([A-Za-z0-9_-]+)/i);
-    const clipSlug = twitchClipMatch ? (twitchClipMatch[1] || twitchClipMatch[2]) : (clip.clipId || '');
+    // Formatear duración
+    const durationSec = Number(clip.duration) || 0;
+    const durMin = Math.floor(durationSec / 60);
+    const durRestSec = durationSec % 60;
+    const durationStr = `${durMin}:${durRestSec < 10 ? '0' : ''}${durRestSec}`;
 
-    if (isTwitch && clipSlug) {
-      const embedParent = window.location.hostname || 'localhost';
-      embedHtml = `<div style="position:relative; padding-bottom:56.25%; height:0; overflow:hidden; background:#0a0d16;">
-        <iframe
-          src="https://clips.twitch.tv/embed?clip=${clipSlug}&parent=${embedParent}&autoplay=false"
-          style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
-          allowfullscreen>
-        </iframe>
-      </div>`;
+    // Thumbnail con botón de reproducción
+    const thumbUrl = clip.thumbnail || '';
+    const viewsCount = Number(clip.views || clip.viewCount || 0).toLocaleString();
+
+    let thumbHtml = '';
+    if (thumbUrl) {
+      thumbHtml = `
+        <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; overflow:hidden; cursor:pointer;" onclick="openClipModalById('${clip.id}')">
+          <img src="${thumbUrl}" alt="${clip.title || ''}" style="width:100%; height:100%; object-fit:cover; display:block; transition:transform 0.3s;"
+            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+          <div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#131826; font-size:40px;">🎬</div>
+          <div style="position:absolute; inset:0; background:rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; opacity:0.85; transition:opacity 0.2s, background 0.2s;" class="clip-thumb-overlay">
+            <div style="width:48px; height:48px; border-radius:50%; background:rgba(0,0,0,0.7); border:2px solid ${platformColor}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; box-shadow:0 0 16px ${platformColor}60;">
+              ▶
+            </div>
+          </div>
+          ${durationSec > 0 ? `<span style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.85); color:#fff; font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:0.03em;">${durationStr}</span>` : ''}
+          ${viewsCount !== '0' ? `<span style="position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.75); color:#cbd5e1; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px;">👁️ ${viewsCount}</span>` : ''}
+        </div>`;
     } else {
-      // Generic preview with thumbnail placeholder + open link button
-      embedHtml = `<div style="height:170px; background:linear-gradient(135deg,rgba(10,13,22,0.95),rgba(20,26,44,0.95)); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px;">
-        <div style="font-size:48px;">🎬</div>
-        <a href="${clip.url}" target="_blank" rel="noopener"
-          style="background:${platformColor}; color:${isTwitch || !isKick ? '#fff' : '#000'}; font-weight:800; font-size:12px; padding:7px 16px; border-radius:8px; text-decoration:none; display:inline-flex; align-items:center; gap:6px;">
-          ${platformIcon} Ver clip en ${platformLabel} ↗
-        </a>
-      </div>`;
+      thumbHtml = `
+        <div style="height:150px; background:linear-gradient(135deg,rgba(10,13,22,0.95),rgba(20,26,44,0.95)); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;" onclick="openClipModalById('${clip.id}')">
+          <div style="font-size:42px;">🎬</div>
+          <span style="font-size:11px; color:#94a3b8; font-weight:700;">Haz clic para ver</span>
+        </div>`;
     }
 
-    // Date formatting
-    const dateStr = clip.createdAt ? new Date(clip.createdAt).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    const dateStr = clip.createdAt ? new Date(clip.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+    const creatorName = clip.creator || clip.requester || 'Streamer';
+    const isDeletable = clip.source === 'chat' || !clip.source;
 
     card.innerHTML = `
-      ${embedHtml}
+      ${thumbHtml}
       <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
-          <span style="font-size: 14px; font-weight: 700; color: #fff; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${clip.title || ''}">${clip.title || 'Clip del stream'}</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+          <span style="font-size: 13px; font-weight: 800; color: #fff; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${clip.title || ''}">${clip.title || 'Clip del stream'}</span>
           <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(${isTwitch ? '145,70,255' : isKick ? '83,252,24' : '0,242,254'},0.15); color: ${platformColor}; border: 1px solid ${platformColor}30; flex-shrink:0;">${platformIcon} ${platformLabel}</span>
         </div>
-        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: #94a3b8;">
-          <span>👤 @${clip.requester || 'Anónimo'}</span>
+        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #94a3b8;">
+          <span title="Creado por @${creatorName}">👤 @${creatorName}</span>
           <span>${dateStr}</span>
         </div>
         <div style="display: flex; gap: 8px; margin-top: 4px;">
-          <a href="${clip.url}" target="_blank" rel="noopener"
-            style="flex:1; text-align:center; padding:6px; background:rgba(0,242,254,0.08); border:1px solid rgba(0,242,254,0.25); border-radius:8px; color:#00f2fe; font-size:12px; font-weight:700; text-decoration:none; display:flex; align-items:center; justify-content:center; gap:5px;">
-            🔗 Abrir
-          </a>
-          <button onclick="deleteClip('${clip.id}')"
-            style="padding:6px 12px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:8px; color:#ef4444; font-size:12px; font-weight:700; cursor:pointer;">
-            🗑️
+          <button onclick="openClipModalById('${clip.id}')"
+            style="flex: 1; padding: 6px 10px; background: rgba(0,242,254,0.12); border: 1px solid rgba(0,242,254,0.35); border-radius: 8px; color: #00f2fe; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+            ▶️ Ver Clip
           </button>
+          <a href="${clip.url}" target="_blank" rel="noopener"
+            style="padding: 6px 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #cbd5e1; font-size: 12px; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;"
+            title="Abrir en ${platformLabel}">
+            🔗
+          </a>
+          ${isDeletable ? `
+            <button onclick="deleteClip('${clip.id}')"
+              style="padding: 6px 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; color: #ef4444; font-size: 12px; font-weight: 700; cursor: pointer;"
+              title="Eliminar de la lista">
+              🗑️
+            </button>` : ''}
         </div>
       </div>`;
 
     // Hover effect
     card.addEventListener('mouseenter', () => {
-      card.style.borderColor = 'rgba(0,242,254,0.4)';
-      card.style.boxShadow = '0 4px 20px rgba(0,242,254,0.12)';
+      card.style.borderColor = 'rgba(0,242,254,0.45)';
+      card.style.transform = 'translateY(-2px)';
+      card.style.boxShadow = '0 6px 24px rgba(0,242,254,0.15)';
     });
     card.addEventListener('mouseleave', () => {
       card.style.borderColor = 'rgba(0,242,254,0.15)';
+      card.style.transform = '';
       card.style.boxShadow = '';
     });
 
     container.appendChild(card);
   });
+}
+
+function openClipModalById(clipId) {
+  const clip = allClipsStore.all.find(c => c.id === clipId) || clipsData.find(c => c.id === clipId);
+  if (!clip) return;
+  openClipModal(clip);
+}
+
+function openClipModal(clip) {
+  const modal = document.getElementById('clipPlayerModal');
+  const frameContainer = document.getElementById('clipModalFrameContainer');
+  const titleEl = document.getElementById('clipModalTitle');
+  const authorEl = document.getElementById('clipModalAuthor');
+  const linkEl = document.getElementById('clipModalLink');
+  const badgeEl = document.getElementById('clipModalPlatformBadge');
+
+  if (!modal || !frameContainer) return;
+
+  if (titleEl) titleEl.textContent = clip.title || 'Clip del stream';
+  if (authorEl) authorEl.textContent = `Clip creado por @${clip.creator || clip.requester || 'Streamer'} • Canal: @${clip.broadcaster || ''}`;
+  if (linkEl) {
+    linkEl.href = clip.url;
+    linkEl.textContent = `🔗 Abrir en ${clip.platform === 'kick' ? 'Kick' : 'Twitch'}`;
+  }
+
+  const isTwitch = clip.platform === 'twitch';
+  const isKick = clip.platform === 'kick';
+  const platformColor = isTwitch ? '#9146ff' : isKick ? '#53fc18' : '#00f2fe';
+
+  if (badgeEl) {
+    badgeEl.textContent = isTwitch ? '🟣 Twitch' : isKick ? '🟢 Kick' : '🌐 Web';
+    badgeEl.style.background = `${platformColor}25`;
+    badgeEl.style.color = platformColor;
+    badgeEl.style.border = `1px solid ${platformColor}50`;
+  }
+
+  // Generar reproductor según plataforma
+  frameContainer.innerHTML = '';
+
+  const parentHost = window.location.hostname || 'localhost';
+  const twitchClipMatch = clip.url && clip.url.match(/clips\.twitch\.tv\/([A-Za-z0-9_-]+)|twitch\.tv\/\w+\/clip\/([A-Za-z0-9_-]+)/i);
+  const twitchSlug = twitchClipMatch ? (twitchClipMatch[1] || twitchClipMatch[2]) : (clip.id || '');
+
+  if (isTwitch && twitchSlug) {
+    frameContainer.innerHTML = `
+      <iframe
+        src="https://clips.twitch.tv/embed?clip=${encodeURIComponent(twitchSlug)}&parent=${parentHost}&autoplay=true&muted=false"
+        style="position:absolute;top:0;left:0;width:100%;height:100%;border:0;"
+        allowfullscreen>
+      </iframe>`;
+  } else if (isKick && clip.videoUrl) {
+    // Si tenemos URL de video de Kick directa
+    frameContainer.innerHTML = `
+      <video controls autoplay style="width:100%; height:100%; object-fit:contain; background:#000;">
+        <source src="${clip.videoUrl}" type="application/x-mpegURL">
+        <source src="${clip.videoUrl}">
+        Tu navegador no soporta el reproductor de video.
+      </video>`;
+  } else {
+    // Iframe general o enlace directo
+    frameContainer.innerHTML = `
+      <div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:16px; background:#0a0d16; padding:20px; text-align:center;">
+        <div style="font-size:56px;">🎬</div>
+        <div style="font-size:16px; font-weight:700; color:#fff;">${clip.title || 'Clip del Stream'}</div>
+        <a href="${clip.url}" target="_blank" rel="noopener"
+          style="background:${platformColor}; color:${isTwitch || !isKick ? '#fff' : '#000'}; font-weight:800; font-size:14px; padding:10px 22px; border-radius:10px; text-decoration:none; display:inline-flex; align-items:center; gap:8px;">
+          🔗 Ver clip directamente en ${clip.platform === 'kick' ? 'Kick' : 'Twitch'} ↗
+        </a>
+      </div>`;
+  }
+
+  modal.style.display = 'flex';
+}
+
+function closeClipModal(e) {
+  const modal = document.getElementById('clipPlayerModal');
+  const frameContainer = document.getElementById('clipModalFrameContainer');
+  if (frameContainer) frameContainer.innerHTML = ''; // Detiene la reproducción de audio/video
+  if (modal) modal.style.display = 'none';
 }
 
 async function addClipManually() {
@@ -11535,7 +11759,7 @@ async function addClipManually() {
     if (data.success) {
       if (urlInput) urlInput.value = '';
       if (titleInput) titleInput.value = '';
-      renderClips(data.clips);
+      loadClips(true);
       showToast('🎬 Clip añadido correctamente', 'success');
     } else {
       showToast(data.message || 'Error al añadir clip', 'error');
@@ -11551,7 +11775,9 @@ async function deleteClip(clipId) {
     const res = await fetch(`${BASE}/api/clips/${clipId}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) {
-      renderClips(data.clips);
+      allClipsStore.chat = allClipsStore.chat.filter(c => c.id !== clipId);
+      allClipsStore.all = allClipsStore.all.filter(c => c.id !== clipId);
+      applyClipsFilter();
       showToast('Clip eliminado', 'success');
     }
   } catch (e) {
@@ -11560,75 +11786,81 @@ async function deleteClip(clipId) {
 }
 
 async function clearAllClips() {
-  if (!confirm('¿Estás seguro de que deseas borrar todos los clips? Esta acción no se puede deshacer.')) return;
+  if (!confirm('¿Estás seguro de que deseas vaciar los clips guardados del chat?')) return;
   try {
     const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
     const res = await fetch(`${BASE}/api/clips`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) {
-      renderClips([]);
-      showToast('Todos los clips fueron eliminados', 'success');
+      allClipsStore.chat = [];
+      allClipsStore.all = [...allClipsStore.twitch, ...allClipsStore.kick];
+      applyClipsFilter();
+      showToast('Se limpiaron los clips guardados', 'success');
     }
   } catch (e) {
     showToast('Error al limpiar clips', 'error');
   }
 }
 
-// Handle real-time clip events from WebSocket
+// Manejar eventos en tiempo real desde WebSocket
 function handleClipWsEvent(event, data) {
   if (event === 'clip_added' && data) {
-    // Prepend to local list and re-render
-    clipsData = [data, ...clipsData.filter(c => c.id !== data.id)];
-    if (clipsData.length > 100) clipsData = clipsData.slice(0, 100);
-    renderClips(clipsData);
-    showToast(`🎬 Nuevo clip de @${data.requester || 'chat'}`, 'info');
+    allClipsStore.chat = [data, ...allClipsStore.chat.filter(c => c.id !== data.id)];
+    allClipsStore.all = [data, ...allClipsStore.all.filter(c => c.id !== data.id)];
+    applyClipsFilter();
+    showToast(`🎬 Nuevo clip compartido por @${data.requester || 'chat'}`, 'info');
+  } else if (event === 'clip_highlighted' && data) {
+    showToast(`🎬 Clip reproducido en el chat: "${data.title || ''}"`, 'info');
   } else if (event === 'clip_deleted' && data && data.id) {
-    clipsData = clipsData.filter(c => c.id !== data.id);
-    renderClips(clipsData);
+    allClipsStore.chat = allClipsStore.chat.filter(c => c.id !== data.id);
+    allClipsStore.all = allClipsStore.all.filter(c => c.id !== data.id);
+    applyClipsFilter();
   } else if (event === 'clips_cleared') {
-    clipsData = [];
-    renderClips([]);
+    allClipsStore.chat = [];
+    allClipsStore.all = [...allClipsStore.twitch, ...allClipsStore.kick];
+    applyClipsFilter();
   }
 }
 
-// Expose clip functions to window
+// Exponer funciones globales
 window.loadClips = loadClips;
 window.renderClips = renderClips;
+window.filterClips = filterClips;
+window.onClipSearch = onClipSearch;
+window.openClipModal = openClipModal;
+window.openClipModalById = openClipModalById;
+window.closeClipModal = closeClipModal;
 window.addClipManually = addClipManually;
 window.deleteClip = deleteClip;
 window.clearAllClips = clearAllClips;
 window.handleClipWsEvent = handleClipWsEvent;
 
-// Hook into tab switching to auto-load clips when the tab is opened
+// Hook para auto-cargar clips cuando se abre la pestaña de clips
 (function patchSwitchTabForClips() {
   const origSwitchTab = window.switchTab;
   window.switchTab = function(tabId, ...args) {
     if (typeof origSwitchTab === 'function') origSwitchTab(tabId, ...args);
     if (tabId === 'tab-clips') {
-      loadClips();
+      loadClips(false);
     }
   };
-  // Also hook the nav click listener that many dashboards use
   document.addEventListener('click', function(e) {
     const li = e.target.closest('[data-tab="tab-clips"]');
     if (li) {
-      setTimeout(loadClips, 100);
+      setTimeout(() => loadClips(false), 100);
     }
   }, { capture: true, passive: true });
 })();
 
-// Hook WebSocket messages for clip events
+// Hook WebSocket para recibir clips en tiempo real
 (function hookWsForClips() {
-  const origWsOnMessage = window._orbibotWsMessageHandler;
-  // Intercept via a MutationObserver-free approach: patch the global handler if it exists
   const _wsCheckInterval = setInterval(() => {
-    // Try to locate the websocket object on the window
     if (window._orbibotSocket && window._orbibotSocket.onmessage) {
       const origHandler = window._orbibotSocket.onmessage;
       window._orbibotSocket.onmessage = function(ev) {
         try {
           const msg = JSON.parse(ev.data);
-          if (msg && (msg.event === 'clip_added' || msg.event === 'clip_deleted' || msg.event === 'clips_cleared')) {
+          if (msg && (msg.event === 'clip_added' || msg.event === 'clip_highlighted' || msg.event === 'clip_deleted' || msg.event === 'clips_cleared')) {
             handleClipWsEvent(msg.event, msg.data);
           }
         } catch (e) {}
@@ -11638,13 +11870,12 @@ window.handleClipWsEvent = handleClipWsEvent;
     }
   }, 1000);
 
-  // Also handle MQTT broker messages (used by OBS widgets)
   const origMqttMsg = window.onMqttMessage;
   if (typeof origMqttMsg === 'function') {
     window.onMqttMessage = function(topic, payload) {
       try {
         const msg = typeof payload === 'string' ? JSON.parse(payload) : payload;
-        if (msg && (msg.event === 'clip_added' || msg.event === 'clip_deleted' || msg.event === 'clips_cleared')) {
+        if (msg && (msg.event === 'clip_added' || msg.event === 'clip_highlighted' || msg.event === 'clip_deleted' || msg.event === 'clips_cleared')) {
           handleClipWsEvent(msg.event, msg.data);
         }
       } catch (e) {}
@@ -11652,6 +11883,7 @@ window.handleClipWsEvent = handleClipWsEvent;
     };
   }
 })();
+
 
 
 

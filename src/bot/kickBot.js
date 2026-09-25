@@ -2,6 +2,7 @@ const WebSocket = require('ws');
 const storage = require('../services/storage');
 const ttsService = require('../services/ttsService');
 const songRequest = require('../services/songRequest');
+const clipService = require('../services/clipService');
 
 class KickBot {
   constructor() {
@@ -303,7 +304,7 @@ class KickBot {
     }
   }
 
-  handlePusherPacket(packet) {
+  async handlePusherPacket(packet) {
     if (!packet || !packet.event) return;
 
     // 1. EVENTO DE MENSAJE DE CHAT
@@ -526,9 +527,9 @@ class KickBot {
           }
         }
 
-        // ============= !clip command =============
-        if (firstWord === '!clip') {
-          const clipArg = trimmed.slice(6).trim();
+        // ============= !clip / !clips command =============
+        if (firstWord === '!clip' || firstWord === '!clips') {
+          const clipArg = trimmed.replace(/^!clips?\s*/i, '').trim();
           const kickClipRegex = /https?:\/\/kick\.com\/[^/]+\/clips\/([A-Za-z0-9_-]+)/i;
           let clipUrl = '';
           let clipId = '';
@@ -546,7 +547,7 @@ class KickBot {
             const newClip = {
               id: 'clip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
               url: clipUrl,
-              title: `Clip pedido por @${username}`,
+              title: `Clip compartido por @${username}`,
               requester: username,
               platform: 'kick',
               clipId,
@@ -556,9 +557,20 @@ class KickBot {
             if (clips.length > 100) clips.splice(100);
             storage.saveClips(clips);
             this.broadcast('clip_added', newClip);
-            this.sendMessage(this.currentChannel, `🎬 ¡Clip de @${username} guardado! Puedes verlo en el panel de OrbyxBot.`);
+            this.sendMessage(this.currentChannel, `🎬 ¡Clip de @${username} guardado en el panel!`);
           } else {
-            this.sendMessage(this.currentChannel, `@${username}, usa: !clip <URL del clip> — Ej: !clip https://kick.com/.../clips/...`);
+            // Si el usuario escribe solo !clip o !clips: obtener un clip ya realizado en el canal y mostrarlo
+            try {
+              const channelClip = await clipService.getRandomOrLatestClip('kick');
+              if (channelClip && channelClip.url) {
+                this.sendMessage(this.currentChannel, `🎬 Clip de @${channelClip.broadcaster || this.currentChannel}: "${channelClip.title}" 👉 ${channelClip.url}`);
+                this.broadcast('clip_highlighted', channelClip);
+              } else {
+                this.sendMessage(this.currentChannel, `@${username}, el canal aún no tiene clips creados o puedes compartir uno con !clip <URL>`);
+              }
+            } catch (clipErr) {
+              this.sendMessage(this.currentChannel, `@${username}, usa: !clip <URL del clip> para guardarlo en el panel.`);
+            }
           }
           return;
         }

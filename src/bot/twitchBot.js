@@ -2,6 +2,7 @@ const tmi = require('tmi.js');
 const storage = require('../services/storage');
 const songRequest = require('../services/songRequest');
 const ttsService = require('../services/ttsService');
+const clipService = require('../services/clipService');
 
 class TwitchBot {
   constructor() {
@@ -545,11 +546,10 @@ class TwitchBot {
         }
       }
 
-      // ============= !clip command =============
-      // Any viewer can run !clip to register a Twitch clip in the dashboard
-      if (firstWord === '!clip') {
-        const clipArg = trimmed.slice(6).trim(); // text after "!clip "
-        // Accept a Twitch clip URL or clip ID
+      // ============= !clip / !clips command =============
+      // If viewer sends a URL: saves it to dashboard. If viewer runs !clip without URL: returns a real channel clip!
+      if (firstWord === '!clip' || firstWord === '!clips') {
+        const clipArg = trimmed.replace(/^!clips?\s*/i, '').trim();
         const twitchClipRegex = /https?:\/\/(?:clips\.twitch\.tv\/|www\.twitch\.tv\/\w+\/clip\/)([A-Za-z0-9_-]+)/i;
         let clipUrl = '';
         let clipId = '';
@@ -559,11 +559,7 @@ class TwitchBot {
           const m = clipArg.match(twitchClipRegex);
           clipId = m ? m[1] : '';
         } else if (/^https?:\/\//i.test(clipArg)) {
-          // Generic URL (e.g. Medal, Streamable, etc.)
           clipUrl = clipArg;
-        } else if (clipArg) {
-          // Treat bare text as a clip title / comment without a URL — skip
-          clipUrl = '';
         }
 
         if (clipUrl) {
@@ -571,7 +567,7 @@ class TwitchBot {
           const newClip = {
             id: 'clip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
             url: clipUrl,
-            title: `Clip pedido por @${username}`,
+            title: `Clip compartido por @${username}`,
             requester: username,
             platform: 'twitch',
             clipId,
@@ -581,9 +577,20 @@ class TwitchBot {
           if (clips.length > 100) clips.splice(100);
           storage.saveClips(clips);
           this.broadcast('clip_added', newClip);
-          this.sendMessage(channel, `🎬 ¡Clip de @${username} guardado! Puedes verlo en el panel de OrbyxBot.`);
+          this.sendMessage(channel, `🎬 ¡Clip de @${username} guardado en el panel!`);
         } else {
-          this.sendMessage(channel, `@${username}, usa: !clip <URL del clip> — Ej: !clip https://clips.twitch.tv/...`);
+          // Si el usuario escribe solo !clip o !clips: obtener un clip ya realizado en el canal y mostrarlo
+          try {
+            const channelClip = await clipService.getRandomOrLatestClip('twitch');
+            if (channelClip && channelClip.url) {
+              this.sendMessage(channel, `🎬 Clip de @${channelClip.broadcaster || channel.replace('#', '')}: "${channelClip.title}" 👉 ${channelClip.url}`);
+              this.broadcast('clip_highlighted', channelClip);
+            } else {
+              this.sendMessage(channel, `@${username}, el canal aún no tiene clips creados o puedes compartir uno con !clip <URL>`);
+            }
+          } catch (clipErr) {
+            this.sendMessage(channel, `@${username}, usa: !clip <URL del clip> para guardarlo en el panel.`);
+          }
         }
         return;
       }

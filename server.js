@@ -13,6 +13,7 @@ const kickBot = require('./src/bot/kickBot');
 const songRequest = require('./src/services/songRequest');
 const ttsService = require('./src/services/ttsService');
 const voiceCatalog = require('./src/services/voiceCatalog');
+const clipService = require('./src/services/clipService');
 
 const app = express();
 const server = http.createServer(app);
@@ -1071,7 +1072,28 @@ app.post('/api/alerts', (req, res) => {
 });
 
 // ================= 🎬 CLIPS API =================
-// GET all clips
+// GET channel clips (Twitch & Kick channel clips + chat clips)
+app.get('/api/clips/channel', async (req, res) => {
+  try {
+    const forceRefresh = req.query.refresh === '1' || req.query.force === 'true';
+    const summary = await clipService.getClipsSummary(forceRefresh);
+    res.json(summary);
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET random or latest clip for a platform
+app.get('/api/clips/random', async (req, res) => {
+  try {
+    const clip = await clipService.getRandomOrLatestClip(req.query.platform || 'twitch');
+    res.json({ success: !!clip, clip });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET all manual/chat clips
 app.get('/api/clips', (req, res) => {
   res.json(storage.getClips());
 });
