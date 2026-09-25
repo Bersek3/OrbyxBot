@@ -526,6 +526,43 @@ class KickBot {
           }
         }
 
+        // ============= !clip command =============
+        if (firstWord === '!clip') {
+          const clipArg = trimmed.slice(6).trim();
+          const kickClipRegex = /https?:\/\/kick\.com\/[^/]+\/clips\/([A-Za-z0-9_-]+)/i;
+          let clipUrl = '';
+          let clipId = '';
+
+          if (kickClipRegex.test(clipArg)) {
+            clipUrl = clipArg;
+            const m = clipArg.match(kickClipRegex);
+            clipId = m ? m[1] : '';
+          } else if (/^https?:\/\//i.test(clipArg)) {
+            clipUrl = clipArg;
+          }
+
+          if (clipUrl) {
+            const clips = storage.getClips();
+            const newClip = {
+              id: 'clip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+              url: clipUrl,
+              title: `Clip pedido por @${username}`,
+              requester: username,
+              platform: 'kick',
+              clipId,
+              createdAt: Date.now()
+            };
+            clips.unshift(newClip);
+            if (clips.length > 100) clips.splice(100);
+            storage.saveClips(clips);
+            this.broadcast('clip_added', newClip);
+            this.sendMessage(this.currentChannel, `🎬 ¡Clip de @${username} guardado! Puedes verlo en el panel de OrbyxBot.`);
+          } else {
+            this.sendMessage(this.currentChannel, `@${username}, usa: !clip <URL del clip> — Ej: !clip https://kick.com/.../clips/...`);
+          }
+          return;
+        }
+
         // Procesar Comandos Personalizados de Chat en Kick (storage.getCommands)
         const commands = storage.getCommands();
         const matchedCmd = commands.find(c => c.enabled && c.name && c.name.toLowerCase() === firstWord);

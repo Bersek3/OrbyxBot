@@ -1070,6 +1070,64 @@ app.post('/api/alerts', (req, res) => {
   res.json({ success: true, alerts });
 });
 
+// ================= 🎬 CLIPS API =================
+// GET all clips
+app.get('/api/clips', (req, res) => {
+  res.json(storage.getClips());
+});
+
+// POST add a new clip (created via !clip command or manually from dashboard)
+app.post('/api/clips', (req, res) => {
+  try {
+    const { url, title, requester, platform, clipId } = req.body;
+    if (!url) return res.status(400).json({ success: false, message: 'URL del clip requerida.' });
+    const clips = storage.getClips();
+    const newClip = {
+      id: clipId || ('clip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
+      url: url.trim(),
+      title: (title || 'Clip de ' + (requester || 'Stream')).trim(),
+      requester: requester || 'Streamer',
+      platform: platform || 'twitch',
+      createdAt: Date.now()
+    };
+    clips.unshift(newClip);
+    // Keep max 100 clips
+    if (clips.length > 100) clips.splice(100);
+    storage.saveClips(clips);
+    broadcast('clip_added', newClip);
+    res.json({ success: true, clip: newClip, clips });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE a clip by id
+app.delete('/api/clips/:id', (req, res) => {
+  try {
+    const { id } = req.params;
+    let clips = storage.getClips();
+    clips = clips.filter(c => c.id !== id);
+    storage.saveClips(clips);
+    broadcast('clip_deleted', { id });
+    res.json({ success: true, clips });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// DELETE all clips
+app.delete('/api/clips', (req, res) => {
+  try {
+    storage.saveClips([]);
+    broadcast('clips_cleared', {});
+    res.json({ success: true, clips: [] });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+
+
 // Channel Points Rewards
 app.get('/api/rewards', (req, res) => {
   res.json(storage.getRewards());

@@ -1272,6 +1272,18 @@ class StorageService {
     return list;
   }
 
+  // ================= 🎬 CLIPS DEL CHAT =================
+  getClips() {
+    return readJSON('clips.json', []);
+  }
+
+  saveClips(clips) {
+    const list = Array.isArray(clips) ? clips : [];
+    writeJSON('clips.json', list);
+    this.syncToCloud('clips', list);
+    return list;
+  }
+
   getCustomSounds() {
     return readJSON('custom_sounds.json', []);
   }

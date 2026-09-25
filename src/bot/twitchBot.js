@@ -545,6 +545,49 @@ class TwitchBot {
         }
       }
 
+      // ============= !clip command =============
+      // Any viewer can run !clip to register a Twitch clip in the dashboard
+      if (firstWord === '!clip') {
+        const clipArg = trimmed.slice(6).trim(); // text after "!clip "
+        // Accept a Twitch clip URL or clip ID
+        const twitchClipRegex = /https?:\/\/(?:clips\.twitch\.tv\/|www\.twitch\.tv\/\w+\/clip\/)([A-Za-z0-9_-]+)/i;
+        let clipUrl = '';
+        let clipId = '';
+
+        if (twitchClipRegex.test(clipArg)) {
+          clipUrl = clipArg;
+          const m = clipArg.match(twitchClipRegex);
+          clipId = m ? m[1] : '';
+        } else if (/^https?:\/\//i.test(clipArg)) {
+          // Generic URL (e.g. Medal, Streamable, etc.)
+          clipUrl = clipArg;
+        } else if (clipArg) {
+          // Treat bare text as a clip title / comment without a URL — skip
+          clipUrl = '';
+        }
+
+        if (clipUrl) {
+          const clips = storage.getClips();
+          const newClip = {
+            id: 'clip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+            url: clipUrl,
+            title: `Clip pedido por @${username}`,
+            requester: username,
+            platform: 'twitch',
+            clipId,
+            createdAt: Date.now()
+          };
+          clips.unshift(newClip);
+          if (clips.length > 100) clips.splice(100);
+          storage.saveClips(clips);
+          this.broadcast('clip_added', newClip);
+          this.sendMessage(channel, `🎬 ¡Clip de @${username} guardado! Puedes verlo en el panel de OrbyxBot.`);
+        } else {
+          this.sendMessage(channel, `@${username}, usa: !clip <URL del clip> — Ej: !clip https://clips.twitch.tv/...`);
+        }
+        return;
+      }
+
       // Check Custom Commands
       const commands = storage.getCommands();
       const matchedCmd = commands.find(c => c.enabled && c.name.toLowerCase() === firstWord);
