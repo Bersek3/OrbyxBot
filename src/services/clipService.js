@@ -86,7 +86,7 @@ class ClipService {
         createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
         platform: 'twitch',
         source: 'channel'
-      }));
+      })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     } catch (err) {
       console.error('[ClipService] Error al obtener clips de Twitch:', err.message);
       return [];
@@ -132,7 +132,7 @@ class ClipService {
         createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
         platform: 'kick',
         source: 'channel'
-      }));
+      })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     } catch (err) {
       console.warn('[ClipService] Error al obtener clips de Kick:', err.message);
       return [];
@@ -148,32 +148,47 @@ class ClipService {
     const twitchChannel = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
     const kickChannel = (config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
 
+    const sortByDateDesc = (arr) => {
+      return [...(arr || [])].sort((a, b) => {
+        const tA = Number(a.createdAt) || (a.created_at ? new Date(a.created_at).getTime() : 0);
+        const tB = Number(b.createdAt) || (b.created_at ? new Date(b.created_at).getTime() : 0);
+        return tB - tA;
+      });
+    };
+
     // Usar caché si aún está fresca
     if (!forceRefresh && (now - this.cache.lastUpdated < this.cacheTtlMs) && (this.cache.twitch.length > 0 || this.cache.kick.length > 0)) {
-      const chatClips = (storage.getClips() || []).map(c => ({ ...c, source: c.source || 'chat' }));
+      const chatClips = sortByDateDesc((storage.getClips() || []).map(c => ({ ...c, source: c.source || 'chat' })));
+      const twitchClips = sortByDateDesc(this.cache.twitch);
+      const kickClips = sortByDateDesc(this.cache.kick);
+      const allClips = sortByDateDesc([...twitchClips, ...kickClips, ...chatClips]);
+
       return {
         success: true,
         channel: { twitch: twitchChannel, kick: kickChannel },
-        twitchClips: this.cache.twitch,
-        kickClips: this.cache.kick,
+        twitchClips,
+        kickClips,
         chatClips,
-        allClips: [...this.cache.twitch, ...this.cache.kick, ...chatClips],
+        allClips,
         lastUpdated: this.cache.lastUpdated,
         fromCache: true
       };
     }
 
     // Actualizar en paralelo
-    const [twitchClips, kickClips] = await Promise.all([
+    const [rawTwitch, rawKick] = await Promise.all([
       this.fetchTwitchClips(50),
       this.fetchKickClips(50)
     ]);
 
+    const twitchClips = sortByDateDesc(rawTwitch);
+    const kickClips = sortByDateDesc(rawKick);
     this.cache.twitch = twitchClips;
     this.cache.kick = kickClips;
     this.cache.lastUpdated = now;
 
-    const chatClips = (storage.getClips() || []).map(c => ({ ...c, source: c.source || 'chat' }));
+    const chatClips = sortByDateDesc((storage.getClips() || []).map(c => ({ ...c, source: c.source || 'chat' })));
+    const allClips = sortByDateDesc([...twitchClips, ...kickClips, ...chatClips]);
 
     return {
       success: true,
@@ -181,7 +196,7 @@ class ClipService {
       twitchClips,
       kickClips,
       chatClips,
-      allClips: [...twitchClips, ...kickClips, ...chatClips],
+      allClips,
       lastUpdated: now,
       fromCache: false
     };

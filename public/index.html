@@ -2632,8 +2632,16 @@ console.log('Widget personalizado cargado');"></textarea>
                 💬 Chat (!clip) (<span id="filterCountChat">0</span>)
               </button>
             </div>
-            <div style="flex: 1; max-width: 320px; min-width: 200px;">
-              <input type="text" id="clipsSearchInput" class="form-control form-control-sm" placeholder="🔍 Buscar por título o creador..." oninput="onClipSearch(this.value)" style="border-radius: 20px; font-size: 13px;">
+            <div style="display: flex; gap: 10px; align-items: center; flex: 1; justify-content: flex-end; flex-wrap: wrap;">
+              <select id="clipsSortSelect" class="form-control form-control-sm" onchange="onClipSortChange(this.value)" style="border-radius: 20px; font-size: 13px; width: auto; min-width: 175px; background: rgba(14,18,30,0.9); color: #cbd5e1; border: 1px solid rgba(0,242,254,0.3); padding: 5px 12px; cursor: pointer; font-weight: 600;">
+                <option value="newest" selected>⏱️ Más recientes</option>
+                <option value="oldest">⌛ Más antiguos</option>
+                <option value="views">👁️ Más vistos</option>
+                <option value="title">🔤 Título (A-Z)</option>
+              </select>
+              <div style="max-width: 320px; min-width: 200px; flex: 1;">
+                <input type="text" id="clipsSearchInput" class="form-control form-control-sm" placeholder="🔍 Buscar por título o creador..." oninput="onClipSearch(this.value)" style="border-radius: 20px; font-size: 13px;">
+              </div>
             </div>
           </div>
 

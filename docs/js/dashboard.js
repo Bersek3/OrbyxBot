@@ -11411,6 +11411,25 @@ let allClipsStore = {
 };
 let currentClipFilter = 'all';
 let currentClipSearch = '';
+let currentClipSort = 'newest'; // 'newest' (más nuevos primero) | 'oldest' | 'views' | 'title'
+
+function getClipTimestamp(clip) {
+  if (!clip) return 0;
+  const raw = clip.createdAt || clip.created_at || clip.date || clip.timestamp;
+  if (raw) {
+    if (typeof raw === 'number' && !isNaN(raw)) return raw;
+    const parsed = new Date(raw).getTime();
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  if (typeof clip.id === 'string') {
+    const match = clip.id.match(/^clip_(\d+)/);
+    if (match && match[1]) {
+      const idTime = parseInt(match[1], 10);
+      if (!isNaN(idTime) && idTime > 0) return idTime;
+    }
+  }
+  return 0;
+}
 
 async function loadClips(forceRefresh = false) {
   const syncBtn = document.getElementById('btnSyncChannelClips');
@@ -11444,13 +11463,21 @@ async function loadClips(forceRefresh = false) {
     }
 
     if (data) {
+      const sortByDateDesc = (arr) => {
+        return [...(arr || [])].sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
+      };
+
       allClipsStore = {
-        all: data.allClips || [],
-        twitch: data.twitchClips || [],
-        kick: data.kickClips || [],
-        chat: data.chatClips || [],
+        all: sortByDateDesc(data.allClips || []),
+        twitch: sortByDateDesc(data.twitchClips || []),
+        kick: sortByDateDesc(data.kickClips || []),
+        chat: sortByDateDesc(data.chatClips || []),
         channel: data.channel || {}
       };
+
+      try {
+        localStorage.setItem('orbibot_clips_cache', JSON.stringify(data));
+      } catch (e) {}
 
       // Actualizar nombres de canal
       const twNameEl = document.getElementById('clipTwitchName');
@@ -11476,6 +11503,26 @@ async function loadClips(forceRefresh = false) {
     }
   } catch (e) {
     console.warn('[Clips] Error al cargar clips:', e);
+    // Fallback a caché local si la red falla o en GitHub Pages
+    try {
+      const cached = localStorage.getItem('orbibot_clips_cache');
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        if (parsed && (parsed.allClips || parsed.twitchClips || parsed.kickClips || parsed.chatClips)) {
+          const sortByDateDesc = (arr) => [...(arr || [])].sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
+          allClipsStore = {
+            all: sortByDateDesc(parsed.allClips || []),
+            twitch: sortByDateDesc(parsed.twitchClips || []),
+            kick: sortByDateDesc(parsed.kickClips || []),
+            chat: sortByDateDesc(parsed.chatClips || []),
+            channel: parsed.channel || {}
+          };
+          applyClipsFilter();
+          return;
+        }
+      }
+    } catch (cacheErr) {}
+
     if (emptyState) {
       emptyState.innerHTML = `
         <div style="font-size: 56px; margin-bottom: 16px;">⚠️</div>
@@ -11510,16 +11557,21 @@ function onClipSearch(query) {
   applyClipsFilter();
 }
 
+function onClipSortChange(sortMode) {
+  currentClipSort = sortMode || 'newest';
+  applyClipsFilter();
+}
+
 function applyClipsFilter() {
   let list = [];
   if (currentClipFilter === 'twitch') {
-    list = allClipsStore.twitch;
+    list = [...allClipsStore.twitch];
   } else if (currentClipFilter === 'kick') {
-    list = allClipsStore.kick;
+    list = [...allClipsStore.kick];
   } else if (currentClipFilter === 'chat') {
-    list = allClipsStore.chat;
+    list = [...allClipsStore.chat];
   } else {
-    list = allClipsStore.all;
+    list = [...allClipsStore.all];
   }
 
   // Filtrar por término de búsqueda si existe
@@ -11531,6 +11583,23 @@ function applyClipsFilter() {
       return title.includes(currentClipSearch) || creator.includes(currentClipSearch) || broadcaster.includes(currentClipSearch);
     });
   }
+
+  // Ordenar clips: por defecto de más nuevos a más antiguos
+  list.sort((a, b) => {
+    if (currentClipSort === 'oldest') {
+      return getClipTimestamp(a) - getClipTimestamp(b);
+    }
+    if (currentClipSort === 'views') {
+      const vA = Number(a.views || a.viewCount || a.view_count || 0);
+      const vB = Number(b.views || b.viewCount || b.view_count || 0);
+      return vB - vA;
+    }
+    if (currentClipSort === 'title') {
+      return (a.title || '').localeCompare(b.title || '');
+    }
+    // 'newest' por defecto (más recientes primero)
+    return getClipTimestamp(b) - getClipTimestamp(a);
+  });
 
   renderClips(list);
 }
@@ -11607,7 +11676,9 @@ function renderClips(clips) {
         </div>`;
     }
 
-    const dateStr = clip.createdAt ? new Date(clip.createdAt).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+    const clipTimestamp = getClipTimestamp(clip);
+    const dateStr = clipTimestamp ? new Date(clipTimestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+    const fullDateTitle = clipTimestamp ? new Date(clipTimestamp).toLocaleString('es-AR') : '';
     const creatorName = clip.creator || clip.requester || 'Streamer';
     const isDeletable = clip.source === 'chat' || !clip.source;
 
@@ -11620,7 +11691,7 @@ function renderClips(clips) {
         </div>
         <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #94a3b8;">
           <span title="Creado por @${creatorName}">👤 @${creatorName}</span>
-          <span>${dateStr}</span>
+          <span title="${fullDateTitle ? 'Fecha: ' + fullDateTitle : ''}" style="color: #cbd5e1; font-weight: 600;">📅 ${dateStr || 'Reciente'}</span>
         </div>
         <div style="display: flex; gap: 8px; margin-top: 4px;">
           <button onclick="openClipModalById('${clip.id}')"
@@ -11827,6 +11898,8 @@ window.loadClips = loadClips;
 window.renderClips = renderClips;
 window.filterClips = filterClips;
 window.onClipSearch = onClipSearch;
+window.onClipSortChange = onClipSortChange;
+window.getClipTimestamp = getClipTimestamp;
 window.openClipModal = openClipModal;
 window.openClipModalById = openClipModalById;
 window.closeClipModal = closeClipModal;

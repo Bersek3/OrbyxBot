@@ -1095,7 +1095,9 @@ app.get('/api/clips/random', async (req, res) => {
 
 // GET all manual/chat clips
 app.get('/api/clips', (req, res) => {
-  res.json(storage.getClips());
+  const clips = storage.getClips() || [];
+  clips.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
+  res.json(clips);
 });
 
 // POST add a new clip (created via !clip command or manually from dashboard)
