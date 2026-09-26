@@ -11027,6 +11027,11 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     connectInBrowserKickBot(appConfig.kick);
   }
 
+  // Pre-cargar clips del streamer asistido
+  if (typeof loadClips === 'function') {
+    loadClips(true).catch(() => {});
+  }
+
   showDashboardView('tab-dashboard');
   switchTab('tab-dashboard');
   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -11437,11 +11442,32 @@ function getSessionClipChannels() {
   let kick = '';
   let streamerId = '';
 
+  const supportId = (typeof adminTargetStreamerId !== 'undefined' && adminTargetStreamerId) || (typeof getSupportModeId === 'function' ? getSupportModeId() : null);
+
   // 1. Modo Soporte (Administrador gestionando un streamer específico)
-  if (typeof adminTargetStreamerId !== 'undefined' && adminTargetStreamerId) {
-    streamerId = adminTargetStreamerId.toLowerCase().trim();
-    tw = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+  if (supportId) {
+    streamerId = supportId.toLowerCase().trim();
+    tw = (appConfig?.twitch?.channel || appConfig?.twitch?.login || '').toLowerCase().replace(/^#/, '').trim();
     kick = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
+
+    // Búsqueda en adminStreamersCache si el canal aún está vacío o es un email
+    if ((!tw || tw.includes('@')) && typeof adminStreamersCache !== 'undefined' && Array.isArray(adminStreamersCache)) {
+      const match = adminStreamersCache.find(s => 
+        s.streamerId === supportId || 
+        (s.relatedIds && s.relatedIds.includes(supportId)) || 
+        (s.email && s.email.toLowerCase() === supportId.toLowerCase())
+      );
+      if (match) {
+        if (!tw || tw.includes('@')) tw = (match.twitchChannel || (Array.isArray(match.channels) && match.channels.find(c => c.startsWith('twitch:'))?.split(':')[1]?.trim()) || '').toLowerCase().replace(/^#/, '').trim();
+        if (!kick || kick.includes('@')) kick = (match.kickChannel || (Array.isArray(match.channels) && match.channels.find(c => c.startsWith('kick:'))?.split(':')[1]?.trim()) || '').toLowerCase().replace(/^@/, '').trim();
+      }
+    }
+
+    // Si sigue sin canal explícito y el ID del streamer no es un email, el streamerId mismo es el canal
+    if (!tw && !streamerId.includes('@')) {
+      tw = streamerId;
+    }
+
     return {
       twitch: tw,
       kick: kick,
@@ -11562,30 +11588,172 @@ async function loadClips(forceRefresh = false) {
   }
 
   try {
-    const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
     const cacheKey = `orbibot_clips_cache_${sessionChannels.twitch}_${sessionChannels.kick}_${sessionChannels.streamerId}`;
-
-    const params = new URLSearchParams();
-    if (sessionChannels.twitch) params.set('twitch', sessionChannels.twitch);
-    if (sessionChannels.kick) params.set('kick', sessionChannels.kick);
-    if (sessionChannels.streamerId) params.set('streamer', sessionChannels.streamerId);
-    params.set('refresh', forceRefresh ? '1' : '0');
-
-    // Consultar el endpoint de clips del canal pasando estrictamente los canales de esta sesión
-    let res = await fetch(`${BASE}/api/clips/channel?${params.toString()}`);
     let data = null;
 
-    if (res.ok) {
-      data = await res.json();
-    } else {
-      // Fallback a clips guardados pasando los filtros de canal de la sesión
-      res = await fetch(`${BASE}/api/clips?${params.toString()}`);
-      const list = await res.json();
+    // 1. Intentar consultar el servidor backend si está disponible
+    try {
+      const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
+      const params = new URLSearchParams();
+      if (sessionChannels.twitch) params.set('twitch', sessionChannels.twitch);
+      if (sessionChannels.kick) params.set('kick', sessionChannels.kick);
+      if (sessionChannels.streamerId) params.set('streamer', sessionChannels.streamerId);
+      params.set('refresh', forceRefresh ? '1' : '0');
+
+      const res = await fetch(`${BASE}/api/clips/channel?${params.toString()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json && (json.allClips || json.twitchClips || json.kickClips || json.channel)) {
+          data = json;
+        }
+      }
+    } catch (backendErr) {
+      console.log('[Clips] Backend no disponible o modo standalone, procediendo con cliente directo:', backendErr.message);
+    }
+
+    // 2. Si el backend no está disponible (GitHub Pages / Standalone), consultar directamente APIs cliente
+    if (!data) {
+      console.log(`🎬 [Clips Standalone] Consultando directamente para @${sessionChannels.twitch || sessionChannels.kick || sessionChannels.streamerId}...`);
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+      const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
+      const thirtyDaysAgoISO = new Date(thirtyDaysAgo).toISOString();
+
+      let twitchClips = [];
+      let kickClips = [];
+      let chatClips = [];
+
+      // A) Twitch Helix directo desde navegador
+      if (sessionChannels.twitch) {
+        try {
+          const twitchChannel = sessionChannels.twitch;
+          let broadcasterId = appConfig?.twitch?.userId || '';
+          let clientId = appConfig?.twitch?.clientId || 'yw1vr664ichms8an2x5lhji58v7ozk';
+          let token = (appConfig?.twitch?.oauthToken || '').replace(/^oauth:/i, '').trim();
+
+          // Buscar credenciales en localStorage
+          if (!token || !broadcasterId) {
+            try {
+              const twAuth = localStorage.getItem('orbibot_twitch_auth');
+              if (twAuth) {
+                const p = JSON.parse(twAuth);
+                if (!token) token = (p.oauthToken || '').replace(/^oauth:/i, '').trim();
+                if (!broadcasterId) broadcasterId = p.userId || '';
+                if (p.clientId) clientId = p.clientId;
+              }
+            } catch(e) {}
+          }
+
+          // Buscar credenciales en Supabase para el streamer
+          if ((!token || !broadcasterId) && supabaseClient) {
+            try {
+              const targetScopes = [sessionChannels.streamerId, sessionChannels.twitch, 'plantasi'].filter(Boolean);
+              const { data: supaAuth } = await supabaseClient
+                .from('orbibot_settings')
+                .select('value')
+                .in('streamer_id', targetScopes)
+                .eq('key', 'twitch_auth')
+                .limit(1);
+              if (supaAuth && supaAuth.length > 0 && supaAuth[0].value) {
+                const v = typeof supaAuth[0].value === 'string' ? JSON.parse(supaAuth[0].value) : supaAuth[0].value;
+                if (!token && v.oauthToken) token = v.oauthToken.replace(/^oauth:/i, '').trim();
+                if (!broadcasterId && v.userId) broadcasterId = v.userId;
+                if (v.clientId) clientId = v.clientId;
+              }
+            } catch(e) {}
+          }
+
+          // Si falta broadcasterId pero tenemos token y clientId, resolver con Helix
+          if (!broadcasterId && clientId && token) {
+            try {
+              const uRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(twitchChannel)}`, {
+                headers: { 'Client-Id': clientId, 'Authorization': `Bearer ${token}` }
+              });
+              if (uRes.ok) {
+                const uJson = await uRes.json();
+                if (uJson.data && uJson.data.length > 0) broadcasterId = uJson.data[0].id;
+              }
+            } catch(e) {}
+          }
+
+          // Consultar clips vía Helix con started_at de 30 días
+          if (broadcasterId && clientId && token) {
+            const clipsUrl = `https://api.twitch.tv/helix/clips?broadcaster_id=${encodeURIComponent(broadcasterId)}&started_at=${encodeURIComponent(thirtyDaysAgoISO)}&first=50`;
+            const clipsRes = await fetch(clipsUrl, {
+              headers: { 'Client-Id': clientId, 'Authorization': `Bearer ${token}` }
+            });
+            if (clipsRes.ok) {
+              const clipsJson = await clipsRes.json();
+              const raw = clipsJson.data || [];
+              twitchClips = raw.map(c => ({
+                id: c.id,
+                url: c.url,
+                embedUrl: c.embed_url,
+                title: c.title || 'Clip de Twitch',
+                creator: c.creator_name || 'Desconocido',
+                broadcaster: c.broadcaster_name || twitchChannel,
+                thumbnail: c.thumbnail_url,
+                views: c.view_count || 0,
+                duration: Math.round(c.duration || 0),
+                createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
+                platform: 'twitch',
+                source: 'channel'
+              }));
+            }
+          }
+        } catch(twErr) {
+          console.warn('[Clips] Error en consulta directa Twitch Helix:', twErr);
+        }
+      }
+
+      // B) Kick API pública directa
+      if (sessionChannels.kick) {
+        try {
+          const kRes = await fetch(`https://kick.com/api/v2/channels/${encodeURIComponent(sessionChannels.kick)}/clips`, {
+            headers: { 'Accept': 'application/json' }
+          });
+          if (kRes.ok) {
+            const kJson = await kRes.json();
+            const raw = Array.isArray(kJson.clips) ? kJson.clips : [];
+            kickClips = raw.map(c => ({
+              id: c.id,
+              url: `https://kick.com/${sessionChannels.kick}/clips/${c.id}`,
+              embedUrl: c.clip_url || c.video_url || '',
+              title: c.title || 'Clip de Kick',
+              creator: c.creator?.username || 'Anónimo',
+              broadcaster: sessionChannels.kick,
+              thumbnail: c.thumbnail_url || (c.channel?.profile_picture || ''),
+              views: c.views || c.view_count || 0,
+              duration: Math.round(c.duration || 0),
+              createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
+              platform: 'kick',
+              source: 'channel'
+            }));
+          }
+        } catch(kErr) {
+          console.warn('[Clips] Error en consulta directa Kick:', kErr);
+        }
+      }
+
+      // C) Clips guardados de chat desde Supabase
+      if (supabaseClient && sessionChannels.streamerId) {
+        try {
+          const { data: supaClips } = await supabaseClient
+            .from('orbibot_settings')
+            .select('value')
+            .in('streamer_id', [sessionChannels.streamerId, sessionChannels.twitch].filter(Boolean))
+            .eq('key', 'clips')
+            .limit(1);
+          if (supaClips && supaClips.length > 0 && Array.isArray(supaClips[0].value)) {
+            chatClips = supaClips[0].value;
+          }
+        } catch(e) {}
+      }
+
       data = {
-        allClips: Array.isArray(list) ? list : [],
-        twitchClips: Array.isArray(list) ? list.filter(c => c.platform === 'twitch') : [],
-        kickClips: Array.isArray(list) ? list.filter(c => c.platform === 'kick') : [],
-        chatClips: Array.isArray(list) ? list : [],
+        allClips: [...twitchClips, ...kickClips, ...chatClips],
+        twitchClips,
+        kickClips,
+        chatClips,
         channel: { twitch: sessionChannels.twitch, kick: sessionChannels.kick }
       };
     }

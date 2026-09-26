@@ -9,17 +9,36 @@ class ClipService {
   /**
    * Obtiene los clips de Twitch directamente de la API Helix para el canal especificado (últimos 30 días)
    */
-  async fetchTwitchClips(targetChannel = null, limit = 50) {
+  async fetchTwitchClips(targetChannel = null, limit = 50, streamerId = null) {
     try {
       const config = storage.getConfig();
       const twitchCfg = config.twitch || {};
       const channelName = (targetChannel !== null ? targetChannel : (twitchCfg.channel || '')).toLowerCase().replace(/^#/, '').trim();
-      const clientId = twitchCfg.clientId || process.env.TWITCH_CLIENT_ID || 'yw1vr664ichms8an2x5lhji58v7ozk';
-      const token = (twitchCfg.oauthToken || process.env.TWITCH_OAUTH_TOKEN || '').replace(/^oauth:/i, '').trim();
+      let clientId = twitchCfg.clientId || process.env.TWITCH_CLIENT_ID || 'yw1vr664ichms8an2x5lhji58v7ozk';
+      let token = (twitchCfg.oauthToken || process.env.TWITCH_OAUTH_TOKEN || '').replace(/^oauth:/i, '').trim();
 
       if (!channelName) return [];
 
       let broadcasterId = (channelName === (twitchCfg.channel || '').toLowerCase().replace(/^#/, '').trim()) ? twitchCfg.userId : null;
+
+      // Consultar credenciales específicas del streamer en Supabase si están disponibles
+      if ((!broadcasterId || !token) && storage.supabase) {
+        try {
+          const searchScopes = [channelName, streamerId].filter(Boolean);
+          const { data: supaAuth } = await storage.supabase
+            .from('orbibot_settings')
+            .select('value')
+            .in('streamer_id', searchScopes)
+            .eq('key', 'twitch_auth')
+            .limit(1);
+          if (supaAuth && supaAuth.length > 0 && supaAuth[0].value) {
+            const v = typeof supaAuth[0].value === 'string' ? JSON.parse(supaAuth[0].value) : supaAuth[0].value;
+            if (v.userId) broadcasterId = v.userId;
+            if (v.oauthToken) token = v.oauthToken.replace(/^oauth:/i, '').trim();
+            if (v.clientId) clientId = v.clientId;
+          }
+        } catch (e) {}
+      }
 
       // Si no tenemos broadcasterId para este canal específico, lo resolvemos con el login del canal
       if (!broadcasterId && clientId && token) {
@@ -226,7 +245,7 @@ class ClipService {
 
     // Actualizar en paralelo para los canales de esta sesión
     const [rawTwitch, rawKick] = await Promise.all([
-      twitchChannel ? this.fetchTwitchClips(twitchChannel, 50) : Promise.resolve([]),
+      twitchChannel ? this.fetchTwitchClips(twitchChannel, 50, streamerId) : Promise.resolve([]),
       kickChannel ? this.fetchKickClips(kickChannel, 50) : Promise.resolve([])
     ]);
 
