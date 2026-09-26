@@ -1072,11 +1072,19 @@ app.post('/api/alerts', (req, res) => {
 });
 
 // ================= 🎬 CLIPS API =================
-// GET channel clips (Twitch & Kick channel clips + chat clips)
+// GET channel clips (Twitch & Kick channel clips + chat clips, isolated per streamer/session, last 30 days)
 app.get('/api/clips/channel', async (req, res) => {
   try {
     const forceRefresh = req.query.refresh === '1' || req.query.force === 'true';
-    const summary = await clipService.getClipsSummary(forceRefresh);
+    const twitchChannel = req.query.twitch !== undefined ? req.query.twitch : req.query.twitchChannel;
+    const kickChannel = req.query.kick !== undefined ? req.query.kick : req.query.kickChannel;
+    const streamerId = req.query.streamer || req.query.streamerId || req.query.channel;
+
+    const summary = await clipService.getClipsSummary(forceRefresh, {
+      twitchChannel,
+      kickChannel,
+      streamerId
+    });
     res.json(summary);
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -1086,16 +1094,36 @@ app.get('/api/clips/channel', async (req, res) => {
 // GET random or latest clip for a platform
 app.get('/api/clips/random', async (req, res) => {
   try {
-    const clip = await clipService.getRandomOrLatestClip(req.query.platform || 'twitch');
+    const channelName = req.query.channel || req.query.twitch || req.query.kick || '';
+    const clip = await clipService.getRandomOrLatestClip(req.query.platform || 'twitch', channelName);
     res.json({ success: !!clip, clip });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// GET all manual/chat clips
+// GET all manual/chat clips (filtered to last 30 days and optional streamer)
 app.get('/api/clips', (req, res) => {
-  const clips = storage.getClips() || [];
+  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+  const twitch = (req.query.twitch || req.query.twitchChannel || '').toLowerCase();
+  const kick = (req.query.kick || req.query.kickChannel || '').toLowerCase();
+  const streamer = (req.query.streamer || req.query.streamerId || '').toLowerCase();
+
+  let clips = storage.getClips() || [];
+  clips = clips.filter(c => {
+    const ts = Number(c.createdAt) || (c.created_at ? new Date(c.created_at).getTime() : 0);
+    if (ts < thirtyDaysAgo) return false;
+    if (twitch || kick || streamer) {
+      const cChan = (c.channel || '').toLowerCase().replace(/^[#@]/, '');
+      const cStreamer = (c.streamerId || '').toLowerCase();
+      return (
+        (twitch && cChan === twitch) ||
+        (kick && cChan === kick) ||
+        (streamer && cStreamer === streamer)
+      );
+    }
+    return true;
+  });
   clips.sort((a, b) => (Number(b.createdAt) || 0) - (Number(a.createdAt) || 0));
   res.json(clips);
 });
@@ -1103,7 +1131,7 @@ app.get('/api/clips', (req, res) => {
 // POST add a new clip (created via !clip command or manually from dashboard)
 app.post('/api/clips', (req, res) => {
   try {
-    const { url, title, requester, platform, clipId } = req.body;
+    const { url, title, requester, platform, clipId, channel, streamerId } = req.body;
     if (!url) return res.status(400).json({ success: false, message: 'URL del clip requerida.' });
     const clips = storage.getClips();
     const newClip = {
@@ -1112,6 +1140,8 @@ app.post('/api/clips', (req, res) => {
       title: (title || 'Clip de ' + (requester || 'Stream')).trim(),
       requester: requester || 'Streamer',
       platform: platform || 'twitch',
+      channel: (channel || '').toLowerCase().replace(/^[#@]/, ''),
+      streamerId: (streamerId || '').toLowerCase(),
       createdAt: Date.now()
     };
     clips.unshift(newClip);
@@ -1139,9 +1169,25 @@ app.delete('/api/clips/:id', (req, res) => {
   }
 });
 
-// DELETE all clips
+// DELETE all clips (scoped to streamer if provided)
 app.delete('/api/clips', (req, res) => {
   try {
+    const streamer = (req.query.streamer || req.query.streamerId || '').toLowerCase();
+    const twitch = (req.query.twitch || '').toLowerCase();
+    const kick = (req.query.kick || '').toLowerCase();
+
+    if (streamer || twitch || kick) {
+      let clips = storage.getClips() || [];
+      clips = clips.filter(c => {
+        const cChan = (c.channel || '').toLowerCase().replace(/^[#@]/, '');
+        const cStreamer = (c.streamerId || '').toLowerCase();
+        const matchesThis = (twitch && cChan === twitch) || (kick && cChan === kick) || (streamer && cStreamer === streamer);
+        return !matchesThis;
+      });
+      storage.saveClips(clips);
+      broadcast('clips_cleared', { streamer, twitch, kick });
+      return res.json({ success: true, clips });
+    }
     storage.saveClips([]);
     broadcast('clips_cleared', {});
     res.json({ success: true, clips: [] });

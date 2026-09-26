@@ -564,12 +564,14 @@ class TwitchBot {
 
         if (clipUrl) {
           const clips = storage.getClips();
+          const cleanChan = channel.toLowerCase().replace(/^#/, '');
           const newClip = {
             id: 'clip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
             url: clipUrl,
             title: `Clip compartido por @${username}`,
             requester: username,
             platform: 'twitch',
+            channel: cleanChan,
             clipId,
             createdAt: Date.now()
           };
@@ -581,7 +583,8 @@ class TwitchBot {
         } else {
           // Si el usuario escribe solo !clip o !clips: obtener un clip ya realizado en el canal y mostrarlo
           try {
-            const channelClip = await clipService.getRandomOrLatestClip('twitch');
+            const cleanChan = channel.toLowerCase().replace(/^#/, '');
+            const channelClip = await clipService.getRandomOrLatestClip('twitch', cleanChan);
             if (channelClip && channelClip.url) {
               this.sendMessage(channel, `🎬 Clip de @${channelClip.broadcaster || channel.replace('#', '')}: "${channelClip.title}" 👉 ${channelClip.url}`);
               this.broadcast('clip_highlighted', channelClip);

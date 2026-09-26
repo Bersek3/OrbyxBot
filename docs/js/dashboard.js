@@ -11431,9 +11431,130 @@ function getClipTimestamp(clip) {
   return 0;
 }
 
+// Obtener canales de la sesión actual de forma aislada
+function getSessionClipChannels() {
+  let tw = '';
+  let kick = '';
+  let streamerId = '';
+
+  // 1. Modo Soporte (Administrador gestionando un streamer específico)
+  if (typeof adminTargetStreamerId !== 'undefined' && adminTargetStreamerId) {
+    streamerId = adminTargetStreamerId.toLowerCase().trim();
+    tw = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
+    kick = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
+    return {
+      twitch: tw,
+      kick: kick,
+      streamerId: streamerId,
+      isConfigured: Boolean(tw || kick),
+      isSupportMode: true,
+      isAdmin: false
+    };
+  }
+
+  // 2. Sesión activa del creador: canal de Twitch explícito
+  try {
+    const twAuth = localStorage.getItem('orbibot_twitch_auth');
+    if (twAuth) {
+      const p = JSON.parse(twAuth);
+      tw = (p.channel || p.login || p.displayName || '').toLowerCase().replace(/^#/, '').trim();
+    }
+  } catch (e) {}
+
+  if (!tw && appConfig?.twitch?.channel && (appConfig?.twitch?.connected || appConfig?.twitch?.botUsername || localStorage.getItem('orbibot_twitch_auth'))) {
+    tw = (appConfig.twitch.channel || '').toLowerCase().replace(/^#/, '').trim();
+  }
+
+  // 3. Canal de Kick explícito
+  try {
+    const kickAuth = localStorage.getItem('orbibot_kick_auth');
+    if (kickAuth) {
+      const p = JSON.parse(kickAuth);
+      kick = (p.channel || p.username || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
+    }
+  } catch (e) {}
+
+  if (!kick) {
+    const storedKick = localStorage.getItem('orbibot_kick_channel');
+    if (storedKick) {
+      kick = storedKick.toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
+    } else if (appConfig?.kick?.channel || appConfig?.kick?.username) {
+      kick = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
+    }
+  }
+
+  // 4. Streamer ID
+  if (typeof getActiveStreamerRoom === 'function') {
+    streamerId = getActiveStreamerRoom();
+  }
+
+  // Comprobar si el usuario es administrador sin canales propios configurados
+  const session = (typeof getUserSession === 'function') ? getUserSession() : null;
+  const isAdmin = Boolean(session && (session.role === 'admin' || session.is_admin || session.email === 'admin@orbibot.com' || (typeof currentUserRole !== 'undefined' && currentUserRole === 'admin')));
+
+  return {
+    twitch: tw,
+    kick: kick,
+    streamerId: streamerId,
+    isAdmin: isAdmin,
+    isConfigured: Boolean(tw || kick)
+  };
+}
+
 async function loadClips(forceRefresh = false) {
   const syncBtn = document.getElementById('btnSyncChannelClips');
   const emptyState = document.getElementById('clipsEmptyState');
+  const sessionChannels = getSessionClipChannels();
+
+  // Actualizar nombres de canal en la interfaz
+  const twNameEl = document.getElementById('clipTwitchName');
+  const kickNameEl = document.getElementById('clipKickName');
+  if (twNameEl) twNameEl.textContent = sessionChannels.twitch ? `@${sessionChannels.twitch}` : 'No vinculado';
+  if (kickNameEl) kickNameEl.textContent = sessionChannels.kick ? `@${sessionChannels.kick}` : 'No vinculado';
+
+  // Si el usuario (p. ej. administrador) no tiene canales vinculados en su sesión actual,
+  // NO consultar clips de otros canales y mostrar estado vacío informativo.
+  if (!sessionChannels.isConfigured) {
+    allClipsStore = { all: [], twitch: [], kick: [], chat: [], channel: {} };
+    const cAll = document.getElementById('filterCountAll');
+    const cTw = document.getElementById('filterCountTwitch');
+    const cKick = document.getElementById('filterCountKick');
+    const cChat = document.getElementById('filterCountChat');
+    const badge = document.getElementById('clipsCountBadge');
+    if (cAll) cAll.textContent = '0';
+    if (cTw) cTw.textContent = '0';
+    if (cKick) cKick.textContent = '0';
+    if (cChat) cChat.textContent = '0';
+    if (badge) badge.textContent = '0 clips';
+
+    const container = document.getElementById('clipsGridContainer');
+    if (container) {
+      Array.from(container.children).forEach(el => {
+        if (el.id !== 'clipsEmptyState') el.remove();
+      });
+    }
+
+    if (emptyState) {
+      emptyState.style.display = 'block';
+      if (sessionChannels.isAdmin) {
+        emptyState.innerHTML = `
+          <div style="font-size: 56px; margin-bottom: 16px;">🛡️</div>
+          <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">Sesión de Administrador</div>
+          <div style="font-size: 14px; color: #94a3b8; max-width: 480px; margin: 0 auto; line-height: 1.6;">
+            No tienes canales de Twitch o Kick asociados a tu cuenta de administrador. Los clips de otros streamers están aislados por privacidad.<br><br>
+            Para gestionar los clips de un streamer específico, entra en <strong>Modo Soporte</strong> desde <strong style="color: #facc15;">Administración & Soporte</strong> o vincula tu canal propio en <strong style="color: #00f2fe;">Conexiones</strong>.
+          </div>`;
+      } else {
+        emptyState.innerHTML = `
+          <div style="font-size: 56px; margin-bottom: 16px;">🎬</div>
+          <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">No hay canales vinculados en tu sesión</div>
+          <div style="font-size: 14px; color: #94a3b8; max-width: 440px; margin: 0 auto; line-height: 1.6;">
+            Para ver tus clips de los últimos 30 días, conecta tu canal de <strong style="color:#c084fc;">Twitch</strong> o <strong style="color:#86efac;">Kick</strong> en la pestaña <strong style="color:#00f2fe;">Conexiones</strong>.
+          </div>`;
+      }
+    }
+    return;
+  }
 
   if (syncBtn) {
     syncBtn.disabled = true;
@@ -11442,48 +11563,58 @@ async function loadClips(forceRefresh = false) {
 
   try {
     const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
-    
-    // Consultar el endpoint de clips del canal (Twitch + Kick + Chat)
-    let res = await fetch(`${BASE}/api/clips/channel?refresh=${forceRefresh ? '1' : '0'}`);
+    const cacheKey = `orbibot_clips_cache_${sessionChannels.twitch}_${sessionChannels.kick}_${sessionChannels.streamerId}`;
+
+    const params = new URLSearchParams();
+    if (sessionChannels.twitch) params.set('twitch', sessionChannels.twitch);
+    if (sessionChannels.kick) params.set('kick', sessionChannels.kick);
+    if (sessionChannels.streamerId) params.set('streamer', sessionChannels.streamerId);
+    params.set('refresh', forceRefresh ? '1' : '0');
+
+    // Consultar el endpoint de clips del canal pasando estrictamente los canales de esta sesión
+    let res = await fetch(`${BASE}/api/clips/channel?${params.toString()}`);
     let data = null;
 
     if (res.ok) {
       data = await res.json();
     } else {
-      // Fallback a clips guardados
-      res = await fetch(`${BASE}/api/clips`);
+      // Fallback a clips guardados pasando los filtros de canal de la sesión
+      res = await fetch(`${BASE}/api/clips?${params.toString()}`);
       const list = await res.json();
       data = {
-        allClips: list,
-        twitchClips: list.filter(c => c.platform === 'twitch'),
-        kickClips: list.filter(c => c.platform === 'kick'),
-        chatClips: list,
-        channel: {}
+        allClips: Array.isArray(list) ? list : [],
+        twitchClips: Array.isArray(list) ? list.filter(c => c.platform === 'twitch') : [],
+        kickClips: Array.isArray(list) ? list.filter(c => c.platform === 'kick') : [],
+        chatClips: Array.isArray(list) ? list : [],
+        channel: { twitch: sessionChannels.twitch, kick: sessionChannels.kick }
       };
     }
 
     if (data) {
-      const sortByDateDesc = (arr) => {
-        return [...(arr || [])].sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
+      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+      const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
+
+      // Filtrar estrictamente solo clips de los últimos 30 días
+      const isWithin30Days = (clip) => {
+        const ts = getClipTimestamp(clip);
+        return !ts || ts >= thirtyDaysAgo;
+      };
+
+      const sanitizeAndSort = (arr) => {
+        return (arr || []).filter(isWithin30Days).sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
       };
 
       allClipsStore = {
-        all: sortByDateDesc(data.allClips || []),
-        twitch: sortByDateDesc(data.twitchClips || []),
-        kick: sortByDateDesc(data.kickClips || []),
-        chat: sortByDateDesc(data.chatClips || []),
-        channel: data.channel || {}
+        all: sanitizeAndSort(data.allClips),
+        twitch: sanitizeAndSort(data.twitchClips),
+        kick: sanitizeAndSort(data.kickClips),
+        chat: sanitizeAndSort(data.chatClips),
+        channel: data.channel || { twitch: sessionChannels.twitch, kick: sessionChannels.kick }
       };
 
       try {
-        localStorage.setItem('orbibot_clips_cache', JSON.stringify(data));
+        localStorage.setItem(cacheKey, JSON.stringify(data));
       } catch (e) {}
-
-      // Actualizar nombres de canal
-      const twNameEl = document.getElementById('clipTwitchName');
-      const kickNameEl = document.getElementById('clipKickName');
-      if (twNameEl) twNameEl.textContent = data.channel?.twitch ? `@${data.channel.twitch}` : 'No vinculado';
-      if (kickNameEl) kickNameEl.textContent = data.channel?.kick ? `@${data.channel.kick}` : 'No vinculado';
 
       // Actualizar contadores de filtros
       const cAll = document.getElementById('filterCountAll');
@@ -11498,23 +11629,30 @@ async function loadClips(forceRefresh = false) {
       applyClipsFilter();
 
       if (forceRefresh) {
-        showToast(`✅ Se sincronizaron ${allClipsStore.all.length} clips del canal`, 'success');
+        showToast(`✅ Se sincronizaron ${allClipsStore.all.length} clips de los últimos 30 días`, 'success');
       }
     }
   } catch (e) {
     console.warn('[Clips] Error al cargar clips:', e);
-    // Fallback a caché local si la red falla o en GitHub Pages
+    // Fallback a caché local aislada por streamer
     try {
-      const cached = localStorage.getItem('orbibot_clips_cache');
+      const cacheKey = `orbibot_clips_cache_${sessionChannels.twitch}_${sessionChannels.kick}_${sessionChannels.streamerId}`;
+      const cached = localStorage.getItem(cacheKey);
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && (parsed.allClips || parsed.twitchClips || parsed.kickClips || parsed.chatClips)) {
-          const sortByDateDesc = (arr) => [...(arr || [])].sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
+          const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+          const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
+          const isWithin30Days = (clip) => {
+            const ts = getClipTimestamp(clip);
+            return !ts || ts >= thirtyDaysAgo;
+          };
+          const sanitizeAndSort = (arr) => (arr || []).filter(isWithin30Days).sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
           allClipsStore = {
-            all: sortByDateDesc(parsed.allClips || []),
-            twitch: sortByDateDesc(parsed.twitchClips || []),
-            kick: sortByDateDesc(parsed.kickClips || []),
-            chat: sortByDateDesc(parsed.chatClips || []),
+            all: sanitizeAndSort(parsed.allClips),
+            twitch: sanitizeAndSort(parsed.twitchClips),
+            kick: sanitizeAndSort(parsed.kickClips),
+            chat: sanitizeAndSort(parsed.chatClips),
             channel: parsed.channel || {}
           };
           applyClipsFilter();
@@ -11574,6 +11712,14 @@ function applyClipsFilter() {
     list = [...allClipsStore.all];
   }
 
+  // Filtrar estrictamente solo clips de los últimos 30 días
+  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+  const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
+  list = list.filter(c => {
+    const ts = getClipTimestamp(c);
+    return !ts || ts >= thirtyDaysAgo;
+  });
+
   // Filtrar por término de búsqueda si existe
   if (currentClipSearch) {
     list = list.filter(c => {
@@ -11623,9 +11769,9 @@ function renderClips(clips) {
       emptyState.style.display = 'block';
       emptyState.innerHTML = `
         <div style="font-size: 56px; margin-bottom: 16px;">🎬</div>
-        <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">No se encontraron clips</div>
-        <div style="font-size: 14px; color: #94a3b8; max-width: 420px; margin: 0 auto;">
-          No hay clips que coincidan con el filtro actual. Puedes sincronizar con Twitch/Kick o compartir uno con <code style="color:#a3e635;">!clip &lt;URL&gt;</code> en el chat.
+        <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">No se encontraron clips de los últimos 30 días</div>
+        <div style="font-size: 14px; color: #94a3b8; max-width: 440px; margin: 0 auto; line-height: 1.5;">
+          No hay clips creados en los últimos 30 días con el filtro actual. Puedes sincronizar con Twitch/Kick o compartir uno con <code style="color:#a3e635;">!clip &lt;URL&gt;</code> en el chat.
         </div>`;
     }
     return;
@@ -11821,10 +11967,20 @@ async function addClipManually() {
   try {
     const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
     const platform = url.includes('twitch.tv') || url.includes('clips.twitch.tv') ? 'twitch' : url.includes('kick.com') ? 'kick' : 'web';
+    const sessionChannels = getSessionClipChannels();
+    const activeChan = platform === 'twitch' ? sessionChannels.twitch : platform === 'kick' ? sessionChannels.kick : (sessionChannels.twitch || sessionChannels.kick || '');
+
     const res = await fetch(`${BASE}/api/clips`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url, title: title || 'Clip manual', requester: 'Streamer', platform })
+      body: JSON.stringify({
+        url,
+        title: title || 'Clip manual',
+        requester: 'Streamer',
+        platform,
+        channel: activeChan,
+        streamerId: sessionChannels.streamerId
+      })
     });
     const data = await res.json();
     if (data.success) {
@@ -11860,7 +12016,13 @@ async function clearAllClips() {
   if (!confirm('¿Estás seguro de que deseas vaciar los clips guardados del chat?')) return;
   try {
     const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
-    const res = await fetch(`${BASE}/api/clips`, { method: 'DELETE' });
+    const sessionChannels = getSessionClipChannels();
+    const params = new URLSearchParams();
+    if (sessionChannels.twitch) params.set('twitch', sessionChannels.twitch);
+    if (sessionChannels.kick) params.set('kick', sessionChannels.kick);
+    if (sessionChannels.streamerId) params.set('streamer', sessionChannels.streamerId);
+
+    const res = await fetch(`${BASE}/api/clips?${params.toString()}`, { method: 'DELETE' });
     const data = await res.json();
     if (data.success) {
       allClipsStore.chat = [];
@@ -11873,8 +12035,23 @@ async function clearAllClips() {
   }
 }
 
-// Manejar eventos en tiempo real desde WebSocket
+// Manejar eventos en tiempo real desde WebSocket con aislamiento por sesión
 function handleClipWsEvent(event, data) {
+  const sessionChannels = getSessionClipChannels();
+  if (data && data.channel) {
+    const cleanDataChan = String(data.channel).toLowerCase().replace(/^[#@]/, '').trim();
+    const cleanTw = sessionChannels.twitch;
+    const cleanKick = sessionChannels.kick;
+    // Si el clip pertenece a otro canal/streamer distinto a esta sesión, ignorar para aislamiento
+    if (cleanTw && cleanDataChan !== cleanTw && cleanKick && cleanDataChan !== cleanKick && cleanDataChan !== sessionChannels.streamerId) {
+      return;
+    }
+    if (!cleanTw && !cleanKick && sessionChannels.isAdmin) {
+      // Admin sin canal vinculado: no mostrar clips de otros streamers
+      return;
+    }
+  }
+
   if (event === 'clip_added' && data) {
     allClipsStore.chat = [data, ...allClipsStore.chat.filter(c => c.id !== data.id)];
     allClipsStore.all = [data, ...allClipsStore.all.filter(c => c.id !== data.id)];
@@ -11894,6 +12071,7 @@ function handleClipWsEvent(event, data) {
 }
 
 // Exponer funciones globales
+window.getSessionClipChannels = getSessionClipChannels;
 window.loadClips = loadClips;
 window.renderClips = renderClips;
 window.filterClips = filterClips;

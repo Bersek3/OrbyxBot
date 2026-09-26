@@ -2,31 +2,26 @@ const storage = require('./storage');
 
 class ClipService {
   constructor() {
-    this.cache = {
-      twitch: [],
-      kick: [],
-      lastUpdated: 0
-    };
-    this.cacheTtlMs = 3 * 60 * 1000; // 3 minutos de caché en memoria
-    this.isFetching = false;
+    this.streamerCaches = new Map();
+    this.cacheTtlMs = 3 * 60 * 1000; // 3 minutos de caché en memoria por canal
   }
 
   /**
-   * Obtiene los clips de Twitch directamente de la API Helix para el canal configurado
+   * Obtiene los clips de Twitch directamente de la API Helix para el canal especificado (últimos 30 días)
    */
-  async fetchTwitchClips(limit = 50) {
+  async fetchTwitchClips(targetChannel = null, limit = 50) {
     try {
       const config = storage.getConfig();
       const twitchCfg = config.twitch || {};
-      const channelName = (twitchCfg.channel || '').toLowerCase().replace(/^#/, '').trim();
-      const clientId = twitchCfg.clientId;
-      const token = (twitchCfg.oauthToken || '').replace(/^oauth:/i, '').trim();
+      const channelName = (targetChannel !== null ? targetChannel : (twitchCfg.channel || '')).toLowerCase().replace(/^#/, '').trim();
+      const clientId = twitchCfg.clientId || process.env.TWITCH_CLIENT_ID || 'yw1vr664ichms8an2x5lhji58v7ozk';
+      const token = (twitchCfg.oauthToken || process.env.TWITCH_OAUTH_TOKEN || '').replace(/^oauth:/i, '').trim();
 
       if (!channelName) return [];
 
-      let broadcasterId = twitchCfg.userId;
+      let broadcasterId = (channelName === (twitchCfg.channel || '').toLowerCase().replace(/^#/, '').trim()) ? twitchCfg.userId : null;
 
-      // Si no tenemos userId, lo resolvemos con el login del canal
+      // Si no tenemos broadcasterId para este canal específico, lo resolvemos con el login del canal
       if (!broadcasterId && clientId && token) {
         try {
           const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channelName)}`, {
@@ -39,11 +34,12 @@ class ClipService {
             const uData = await userRes.json();
             if (uData.data && uData.data.length > 0) {
               broadcasterId = uData.data[0].id;
-              // Guardar para futuros usos
-              twitchCfg.userId = broadcasterId;
-              const fullCfg = storage.getConfig();
-              fullCfg.twitch = { ...fullCfg.twitch, userId: broadcasterId };
-              storage.saveConfig(fullCfg);
+              if (channelName === (twitchCfg.channel || '').toLowerCase().replace(/^#/, '').trim()) {
+                twitchCfg.userId = broadcasterId;
+                const fullCfg = storage.getConfig();
+                fullCfg.twitch = { ...fullCfg.twitch, userId: broadcasterId };
+                storage.saveConfig(fullCfg);
+              }
             }
           }
         } catch (e) {
@@ -55,8 +51,12 @@ class ClipService {
         return [];
       }
 
+      // Filtrar clips de los últimos 30 días
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+      const thirtyDaysAgoISO = new Date(thirtyDaysAgo).toISOString();
+
       const clipsRes = await fetch(
-        `https://api.twitch.tv/helix/clips?broadcaster_id=${encodeURIComponent(broadcasterId)}&first=${limit}`,
+        `https://api.twitch.tv/helix/clips?broadcaster_id=${encodeURIComponent(broadcasterId)}&started_at=${encodeURIComponent(thirtyDaysAgoISO)}&first=${limit}`,
         {
           headers: {
             'Client-Id': clientId,
@@ -73,20 +73,23 @@ class ClipService {
       const clipsJson = await clipsRes.json();
       const rawClips = clipsJson.data || [];
 
-      return rawClips.map(c => ({
-        id: c.id,
-        url: c.url,
-        embedUrl: c.embed_url,
-        title: c.title || 'Clip de Twitch',
-        creator: c.creator_name || 'Desconocido',
-        broadcaster: c.broadcaster_name || channelName,
-        thumbnail: c.thumbnail_url,
-        views: c.view_count || 0,
-        duration: Math.round(c.duration || 0),
-        createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
-        platform: 'twitch',
-        source: 'channel'
-      })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return rawClips
+        .map(c => ({
+          id: c.id,
+          url: c.url,
+          embedUrl: c.embed_url,
+          title: c.title || 'Clip de Twitch',
+          creator: c.creator_name || 'Desconocido',
+          broadcaster: c.broadcaster_name || channelName,
+          thumbnail: c.thumbnail_url,
+          views: c.view_count || 0,
+          duration: Math.round(c.duration || 0),
+          createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
+          platform: 'twitch',
+          source: 'channel'
+        }))
+        .filter(c => (c.createdAt || 0) >= thirtyDaysAgo)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     } catch (err) {
       console.error('[ClipService] Error al obtener clips de Twitch:', err.message);
       return [];
@@ -94,13 +97,13 @@ class ClipService {
   }
 
   /**
-   * Obtiene los clips de Kick directamente de la API pública de Kick para el canal configurado
+   * Obtiene los clips de Kick directamente de la API pública de Kick para el canal configurado (últimos 30 días)
    */
-  async fetchKickClips(limit = 50) {
+  async fetchKickClips(targetChannel = null, limit = 50) {
     try {
       const config = storage.getConfig();
       const kickCfg = config.kick || {};
-      const channelName = (kickCfg.channel || kickCfg.username || '').toLowerCase().replace(/^@/, '').trim();
+      const channelName = (targetChannel !== null ? targetChannel : (kickCfg.channel || kickCfg.username || '')).toLowerCase().replace(/^@/, '').trim();
 
       if (!channelName) return [];
 
@@ -117,22 +120,27 @@ class ClipService {
 
       const data = await res.json();
       const rawClips = (data && Array.isArray(data.clips)) ? data.clips : [];
+      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
 
-      return rawClips.slice(0, limit).map(c => ({
-        id: c.id,
-        url: `https://kick.com/${channelName}/clips/${c.id}`,
-        embedUrl: c.clip_url || c.video_url || '',
-        videoUrl: c.clip_url || c.video_url || '',
-        title: c.title || 'Clip de Kick',
-        creator: c.creator?.username || 'Anónimo',
-        broadcaster: channelName,
-        thumbnail: c.thumbnail_url || (c.channel?.profile_picture || ''),
-        views: c.views || c.view_count || 0,
-        duration: Math.round(c.duration || 0),
-        createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
-        platform: 'kick',
-        source: 'channel'
-      })).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+      return rawClips
+        .slice(0, limit)
+        .map(c => ({
+          id: c.id,
+          url: `https://kick.com/${channelName}/clips/${c.id}`,
+          embedUrl: c.clip_url || c.video_url || '',
+          videoUrl: c.clip_url || c.video_url || '',
+          title: c.title || 'Clip de Kick',
+          creator: c.creator?.username || 'Anónimo',
+          broadcaster: channelName,
+          thumbnail: c.thumbnail_url || (c.channel?.profile_picture || ''),
+          views: c.views || c.view_count || 0,
+          duration: Math.round(c.duration || 0),
+          createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
+          platform: 'kick',
+          source: 'channel'
+        }))
+        .filter(c => (c.createdAt || 0) >= thirtyDaysAgo)
+        .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     } catch (err) {
       console.warn('[ClipService] Error al obtener clips de Kick:', err.message);
       return [];
@@ -141,26 +149,67 @@ class ClipService {
 
   /**
    * Obtiene todos los clips del canal (Twitch + Kick) combinados con los guardados manualmente por chat
+   * Aislados por creador/sesión y filtrados a los últimos 30 días
    */
-  async getClipsSummary(forceRefresh = false) {
+  async getClipsSummary(forceRefresh = false, options = {}) {
     const now = Date.now();
+    const thirtyDaysAgo = now - (30 * 24 * 60 * 60 * 1000);
     const config = storage.getConfig();
-    const twitchChannel = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
-    const kickChannel = (config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+
+    // Determinar canales exactos de la sesión solicitada
+    const twitchChannel = (options.twitchChannel !== undefined ? options.twitchChannel : (config.twitch?.channel || '')).toLowerCase().replace(/^#/, '').trim();
+    const kickChannel = (options.kickChannel !== undefined ? options.kickChannel : (config.kick?.channel || config.kick?.username || '')).toLowerCase().replace(/^@/, '').trim();
+    const streamerId = (options.streamerId || twitchChannel || kickChannel || '').toLowerCase().trim();
+
+    // Si la sesión no tiene ningún canal vinculado, no retornar clips de otro streamer
+    if (!twitchChannel && !kickChannel && !streamerId) {
+      return {
+        success: true,
+        channel: { twitch: '', kick: '' },
+        twitchClips: [],
+        kickClips: [],
+        chatClips: [],
+        allClips: [],
+        lastUpdated: now,
+        fromCache: false
+      };
+    }
+
+    const cacheKey = `${twitchChannel}__${kickChannel}__${streamerId}`;
+    const cachedEntry = this.streamerCaches.get(cacheKey);
 
     const sortByDateDesc = (arr) => {
-      return [...(arr || [])].sort((a, b) => {
-        const tA = Number(a.createdAt) || (a.created_at ? new Date(a.created_at).getTime() : 0);
-        const tB = Number(b.createdAt) || (b.created_at ? new Date(b.created_at).getTime() : 0);
-        return tB - tA;
-      });
+      return [...(arr || [])]
+        .filter(c => {
+          const t = Number(c.createdAt) || (c.created_at ? new Date(c.created_at).getTime() : 0);
+          return t >= thirtyDaysAgo;
+        })
+        .sort((a, b) => {
+          const tA = Number(a.createdAt) || (a.created_at ? new Date(a.created_at).getTime() : 0);
+          const tB = Number(b.createdAt) || (b.created_at ? new Date(b.created_at).getTime() : 0);
+          return tB - tA;
+        });
     };
 
-    // Usar caché si aún está fresca
-    if (!forceRefresh && (now - this.cache.lastUpdated < this.cacheTtlMs) && (this.cache.twitch.length > 0 || this.cache.kick.length > 0)) {
-      const chatClips = sortByDateDesc((storage.getClips() || []).map(c => ({ ...c, source: c.source || 'chat' })));
-      const twitchClips = sortByDateDesc(this.cache.twitch);
-      const kickClips = sortByDateDesc(this.cache.kick);
+    // Usar caché si aún está fresca para esta sesión
+    if (!forceRefresh && cachedEntry && (now - cachedEntry.lastUpdated < this.cacheTtlMs)) {
+      const allChatClips = storage.getClips() || [];
+      const chatClips = sortByDateDesc(
+        allChatClips
+          .filter(c => {
+            const cChan = (c.channel || '').toLowerCase().replace(/^[#@]/, '');
+            const cStreamer = (c.streamerId || '').toLowerCase();
+            return (
+              (twitchChannel && cChan === twitchChannel) ||
+              (kickChannel && cChan === kickChannel) ||
+              (streamerId && cStreamer === streamerId)
+            );
+          })
+          .map(c => ({ ...c, source: c.source || 'chat' }))
+      );
+
+      const twitchClips = sortByDateDesc(cachedEntry.twitch);
+      const kickClips = sortByDateDesc(cachedEntry.kick);
       const allClips = sortByDateDesc([...twitchClips, ...kickClips, ...chatClips]);
 
       return {
@@ -170,24 +219,41 @@ class ClipService {
         kickClips,
         chatClips,
         allClips,
-        lastUpdated: this.cache.lastUpdated,
+        lastUpdated: cachedEntry.lastUpdated,
         fromCache: true
       };
     }
 
-    // Actualizar en paralelo
+    // Actualizar en paralelo para los canales de esta sesión
     const [rawTwitch, rawKick] = await Promise.all([
-      this.fetchTwitchClips(50),
-      this.fetchKickClips(50)
+      twitchChannel ? this.fetchTwitchClips(twitchChannel, 50) : Promise.resolve([]),
+      kickChannel ? this.fetchKickClips(kickChannel, 50) : Promise.resolve([])
     ]);
 
     const twitchClips = sortByDateDesc(rawTwitch);
     const kickClips = sortByDateDesc(rawKick);
-    this.cache.twitch = twitchClips;
-    this.cache.kick = kickClips;
-    this.cache.lastUpdated = now;
 
-    const chatClips = sortByDateDesc((storage.getClips() || []).map(c => ({ ...c, source: c.source || 'chat' })));
+    this.streamerCaches.set(cacheKey, {
+      twitch: twitchClips,
+      kick: kickClips,
+      lastUpdated: now
+    });
+
+    const allChatClips = storage.getClips() || [];
+    const chatClips = sortByDateDesc(
+      allChatClips
+        .filter(c => {
+          const cChan = (c.channel || '').toLowerCase().replace(/^[#@]/, '');
+          const cStreamer = (c.streamerId || '').toLowerCase();
+          return (
+            (twitchChannel && cChan === twitchChannel) ||
+            (kickChannel && cChan === kickChannel) ||
+            (streamerId && cStreamer === streamerId)
+          );
+        })
+        .map(c => ({ ...c, source: c.source || 'chat' }))
+    );
+
     const allClips = sortByDateDesc([...twitchClips, ...kickClips, ...chatClips]);
 
     return {
@@ -205,18 +271,17 @@ class ClipService {
   /**
    * Obtiene un clip aleatorio o el más reciente para responder al comando !clip en el chat
    */
-  async getRandomOrLatestClip(platform = 'twitch') {
-    const summary = await this.getClipsSummary(false);
+  async getRandomOrLatestClip(platform = 'twitch', channelName = '') {
+    const opts = platform === 'kick' ? { kickChannel: channelName } : { twitchChannel: channelName };
+    const summary = await this.getClipsSummary(false, opts);
     let list = platform === 'kick' ? summary.kickClips : summary.twitchClips;
 
-    // Si la plataforma pedida no tiene clips del canal, probar con la otra o con chatClips
     if (!list || list.length === 0) {
       list = summary.allClips;
     }
 
     if (!list || list.length === 0) return null;
 
-    // Seleccionar aleatoriamente entre los mejores o más recientes
     const randomIndex = Math.floor(Math.random() * list.length);
     return list[randomIndex];
   }
