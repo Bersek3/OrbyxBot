@@ -1128,6 +1128,20 @@ app.get('/api/clips', (req, res) => {
   res.json(clips);
 });
 
+// POST create a live clip of the stream (last 30 seconds via Twitch Helix)
+app.post('/api/clips/create', async (req, res) => {
+  try {
+    const { platform = 'twitch', channel = '', requester = 'Viewer', streamerId = '' } = req.body;
+    const result = await clipService.createLiveClip(platform, channel, requester, streamerId);
+    if (result.success && result.clip) {
+      broadcast('clip_added', result.clip);
+    }
+    return res.json(result);
+  } catch (err) {
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // POST add a new clip (created via !clip command or manually from dashboard)
 app.post('/api/clips', (req, res) => {
   try {

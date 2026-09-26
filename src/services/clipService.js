@@ -288,6 +288,158 @@ class ClipService {
   }
 
   /**
+   * Crea un clip en vivo de los últimos 30 segundos del stream (Twitch Helix)
+   */
+  async createLiveClip(platform = 'twitch', channelName = '', requester = 'Viewer', streamerId = null) {
+    if (platform === 'twitch') {
+      try {
+        const config = storage.getConfig();
+        const twitchCfg = config.twitch || {};
+        const cleanChan = (channelName || twitchCfg.channel || '').toLowerCase().replace(/^#/, '').trim();
+        let clientId = twitchCfg.clientId || process.env.TWITCH_CLIENT_ID || 'yw1vr664ichms8an2x5lhji58v7ozk';
+        let token = (twitchCfg.oauthToken || process.env.TWITCH_OAUTH_TOKEN || '').replace(/^oauth:/i, '').trim();
+        let broadcasterId = (cleanChan === (twitchCfg.channel || '').toLowerCase().replace(/^#/, '').trim()) ? twitchCfg.userId : null;
+
+        // Buscar credenciales en Supabase para el streamer específico si faltan
+        if ((!broadcasterId || !token) && storage.supabase) {
+          try {
+            const searchScopes = [cleanChan, streamerId].filter(Boolean);
+            const { data: supaAuth } = await storage.supabase
+              .from('orbibot_settings')
+              .select('value')
+              .in('streamer_id', searchScopes)
+              .eq('key', 'twitch_auth')
+              .limit(1);
+            if (supaAuth && supaAuth.length > 0 && supaAuth[0].value) {
+              const v = typeof supaAuth[0].value === 'string' ? JSON.parse(supaAuth[0].value) : supaAuth[0].value;
+              if (v.userId) broadcasterId = v.userId;
+              if (v.oauthToken) token = v.oauthToken.replace(/^oauth:/i, '').trim();
+              if (v.clientId) clientId = v.clientId;
+            }
+          } catch (e) {}
+        }
+
+        // Si falta broadcasterId, resolverlo vía Helix
+        if (!broadcasterId && clientId && token) {
+          try {
+            const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(cleanChan)}`, {
+              headers: { 'Client-Id': clientId, 'Authorization': `Bearer ${token}` }
+            });
+            if (userRes.ok) {
+              const uData = await userRes.json();
+              if (uData.data && uData.data.length > 0) broadcasterId = uData.data[0].id;
+            }
+          } catch(e) {}
+        }
+
+        if (!broadcasterId || !token) {
+          return {
+            success: false,
+            error: 'no_credentials',
+            message: 'No hay credenciales de Twitch vinculadas para crear clips.'
+          };
+        }
+
+        // Llamar a Twitch Helix POST /helix/clips (captura aproximadamente los últimos 30 segundos del stream)
+        const url = `https://api.twitch.tv/helix/clips?broadcaster_id=${encodeURIComponent(broadcasterId)}&has_delay=false`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Client-Id': clientId,
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        const status = res.status;
+        const resJson = await res.json().catch(() => ({}));
+
+        if (res.ok && resJson.data && resJson.data.length > 0) {
+          const clipItem = resJson.data[0];
+          const clipId = clipItem.id;
+          const clipUrl = `https://clips.twitch.tv/${clipId}`;
+          const editUrl = clipItem.edit_url || clipUrl;
+
+          const newClip = {
+            id: 'clip_' + Date.now() + '_' + clipId,
+            url: clipUrl,
+            editUrl,
+            title: `Clip en vivo creado por @${requester}`,
+            creator: requester,
+            broadcaster: cleanChan,
+            platform: 'twitch',
+            channel: cleanChan,
+            streamerId: streamerId || cleanChan,
+            clipId,
+            createdAt: Date.now(),
+            source: 'live_command'
+          };
+
+          // Guardar en la lista de clips
+          const clips = storage.getClips();
+          clips.unshift(newClip);
+          if (clips.length > 100) clips.splice(100);
+          storage.saveClips(clips);
+
+          // Si Supabase está conectado, guardar en la nube
+          if (storage.supabase) {
+            try {
+              await storage.supabase.from('orbibot_settings').upsert({
+                streamer_id: streamerId || cleanChan,
+                key: 'clips',
+                value: clips,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'streamer_id,key' });
+            } catch(e) {}
+          }
+
+          return {
+            success: true,
+            clip: newClip,
+            clipUrl,
+            editUrl
+          };
+        }
+
+        // Manejo de errores específicos de Twitch
+        if (status === 401 || (resJson.message && resJson.message.includes('clips:edit'))) {
+          return {
+            success: false,
+            error: 'missing_scope',
+            message: 'Falta el permiso clips:edit en el token de Twitch. El streamer debe reconectar Twitch en Conexiones.'
+          };
+        }
+
+        if (status === 404 || status === 400 || (resJson.message && resJson.message.includes('offline'))) {
+          return {
+            success: false,
+            error: 'stream_offline',
+            message: 'El stream no está en vivo en este momento para crear un clip.'
+          };
+        }
+
+        return {
+          success: false,
+          error: 'twitch_error',
+          message: resJson.message || `Error de Twitch (${status}) al crear el clip.`
+        };
+      } catch (err) {
+        console.error('[ClipService] Error en createLiveClip:', err);
+        return {
+          success: false,
+          error: 'internal_error',
+          message: err.message
+        };
+      }
+    }
+
+    return {
+      success: false,
+      error: 'unsupported_platform',
+      message: 'Creación instantánea disponible en streams en vivo de Twitch. En Kick usa el botón de tijeras ✂️ del reproductor y escribe !clip <URL>.'
+    };
+  }
+
+  /**
    * Obtiene un clip aleatorio o el más reciente para responder al comando !clip en el chat
    */
   async getRandomOrLatestClip(platform = 'twitch', channelName = '') {

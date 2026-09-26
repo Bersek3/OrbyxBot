@@ -561,18 +561,18 @@ class KickBot {
             this.broadcast('clip_added', newClip);
             this.sendMessage(this.currentChannel, `🎬 ¡Clip de @${username} guardado en el panel!`);
           } else {
-            // Si el usuario escribe solo !clip o !clips: obtener un clip ya realizado en el canal y mostrarlo
+            // El usuario escribió solo !clip en Kick
             try {
               const cleanChan = (this.currentChannel || '').toLowerCase().replace(/^@/, '');
               const channelClip = await clipService.getRandomOrLatestClip('kick', cleanChan);
               if (channelClip && channelClip.url) {
-                this.sendMessage(this.currentChannel, `🎬 Clip de @${channelClip.broadcaster || this.currentChannel}: "${channelClip.title}" 👉 ${channelClip.url}`);
+                this.sendMessage(this.currentChannel, `🎬 Clip reciente de @${channelClip.broadcaster || this.currentChannel}: "${channelClip.title}" 👉 ${channelClip.url} (En Kick clipea en vivo con las tijeras ✂️ del reproductor)`);
                 this.broadcast('clip_highlighted', channelClip);
               } else {
-                this.sendMessage(this.currentChannel, `@${username}, el canal aún no tiene clips creados o puedes compartir uno con !clip <URL>`);
+                this.sendMessage(this.currentChannel, `@${username}, en Kick crea tu clip con las tijeras ✂️ del reproductor y compártelo aquí con !clip <URL>`);
               }
             } catch (clipErr) {
-              this.sendMessage(this.currentChannel, `@${username}, usa: !clip <URL del clip> para guardarlo en el panel.`);
+              this.sendMessage(this.currentChannel, `@${username}, en Kick clipea con las tijeras ✂️ del reproductor y usa: !clip <URL>`);
             }
           }
           return;

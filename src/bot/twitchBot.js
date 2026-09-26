@@ -573,7 +573,8 @@ class TwitchBot {
             platform: 'twitch',
             channel: cleanChan,
             clipId,
-            createdAt: Date.now()
+            createdAt: Date.now(),
+            source: 'chat'
           };
           clips.unshift(newClip);
           if (clips.length > 100) clips.splice(100);
@@ -581,18 +582,36 @@ class TwitchBot {
           this.broadcast('clip_added', newClip);
           this.sendMessage(channel, `🎬 ¡Clip de @${username} guardado en el panel!`);
         } else {
-          // Si el usuario escribe solo !clip o !clips: obtener un clip ya realizado en el canal y mostrarlo
+          // El usuario escribió !clip sin URL: CREAR UN CLIP EN VIVO DE LOS ÚLTIMOS 30 SEGUNDOS
+          const cleanChan = channel.toLowerCase().replace(/^#/, '');
+          this.sendMessage(channel, `⏳ @${username}, creando clip de los últimos 30 segundos del stream...`);
           try {
-            const cleanChan = channel.toLowerCase().replace(/^#/, '');
-            const channelClip = await clipService.getRandomOrLatestClip('twitch', cleanChan);
-            if (channelClip && channelClip.url) {
-              this.sendMessage(channel, `🎬 Clip de @${channelClip.broadcaster || channel.replace('#', '')}: "${channelClip.title}" 👉 ${channelClip.url}`);
-              this.broadcast('clip_highlighted', channelClip);
+            const createResult = await clipService.createLiveClip('twitch', cleanChan, username, cleanChan);
+            if (createResult.success && createResult.clipUrl) {
+              this.sendMessage(channel, `🎬 ¡Clip creado por @${username}! 👉 ${createResult.clipUrl}`);
+              this.broadcast('clip_added', createResult.clip);
             } else {
-              this.sendMessage(channel, `@${username}, el canal aún no tiene clips creados o puedes compartir uno con !clip <URL>`);
+              // Si no se pudo crear (p. ej. stream offline o falta permiso), intentar mostrar el más reciente y explicar la razón
+              const channelClip = await clipService.getRandomOrLatestClip('twitch', cleanChan);
+              if (createResult.error === 'missing_scope') {
+                this.sendMessage(channel, `⚠️ @${username}, para crear clips en vivo el streamer debe autorizar el permiso "clips:edit" reconectando Twitch en el panel.`);
+              } else if (createResult.error === 'stream_offline') {
+                if (channelClip && channelClip.url) {
+                  this.sendMessage(channel, `⚠️ @${username}, el stream no está transmitiendo en vivo para clipear ahora. Clip reciente: ${channelClip.url}`);
+                } else {
+                  this.sendMessage(channel, `⚠️ @${username}, el canal debe estar en vivo para crear un clip.`);
+                }
+              } else {
+                if (channelClip && channelClip.url) {
+                  this.sendMessage(channel, `🎬 Clip de @${channelClip.broadcaster || cleanChan}: "${channelClip.title}" 👉 ${channelClip.url}`);
+                } else {
+                  this.sendMessage(channel, `⚠️ @${username}, no se pudo crear el clip en este momento. Puedes compartir uno con !clip <URL>`);
+                }
+              }
             }
           } catch (clipErr) {
-            this.sendMessage(channel, `@${username}, usa: !clip <URL del clip> para guardarlo en el panel.`);
+            console.error('Error handling !clip in twitchBot:', clipErr);
+            this.sendMessage(channel, `⚠️ @${username}, ocurrió un error al procesar el clip.`);
           }
         }
         return;

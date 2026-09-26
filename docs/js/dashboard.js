@@ -2891,7 +2891,35 @@ function connectInBrowserTwitchBot(twitchData) {
                 });
               }
             }
+            return;
           }
+        }
+
+        // Comando !clip / !clips en chat de Twitch vía cliente de navegador
+        if (firstWord === '!clip' || firstWord === '!clips') {
+          const clipArg = trimmed.replace(/^!clips?\s*/i, '').trim();
+          const twitchClipRegex = /https?:\/\/(?:clips\.twitch\.tv\/|www\.twitch\.tv\/\w+\/clip\/)([A-Za-z0-9_-]+)/i;
+          let clipUrl = '';
+          let clipId = '';
+
+          if (twitchClipRegex.test(clipArg)) {
+            clipUrl = clipArg;
+            const m = clipArg.match(twitchClipRegex);
+            clipId = m ? m[1] : '';
+          } else if (/^https?:\/\//i.test(clipArg)) {
+            clipUrl = clipArg;
+          }
+
+          if (clipUrl) {
+            if (typeof handleBrowserSaveManualClip === 'function') {
+              handleBrowserSaveManualClip(clipUrl, username, channel, clipId);
+            }
+          } else {
+            if (typeof handleBrowserCreateLiveClip === 'function') {
+              handleBrowserCreateLiveClip(channel, username);
+            }
+          }
+          return;
         }
       } catch (e) {
         console.warn('Error processing Twitch chat command in browser:', e);
@@ -8658,7 +8686,7 @@ function setupEventListeners() {
     const customClientId = document.getElementById('cfgTwitchClientId')?.value?.trim();
     const clientId = customClientId || 'yw1vr664ichms8an2x5lhji58v7ozk';
     const redirectUri = getTwitchRedirectUri();
-    const scopes = encodeURIComponent('chat:read chat:edit channel:read:redemptions bits:read channel:read:subscriptions');
+    const scopes = encodeURIComponent('chat:read chat:edit channel:read:redemptions bits:read channel:read:subscriptions clips:edit');
 
     const twitchAuthUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=token&scope=${scopes}&state=popup&force_verify=true`;
 
@@ -12238,6 +12266,217 @@ function handleClipWsEvent(event, data) {
   }
 }
 
+// Creación en vivo de clips de los últimos 30 segundos desde el cliente de navegador (Standalone / GitHub Pages / Backend)
+async function handleBrowserCreateLiveClip(channel, username) {
+  const cleanChan = (channel || '').toLowerCase().replace(/^#/, '').trim();
+  const sessionChannels = getSessionClipChannels();
+  const streamerId = sessionChannels.streamerId || cleanChan;
+
+  showToast(`⏳ @${username} ejecutó !clip. Creando clip de los últimos 30 segundos del stream...`, 'info');
+
+  // 1. Intentar llamar al endpoint de backend si está disponible
+  try {
+    const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
+    const res = await fetch(`${BASE}/api/clips/create`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        platform: 'twitch',
+        channel: cleanChan,
+        requester: username,
+        streamerId
+      })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success && data.clipUrl) {
+        showToast(`🎬 ¡Clip creado por @${username}!`, 'success');
+        if (browserTmiClient && typeof browserTmiClient.say === 'function' && typeof browserTmiClient.readyState === 'function' && browserTmiClient.readyState() === 'OPEN') {
+          browserTmiClient.say(cleanChan, `🎬 ¡Clip de los últimos 30s creado por @${username}! 👉 ${data.clipUrl}`).catch(() => {});
+        }
+        allClipsStore.chat = [data.clip, ...allClipsStore.chat.filter(c => c.id !== data.clip.id)];
+        allClipsStore.all = [data.clip, ...allClipsStore.all.filter(c => c.id !== data.clip.id)];
+        applyClipsFilter();
+        return;
+      }
+    }
+  } catch (backendErr) {}
+
+  // 2. Modo Standalone / GitHub Pages: Llamar directamente a Twitch Helix POST /helix/clips desde el navegador
+  try {
+    let broadcasterId = appConfig?.twitch?.userId || '';
+    let clientId = appConfig?.twitch?.clientId || 'yw1vr664ichms8an2x5lhji58v7ozk';
+    let token = (appConfig?.twitch?.oauthToken || '').replace(/^oauth:/i, '').trim();
+
+    if (!token || !broadcasterId) {
+      try {
+        const twAuth = localStorage.getItem('orbibot_twitch_auth');
+        if (twAuth) {
+          const p = JSON.parse(twAuth);
+          if (!token) token = (p.oauthToken || '').replace(/^oauth:/i, '').trim();
+          if (!broadcasterId) broadcasterId = p.userId || '';
+          if (p.clientId) clientId = p.clientId;
+        }
+      } catch (e) {}
+    }
+
+    if ((!token || !broadcasterId) && supabaseClient) {
+      try {
+        const targetScopes = [streamerId, cleanChan, 'plantasi'].filter(Boolean);
+        const { data: supaAuth } = await supabaseClient
+          .from('orbibot_settings')
+          .select('value')
+          .in('streamer_id', targetScopes)
+          .eq('key', 'twitch_auth')
+          .limit(1);
+        if (supaAuth && supaAuth.length > 0 && supaAuth[0].value) {
+          const v = typeof supaAuth[0].value === 'string' ? JSON.parse(supaAuth[0].value) : supaAuth[0].value;
+          if (!token && v.oauthToken) token = v.oauthToken.replace(/^oauth:/i, '').trim();
+          if (!broadcasterId && v.userId) broadcasterId = v.userId;
+          if (v.clientId) clientId = v.clientId;
+        }
+      } catch (e) {}
+    }
+
+    if (!broadcasterId && clientId && token) {
+      try {
+        const uRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(cleanChan)}`, {
+          headers: { 'Client-Id': clientId, 'Authorization': `Bearer ${token}` }
+        });
+        if (uRes.ok) {
+          const uJson = await uRes.json();
+          if (uJson.data && uJson.data.length > 0) broadcasterId = uJson.data[0].id;
+        }
+      } catch (e) {}
+    }
+
+    if (!broadcasterId || !token) {
+      showToast(`⚠️ No hay credenciales de Twitch vinculadas para clipear en vivo.`, 'warn');
+      return;
+    }
+
+    // Capturar aproximadamente los últimos 30 segundos del stream
+    const clipsUrl = `https://api.twitch.tv/helix/clips?broadcaster_id=${encodeURIComponent(broadcasterId)}&has_delay=false`;
+    const res = await fetch(clipsUrl, {
+      method: 'POST',
+      headers: {
+        'Client-Id': clientId,
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const status = res.status;
+    const resJson = await res.json().catch(() => ({}));
+
+    if (res.ok && resJson.data && resJson.data.length > 0) {
+      const clipItem = resJson.data[0];
+      const clipId = clipItem.id;
+      const clipUrl = `https://clips.twitch.tv/${clipId}`;
+      const newClip = {
+        id: 'clip_' + Date.now() + '_' + clipId,
+        url: clipUrl,
+        title: `Clip en vivo creado por @${username}`,
+        creator: username,
+        broadcaster: cleanChan,
+        platform: 'twitch',
+        channel: cleanChan,
+        streamerId: streamerId,
+        clipId,
+        createdAt: Date.now(),
+        source: 'live_command'
+      };
+
+      allClipsStore.chat = [newClip, ...allClipsStore.chat.filter(c => c.id !== newClip.id)];
+      allClipsStore.all = [newClip, ...allClipsStore.all.filter(c => c.id !== newClip.id)];
+      applyClipsFilter();
+      showToast(`🎬 ¡Clip creado por @${username}! 👉 ${clipUrl}`, 'success');
+
+      if (browserTmiClient && typeof browserTmiClient.say === 'function') {
+        try {
+          browserTmiClient.say(cleanChan, `🎬 ¡Clip de los últimos 30s creado por @${username}! 👉 ${clipUrl}`);
+        } catch (e) {}
+      }
+
+      if (supabaseClient) {
+        try {
+          await supabaseClient.from('orbibot_settings').upsert({
+            streamer_id: streamerId,
+            key: 'clips',
+            value: allClipsStore.chat,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'streamer_id,key' });
+        } catch (e) {}
+      }
+      return;
+    }
+
+    if (status === 401 || (resJson.message && resJson.message.includes('clips:edit'))) {
+      showToast(`⚠️ Falta el permiso "clips:edit" en Twitch. Reconecta Twitch en Conexiones para autorizar la creación de clips con !clip.`, 'warn');
+      if (browserTmiClient && typeof browserTmiClient.say === 'function') {
+        try {
+          browserTmiClient.say(cleanChan, `⚠️ @${username}, para crear clips en vivo el streamer debe autorizar el permiso clips:edit reconectando Twitch en el panel.`);
+        } catch (e) {}
+      }
+      return;
+    }
+
+    if (status === 404 || status === 400 || (resJson.message && resJson.message.includes('offline'))) {
+      showToast(`⚠️ El canal #${cleanChan} no está transmitiendo en vivo para crear un clip en este momento.`, 'warn');
+      if (browserTmiClient && typeof browserTmiClient.say === 'function') {
+        try {
+          browserTmiClient.say(cleanChan, `⚠️ @${username}, el stream debe estar transmitiendo en vivo para crear un clip de los últimos 30 segundos.`);
+        } catch (e) {}
+      }
+      return;
+    }
+
+    showToast(resJson.message || `Error al crear clip en vivo (${status}).`, 'error');
+  } catch (err) {
+    console.warn('[Clips] Error en handleBrowserCreateLiveClip:', err);
+    showToast(`Error al crear clip: ${err.message}`, 'error');
+  }
+}
+
+async function handleBrowserSaveManualClip(clipUrl, username, channel, clipId) {
+  const cleanChan = (channel || '').toLowerCase().replace(/^#/, '').trim();
+  const sessionChannels = getSessionClipChannels();
+  const streamerId = sessionChannels.streamerId || cleanChan;
+  const newClip = {
+    id: 'clip_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+    url: clipUrl,
+    title: `Clip compartido por @${username}`,
+    requester: username,
+    platform: clipUrl.includes('kick.com') ? 'kick' : 'twitch',
+    channel: cleanChan,
+    streamerId: streamerId,
+    clipId: clipId || '',
+    createdAt: Date.now(),
+    source: 'chat'
+  };
+
+  allClipsStore.chat = [newClip, ...allClipsStore.chat.filter(c => c.id !== newClip.id)];
+  allClipsStore.all = [newClip, ...allClipsStore.all.filter(c => c.id !== newClip.id)];
+  applyClipsFilter();
+  showToast(`🎬 Clip compartido por @${username} guardado`, 'success');
+
+  if (browserTmiClient && typeof browserTmiClient.say === 'function') {
+    try {
+      browserTmiClient.say(cleanChan, `🎬 ¡Clip de @${username} guardado en el panel!`);
+    } catch (e) {}
+  }
+
+  if (supabaseClient) {
+    try {
+      await supabaseClient.from('orbibot_settings').upsert({
+        streamer_id: streamerId,
+        key: 'clips',
+        value: allClipsStore.chat,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'streamer_id,key' });
+    } catch (e) {}
+  }
+}
+
 // Exponer funciones globales
 window.getSessionClipChannels = getSessionClipChannels;
 window.loadClips = loadClips;
@@ -12253,6 +12492,8 @@ window.addClipManually = addClipManually;
 window.deleteClip = deleteClip;
 window.clearAllClips = clearAllClips;
 window.handleClipWsEvent = handleClipWsEvent;
+window.handleBrowserCreateLiveClip = handleBrowserCreateLiveClip;
+window.handleBrowserSaveManualClip = handleBrowserSaveManualClip;
 
 // Hook para auto-cargar clips cuando se abre la pestaña de clips
 (function patchSwitchTabForClips() {
