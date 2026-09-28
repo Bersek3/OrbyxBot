@@ -502,12 +502,15 @@ class KickBot {
           if (matchedVoiceCmd && ttsService.hasPermission(matchedVoiceCmd, userBadges)) {
             const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
             if (voiceText) {
+              const targetChan = storage.getStreamerId() || this.currentChannel;
+              console.log(`[KickBot TTS] 🗣️ Comando de voz "${firstWord}" recibido de @${username} (Voz: ${matchedVoiceCmd.voiceId}, Canal: ${targetChan}): "${voiceText}"`);
               ttsService.processRequest({
                 user: username,
                 text: voiceText,
                 source: 'chat',
+                platform: 'kick',
                 voiceOverride: matchedVoiceCmd.voiceId,
-                channel: this.currentChannel,
+                channel: targetChan,
                 userBadges
               });
               return;
@@ -515,11 +518,14 @@ class KickBot {
           } else if (ttsConfig.allowChatCommand !== false && trimmed.toLowerCase().startsWith(ttsCmd)) {
             const ttsText = trimmed.slice(ttsCmd.length).trim();
             if (ttsText) {
+              const targetChan = storage.getStreamerId() || this.currentChannel;
+              console.log(`[KickBot TTS] 🗣️ Comando TTS genérico "${ttsCmd}" de @${username} (Canal: ${targetChan}): "${ttsText}"`);
               ttsService.processRequest({
                 user: username,
                 text: ttsText,
                 source: 'chat',
-                channel: this.currentChannel,
+                platform: 'kick',
+                channel: targetChan,
                 userBadges
               });
               return;

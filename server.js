@@ -206,7 +206,7 @@ function broadcast(event, data, targetRoom) {
   const token = data?.token || null;
   const config = storage.getConfig();
   const twitchChan = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
-  const kickChan = (config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+  const kickChan = (kickBot.currentChannel || config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
   const streamerId = (storage.getStreamerId() || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
 
   const payload = JSON.stringify({ event, data, room: cleanTarget || 'default', token, timestamp: Date.now() });

@@ -3,10 +3,8 @@
     "id": "reward-1789254410697",
     "action": "song_request",
     "enabled": true,
-    "voiceId": null,
     "rewardId": "cf78df7d-b7e7-4af1-803b-8ace9bc9f76b",
     "soundUrl": null,
-    "rewardName": "Pide una canción",
-    "customMessage": null
+    "rewardName": "Pide una canción"
   }
 ]

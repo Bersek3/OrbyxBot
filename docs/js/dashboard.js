@@ -402,6 +402,11 @@ async function loadUserDataFromSupabase(userIdentifier) {
               if (kData.channel) localStorage.setItem('orbibot_kick_channel', kData.channel);
               appConfig.kick = { ...(appConfig.kick || {}), ...kData };
               updatePlatformLinkingUI();
+              fetch('/api/config', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ kick: appConfig.kick })
+              }).catch(() => {});
               if (kData.channel && typeof connectInBrowserKickBot === 'function') {
                 connectInBrowserKickBot(kData);
               }
@@ -421,6 +426,11 @@ async function loadUserDataFromSupabase(userIdentifier) {
           if (item.value.kick && (item.value.kick.channel || item.value.kick.username)) {
             localStorage.setItem('orbibot_kick_auth', JSON.stringify(item.value.kick));
             if (item.value.kick.channel) localStorage.setItem('orbibot_kick_channel', item.value.kick.channel);
+            fetch('/api/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ kick: item.value.kick })
+            }).catch(() => {});
           }
           localStorage.setItem('orbibot_config', JSON.stringify(appConfig));
           bindConfigToUI(appConfig);
@@ -1401,6 +1411,15 @@ async function handleKickAuthSuccess(payload) {
     saveToAllSupabaseScopes('config', appConfig).catch(() => {});
   }
 
+  // Sincronizar con el backend local para activar kickBot.js en el servidor
+  fetch('/api/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ kick: appConfig.kick })
+  }).then(() => {
+    fetch('/api/bot/kick/connect', { method: 'POST' }).catch(() => {});
+  }).catch(() => {});
+
   showToast(`🟢 ¡Kick vinculado con éxito! Conectado como @${displayName || channel}`, 'success');
 
   connectInBrowserKickBot(appConfig.kick);
@@ -2042,6 +2061,8 @@ function findVoiceCommandOrAlias(firstWord) {
   // 3. Catálogo Universal de Alias de Voces
   const aliasMap = {
     // Voces IA / Famosas (Fish Audio)
+    vegetta: 'es_vegetta', vegetta777: 'es_vegetta',
+    elrich: 'es_elrichmc', elrichmc: 'es_elrichmc', rich: 'es_elrichmc',
     messi: 'es_ar_messi', lionel_messi: 'es_ar_messi', leo_messi: 'es_ar_messi',
     maduro: 'es_ve_maduro', nicolas_maduro: 'es_ve_maduro',
     tiktok: 'es_tiktok', voz_tiktok: 'es_tiktok',
@@ -2548,6 +2569,30 @@ async function loadInitialData() {
               body: JSON.stringify({ token: parsed.oauthToken, channel: chan })
             }).catch(() => { });
           }
+        }
+      } catch (e) { }
+    }
+
+    // Sync localStorage Kick auth if present for active session
+    const localKick = localStorage.getItem('orbibot_kick_auth');
+    const localKickChan = localStorage.getItem('orbibot_kick_channel');
+    let effectiveKick = cfgRes.kick || {};
+    if (localKick || localKickChan) {
+      try {
+        const parsedKick = localKick ? JSON.parse(localKick) : {};
+        const kChan = (parsedKick.channel || parsedKick.username || localKickChan || '').toLowerCase().replace(/^@/, '').trim();
+        if (kChan) {
+          parsedKick.channel = kChan;
+          parsedKick.connected = true;
+          effectiveKick = { ...effectiveKick, ...parsedKick };
+          cfgRes.kick = effectiveKick;
+          fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ kick: effectiveKick })
+          }).then(() => {
+            fetch('/api/bot/kick/connect', { method: 'POST' }).catch(() => {});
+          }).catch(() => {});
         }
       } catch (e) { }
     }
@@ -3439,6 +3484,7 @@ function connectInBrowserKickBot(kickData) {
                   if (voiceText) {
                     const selectedVoice = matchedVoiceCmd.voiceId || ttsConfig.voice || 'es_mx_mia';
                     const ttsAudioUrl = getTTSAudioUrl(voiceText, selectedVoice);
+                    const streamerRoom = (typeof getActiveStreamerRoom === 'function' ? getActiveStreamerRoom() : null) || channel;
                     const ttsData = {
                       id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
                       user: username,
@@ -3449,7 +3495,9 @@ function connectInBrowserKickBot(kickData) {
                       rate: Number(matchedVoiceCmd.rate || ttsConfig.rate || 1.0),
                       pitch: Number(matchedVoiceCmd.pitch || ttsConfig.pitch || 1.0),
                       audioUrl: ttsAudioUrl,
-                      channel,
+                      channel: streamerRoom,
+                      room: streamerRoom,
+                      streamer: streamerRoom,
                       platform: 'kick',
                       timestamp: Date.now()
                     };
@@ -3463,6 +3511,8 @@ function connectInBrowserKickBot(kickData) {
                   let selectedVoice = ttsConfig.voice || 'es_mx_mia';
                   const firstToken = ttsRaw.split(/\s+/)[0].toLowerCase().replace(/^[-@/]/, '').replace(/^voice:/, '');
                   const aliasMap = {
+                    vegetta: 'es_vegetta', vegetta777: 'es_vegetta',
+                    elrich: 'es_elrichmc', elrichmc: 'es_elrichmc', rich: 'es_elrichmc',
                     messi: 'es_ar_messi', maduro: 'es_ve_maduro', tiktok: 'es_tiktok', homero: 'es_mx_homero',
                     dross: 'es_dross', badbunny: 'es_badbunny', rubius: 'es_rubius', farid: 'es_farid',
                     westcol: 'es_westcol', cr7: 'es_cr7', goku: 'es_goku', maradona: 'es_maradona',
@@ -3476,6 +3526,7 @@ function connectInBrowserKickBot(kickData) {
                   }
                   if (ttsRaw) {
                     const ttsAudioUrl = getTTSAudioUrl(ttsRaw, selectedVoice);
+                    const streamerRoom = (typeof getActiveStreamerRoom === 'function' ? getActiveStreamerRoom() : null) || channel;
                     const ttsData = {
                       id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
                       user: username,
@@ -3486,7 +3537,9 @@ function connectInBrowserKickBot(kickData) {
                       rate: Number(ttsConfig.rate || 1.0),
                       pitch: Number(ttsConfig.pitch || 1.0),
                       audioUrl: ttsAudioUrl,
-                      channel,
+                      channel: streamerRoom,
+                      room: streamerRoom,
+                      streamer: streamerRoom,
                       platform: 'kick',
                       timestamp: Date.now()
                     };
@@ -4712,11 +4765,14 @@ function populateWidgetUrls() {
   const chatParams = [channelParam, kickParam, tokenParam].filter(Boolean).join('&');
   const chatQs = chatParams ? `?${chatParams}` : '';
 
+  const ttsParams = [channelParam, kickParam, tokenParam].filter(Boolean).join('&');
+  const ttsQs = ttsParams ? `?${ttsParams}` : '';
+
   const alertsUrl = `${baseUrl}/overlays/alerts.html${qs}`;
   const npUrl = `${baseUrl}/overlays/nowplaying.html${qs}`;
   const goalUrl = `${baseUrl}/overlays/goals.html${goalQs}`;
   const musicPlayerUrl = `${baseUrl}/overlays/music_player.html${qs}`;
-  const ttsUrl = `${baseUrl}/overlays/tts.html${qs}`;
+  const ttsUrl = `${baseUrl}/overlays/tts.html${ttsQs}`;
   const chatUrl = `${baseUrl}/overlays/chat.html${chatQs}`;
 
   if (document.getElementById('urlAlertsWidget')) document.getElementById('urlAlertsWidget').value = alertsUrl;

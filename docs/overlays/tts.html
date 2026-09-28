@@ -89,11 +89,14 @@
 
     // Extraer parámetros de URL del overlay globalmente
     const urlParams = new URLSearchParams(window.location.search);
-    const channel = (urlParams.get('channel') || urlParams.get('kick') || urlParams.get('streamer') || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
+    const channel = (urlParams.get('channel') || urlParams.get('streamer') || '').toLowerCase().replace(/^#/, '').trim();
+    const kickParam = (urlParams.get('kick') || '').toLowerCase().replace(/^@/, '').trim();
     const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
-    const myStreamerKey = channel || '';
+    const myStreamerKey = channel || kickParam || '';
     const myToken = token || '';
-    const linkedChannels = new Set([myStreamerKey]);
+    const linkedChannels = new Set([myStreamerKey].filter(Boolean));
+    if (channel) linkedChannels.add(channel);
+    if (kickParam) linkedChannels.add(kickParam);
 
     // Cola estricta y control de reproducción único (FIFO)
     const queue = [];
@@ -683,7 +686,13 @@
         } else if (myToken && !targetToken && (targetRoom === myStreamerKey || linkedChannels.has(targetRoom))) {
           // Transmisión local sin token pero mismo canal
         } else if (targetRoom && targetRoom !== 'default' && targetRoom !== 'streamer' && myStreamerKey && targetRoom !== myStreamerKey && !linkedChannels.has(targetRoom)) {
-          return;
+          const isKickEvent = msg.platform === 'kick' || msg.data?.platform === 'kick';
+          const eventStreamer = (msg.streamer || msg.data?.streamer || '').toLowerCase().replace(/^#/, '').trim();
+          if (isKickEvent && (linkedChannels.has(eventStreamer) || eventStreamer === myStreamerKey)) {
+            // Evento válido de Kick perteneciente a este streamer
+          } else {
+            return;
+          }
         }
       }
 

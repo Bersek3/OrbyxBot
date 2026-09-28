@@ -24,20 +24,20 @@ class TTSService {
 
   normalizeChannelKey(channelOrUser = 'default') {
     const raw = (channelOrUser || 'default').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() || 'default';
+    const streamerId = (storage.getStreamerId() || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
     if (raw === 'default') {
-      return storage.getStreamerId() || 'default';
+      return streamerId || 'default';
     }
     try {
       const config = storage.getConfig();
       const twitchChan = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
       const kickChan = (config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
-      const streamerId = (storage.getStreamerId() || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
 
       if ((twitchChan && raw === twitchChan) || (kickChan && raw === kickChan) || (streamerId && raw === streamerId)) {
         return streamerId || twitchChan || kickChan || 'default';
       }
     } catch(e) {}
-    return raw;
+    return streamerId || raw;
   }
 
   sanitizeText(text, config) {
@@ -310,7 +310,7 @@ class TTSService {
     return segments;
   }
 
-  processRequest({ user, text, source = 'chat', bits = 0, voiceOverride = null, channel = null, userBadges = {} }) {
+  processRequest({ user, text, source = 'chat', bits = 0, voiceOverride = null, channel = null, userBadges = {}, platform = null }) {
     const config = storage.getConfig().tts;
     if (!config.enabled) {
       return { success: false, reason: 'TTS está deshabilitado en la configuración' };
@@ -394,13 +394,16 @@ class TTSService {
       : primaryAudioUrl;
 
     const cleanChannel = this.normalizeChannelKey(channel);
+    const effectivePlatform = platform || (source === 'kick' ? 'kick' : 'twitch');
     const ttsItem = {
       id: 'tts-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
       channel: cleanChannel,
       room: cleanChannel,
+      streamer: cleanChannel,
       user: user || 'Anónimo',
       text: cleanText,
       source,
+      platform: effectivePlatform,
       bits,
       engine: isFish ? 'fish_audio' : 'audio_stream',
       voice: selectedVoice,
