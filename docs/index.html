@@ -2756,10 +2756,10 @@ console.log('Widget personalizado cargado');"></textarea>
                 <h3 style="font-size: 20px; font-weight: 800; color: #fff; margin-bottom: 6px; display: flex; align-items: center; gap: 10px;">
                   <span>🎬</span> <span>Clips del Canal & Chat</span>
                   <span id="clipsCountBadge" style="font-size: 12px; background: rgba(0,242,254,0.15); color: #00f2fe; border: 1px solid rgba(0,242,254,0.35); padding: 3px 12px; border-radius: 999px; font-weight: 700;">0 clips</span>
-                  <span style="font-size: 11px; background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.35); padding: 3px 10px; border-radius: 999px; font-weight: 700;">📅 Últimos 30 días</span>
+                  <span id="clipsScopeBadge" style="font-size: 11px; background: rgba(168,85,247,0.15); color: #c084fc; border: 1px solid rgba(168,85,247,0.35); padding: 3px 10px; border-radius: 999px; font-weight: 700;">🎬 Colección Completa</span>
                 </h3>
                 <p style="font-size: 13px; color: var(--text-secondary); margin: 0;">
-                  Visualiza los clips creados en los últimos 30 días en tu canal de <strong>Twitch</strong> y <strong>Kick</strong>, y los compartidos en el chat con <code style="color:#a3e635;">!clip</code>.
+                  Colección de clips de tu canal de <strong>Twitch</strong> y <strong>Kick</strong>, organizados por fecha de creación o vistas, y clips compartidos en el chat con <code style="color:#a3e635;">!clip</code>.
                 </p>
               </div>
               <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
@@ -2786,29 +2786,64 @@ console.log('Widget personalizado cargado');"></textarea>
             </div>
           </div>
 
-          <!-- Filtros de plataforma y buscador -->
-          <div style="display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 20px;">
-            <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="clipsFilterGroup">
-              <button class="btn btn-sm clip-filter-btn active" data-filter="all" onclick="filterClips('all', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px;">
-                🎬 Todos (<span id="filterCountAll">0</span>)
-              </button>
-              <button class="btn btn-sm clip-filter-btn" data-filter="twitch" onclick="filterClips('twitch', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px; background: rgba(145,70,255,0.1); color: #c084fc; border: 1px solid rgba(145,70,255,0.3);">
-                🟣 Twitch (<span id="filterCountTwitch">0</span>)
-              </button>
-              <button class="btn btn-sm clip-filter-btn" data-filter="kick" onclick="filterClips('kick', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px; background: rgba(83,252,24,0.08); color: #86efac; border: 1px solid rgba(83,252,24,0.25);">
-                🟢 Kick (<span id="filterCountKick">0</span>)
-              </button>
-              <button class="btn btn-sm clip-filter-btn" data-filter="chat" onclick="filterClips('chat', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px; background: rgba(0,242,254,0.08); color: #00f2fe; border: 1px solid rgba(0,242,254,0.25);">
-                💬 Chat (!clip) (<span id="filterCountChat">0</span>)
-              </button>
+          <!-- Banner de aviso si falta el permiso clips:edit en Twitch -->
+          <div id="clipsScopeWarningBanner" style="display: none; background: linear-gradient(135deg, rgba(234,179,8,0.12), rgba(245,158,11,0.06)); border: 1px solid rgba(234,179,8,0.35); border-radius: 12px; padding: 14px 20px; margin-bottom: 20px; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span style="font-size: 24px;">⚠️</span>
+              <div>
+                <div style="font-size: 14px; font-weight: 700; color: #fde047; margin-bottom: 2px;">Permiso para crear clips en Twitch no autorizado</div>
+                <div style="font-size: 12px; color: #cbd5e1; line-height: 1.4;">Para que el bot pueda crear clips en vivo automáticamente en Twitch con el comando <code style="color:#a3e635;">!clip</code>, autoriza el permiso <strong>clips:edit</strong> con un solo clic.</div>
+              </div>
             </div>
-            <div style="display: flex; gap: 10px; align-items: center; flex: 1; justify-content: flex-end; flex-wrap: wrap;">
-              <select id="clipsSortSelect" class="form-control form-control-sm" onchange="onClipSortChange(this.value)" style="border-radius: 20px; font-size: 13px; width: auto; min-width: 175px; background: rgba(14,18,30,0.9); color: #cbd5e1; border: 1px solid rgba(0,242,254,0.3); padding: 5px 12px; cursor: pointer; font-weight: 600;">
-                <option value="newest" selected>⏱️ Más recientes</option>
-                <option value="oldest">⌛ Más antiguos</option>
-                <option value="views">👁️ Más vistos</option>
-                <option value="title">🔤 Título (A-Z)</option>
-              </select>
+            <button class="btn btn-sm btn-primary" onclick="triggerTwitchOAuthLogin()" style="font-weight: 700; padding: 7px 16px; background: #9146ff; border-color: #a855f7; display: flex; align-items: center; gap: 6px;">
+              <span>⚡</span> <span>Autorizar Permiso de Clips</span>
+            </button>
+          </div>
+
+          <!-- Filtros de plataforma, buscador, agrupación y orden -->
+          <div style="display: flex; flex-direction: column; gap: 14px; margin-bottom: 22px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;" id="clipsFilterGroup">
+                <button class="btn btn-sm clip-filter-btn active" data-filter="all" onclick="filterClips('all', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px;">
+                  🎬 Todos (<span id="filterCountAll">0</span>)
+                </button>
+                <button class="btn btn-sm clip-filter-btn" data-filter="twitch" onclick="filterClips('twitch', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px; background: rgba(145,70,255,0.1); color: #c084fc; border: 1px solid rgba(145,70,255,0.3);">
+                  🟣 Twitch (<span id="filterCountTwitch">0</span>)
+                </button>
+                <button class="btn btn-sm clip-filter-btn" data-filter="kick" onclick="filterClips('kick', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px; background: rgba(83,252,24,0.08); color: #86efac; border: 1px solid rgba(83,252,24,0.25);">
+                  🟢 Kick (<span id="filterCountKick">0</span>)
+                </button>
+                <button class="btn btn-sm clip-filter-btn" data-filter="chat" onclick="filterClips('chat', this)" style="border-radius: 20px; font-weight: 700; padding: 6px 14px; background: rgba(0,242,254,0.08); color: #00f2fe; border: 1px solid rgba(0,242,254,0.25);">
+                  💬 Chat (!clip) (<span id="filterCountChat">0</span>)
+                </button>
+              </div>
+
+              <!-- Controles de agrupación y rango de fechas -->
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <button id="btnToggleClipGrouping" class="btn btn-sm" onclick="toggleClipGrouping()" style="border-radius: 20px; font-weight: 700; padding: 5px 14px; background: rgba(0,242,254,0.15); color: #00f2fe; border: 1px solid rgba(0,242,254,0.35); cursor: pointer; display: flex; align-items: center; gap: 6px;" title="Alternar agrupación por fecha">
+                  <span>📅</span> <span id="lblClipGrouping">Agrupado por fecha: ON</span>
+                </button>
+
+                <select id="clipsDateRangeSelect" class="form-control form-control-sm" onchange="onClipDateRangeChange(this.value)" style="border-radius: 20px; font-size: 13px; width: auto; background: rgba(14,18,30,0.9); color: #cbd5e1; border: 1px solid rgba(0,242,254,0.3); padding: 5px 12px; cursor: pointer; font-weight: 600;">
+                  <option value="all" selected>🌐 Todo el historial</option>
+                  <option value="30d">🗓️ Últimos 30 días</option>
+                  <option value="7d">⚡ Últimos 7 días</option>
+                  <option value="year">📅 Este año</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;">
+              <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                <span style="font-size: 12px; font-weight: 700; color: #94a3b8;">Ordenar por:</span>
+                <select id="clipsSortSelect" class="form-control form-control-sm" onchange="onClipSortChange(this.value)" style="border-radius: 20px; font-size: 13px; width: auto; min-width: 190px; background: rgba(14,18,30,0.9); color: #cbd5e1; border: 1px solid rgba(0,242,254,0.3); padding: 5px 12px; cursor: pointer; font-weight: 600;">
+                  <option value="newest" selected>⏱️ Más recientes primero</option>
+                  <option value="oldest">⌛ Más antiguos primero</option>
+                  <option value="views">👁️ Más vistos</option>
+                  <option value="title">🔤 Título (A-Z)</option>
+                  <option value="duration">⏳ Mayor duración</option>
+                </select>
+              </div>
               <div style="max-width: 320px; min-width: 200px; flex: 1;">
                 <input type="text" id="clipsSearchInput" class="form-control form-control-sm" placeholder="🔍 Buscar por título o creador..." oninput="onClipSearch(this.value)" style="border-radius: 20px; font-size: 13px;">
               </div>
@@ -2820,7 +2855,7 @@ console.log('Widget personalizado cargado');"></textarea>
             <div style="background: rgba(145,70,255,0.06); border: 1px solid rgba(145,70,255,0.25); border-radius: 10px; padding: 10px 14px; display: flex; gap: 10px; align-items: center;">
               <span style="font-size: 20px;">⚡</span>
               <div style="font-size: 12px; color: #cbd5e1;">
-                En el chat escribe <strong style="color: #c084fc;">!clip</strong> para <strong>crear un clip instantáneo de los últimos 30 segundos</strong> del stream en vivo, o <strong style="color:#a3e635;">!clip &lt;URL&gt;</strong> para registrar uno manualmente.
+                En el chat escribe <strong style="color: #c084fc;">!clip</strong> para <strong>crear un clip instantáneo en vivo en Twitch</strong> de los últimos 30 segundos, o <strong style="color:#a3e635;">!clip &lt;URL&gt;</strong> para registrar uno manualmente.
               </div>
             </div>
             <div style="background: rgba(0,242,254,0.06); border: 1px solid rgba(0,242,254,0.25); border-radius: 10px; padding: 10px 14px; display: flex; gap: 10px; align-items: center;">
@@ -2846,9 +2881,9 @@ console.log('Widget personalizado cargado');"></textarea>
             </div>
           </details>
 
-          <!-- Grid de clips -->
-          <div id="clipsGridContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px;">
-            <div id="clipsEmptyState" style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: var(--text-muted);">
+          <!-- Contenedor de clips (con soporte para agrupación por fecha) -->
+          <div id="clipsGridContainer" style="display: flex; flex-direction: column; gap: 24px;">
+            <div id="clipsEmptyState" style="text-align: center; padding: 60px 20px; color: var(--text-muted);">
               <div style="font-size: 56px; margin-bottom: 16px;">🎬</div>
               <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">Cargando clips del canal...</div>
               <div style="font-size: 14px; color: #94a3b8; max-width: 420px; margin: 0 auto;">

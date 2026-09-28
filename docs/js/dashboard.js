@@ -12141,30 +12141,56 @@ async function loadClips(forceRefresh = false) {
             } catch(e) {}
           }
 
-          // Consultar clips vía Helix con started_at de 30 días
+          // Consultar clips vía Helix con paginación completa (hasta 10 páginas)
           if (broadcasterId && clientId && token) {
-            const clipsUrl = `https://api.twitch.tv/helix/clips?broadcaster_id=${encodeURIComponent(broadcasterId)}&started_at=${encodeURIComponent(thirtyDaysAgoISO)}&first=50`;
-            const clipsRes = await fetch(clipsUrl, {
-              headers: { 'Client-Id': clientId, 'Authorization': `Bearer ${token}` }
-            });
-            if (clipsRes.ok) {
+            let cursor = null;
+            let pageCount = 0;
+            const rawMap = new Map();
+            do {
+              let clipsUrl = `https://api.twitch.tv/helix/clips?broadcaster_id=${encodeURIComponent(broadcasterId)}&first=100`;
+              if (cursor) clipsUrl += `&after=${encodeURIComponent(cursor)}`;
+              const clipsRes = await fetch(clipsUrl, {
+                headers: { 'Client-Id': clientId, 'Authorization': `Bearer ${token}` }
+              });
+              if (!clipsRes.ok) break;
               const clipsJson = await clipsRes.json();
-              const raw = clipsJson.data || [];
-              twitchClips = raw.map(c => ({
-                id: c.id,
-                url: c.url,
-                embedUrl: c.embed_url,
-                title: c.title || 'Clip de Twitch',
-                creator: c.creator_name || 'Desconocido',
-                broadcaster: c.broadcaster_name || twitchChannel,
-                thumbnail: c.thumbnail_url,
-                views: c.view_count || 0,
-                duration: Math.round(c.duration || 0),
-                createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
-                platform: 'twitch',
-                source: 'channel'
-              }));
-            }
+              const batch = clipsJson.data || [];
+              if (batch.length === 0) break;
+              for (const c of batch) {
+                if (c && c.id && !rawMap.has(c.id)) rawMap.set(c.id, c);
+              }
+              pageCount++;
+              cursor = clipsJson.pagination && clipsJson.pagination.cursor ? clipsJson.pagination.cursor : null;
+            } while (cursor && pageCount < 10);
+
+            const raw = Array.from(rawMap.values());
+            twitchClips = raw.map(c => ({
+              id: c.id,
+              url: c.url,
+              embedUrl: c.embed_url,
+              title: c.title || 'Clip de Twitch',
+              creator: c.creator_name || 'Desconocido',
+              broadcaster: c.broadcaster_name || twitchChannel,
+              thumbnail: c.thumbnail_url,
+              views: c.view_count || 0,
+              duration: Math.round(c.duration || 0),
+              createdAt: c.created_at ? new Date(c.created_at).getTime() : Date.now(),
+              platform: 'twitch',
+              source: 'channel'
+            }));
+
+            // Scope check en modo standalone
+            try {
+              const valRes = await fetch('https://id.twitch.tv/oauth2/validate', {
+                headers: { 'Authorization': `OAuth ${token}` }
+              });
+              if (valRes.ok) {
+                const valData = await valRes.json();
+                if (valData.scopes && valData.scopes.includes('clips:edit')) {
+                  standaloneCanCreateClip = true;
+                }
+              }
+            } catch(e) {}
           }
         } catch(twErr) {
           console.warn('[Clips] Error en consulta directa Twitch Helix:', twErr);
@@ -12220,31 +12246,34 @@ async function loadClips(forceRefresh = false) {
         twitchClips,
         kickClips,
         chatClips,
+        canCreateLiveClip: typeof standaloneCanCreateClip !== 'undefined' ? standaloneCanCreateClip : false,
         channel: { twitch: sessionChannels.twitch, kick: sessionChannels.kick }
       };
     }
 
     if (data) {
-      const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-      const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
-
-      // Filtrar estrictamente solo clips de los últimos 30 días
-      const isWithin30Days = (clip) => {
-        const ts = getClipTimestamp(clip);
-        return !ts || ts >= thirtyDaysAgo;
-      };
-
-      const sanitizeAndSort = (arr) => {
-        return (arr || []).filter(isWithin30Days).sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
+      const sortDesc = (arr) => {
+        return [...(arr || [])].sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
       };
 
       allClipsStore = {
-        all: sanitizeAndSort(data.allClips),
-        twitch: sanitizeAndSort(data.twitchClips),
-        kick: sanitizeAndSort(data.kickClips),
-        chat: sanitizeAndSort(data.chatClips),
+        all: sortDesc(data.allClips),
+        twitch: sortDesc(data.twitchClips),
+        kick: sortDesc(data.kickClips),
+        chat: sortDesc(data.chatClips),
+        canCreateLiveClip: Boolean(data.canCreateLiveClip),
         channel: data.channel || { twitch: sessionChannels.twitch, kick: sessionChannels.kick }
       };
+
+      // Banner de permiso clips:edit
+      const scopeBanner = document.getElementById('clipsScopeWarningBanner');
+      if (scopeBanner) {
+        if (sessionChannels.twitch && data.canCreateLiveClip === false) {
+          scopeBanner.style.display = 'flex';
+        } else {
+          scopeBanner.style.display = 'none';
+        }
+      }
 
       try {
         localStorage.setItem(cacheKey, JSON.stringify(data));
@@ -12255,15 +12284,15 @@ async function loadClips(forceRefresh = false) {
       const cTw = document.getElementById('filterCountTwitch');
       const cKick = document.getElementById('filterCountKick');
       const cChat = document.getElementById('filterCountChat');
-      if (cAll) cAll.textContent = allClipsStore.all.length;
-      if (cTw) cTw.textContent = allClipsStore.twitch.length;
-      if (cKick) cKick.textContent = allClipsStore.kick.length;
-      if (cChat) cChat.textContent = allClipsStore.chat.length;
+      if (cAll) cAll.textContent = allClipsStore.all.length.toLocaleString();
+      if (cTw) cTw.textContent = allClipsStore.twitch.length.toLocaleString();
+      if (cKick) cKick.textContent = allClipsStore.kick.length.toLocaleString();
+      if (cChat) cChat.textContent = allClipsStore.chat.length.toLocaleString();
 
       applyClipsFilter();
 
       if (forceRefresh) {
-        showToast(`✅ Se sincronizaron ${allClipsStore.all.length} clips de los últimos 30 días`, 'success');
+        showToast(`✅ Se sincronizaron ${allClipsStore.all.length} clips del canal`, 'success');
       }
     }
   } catch (e) {
@@ -12275,18 +12304,13 @@ async function loadClips(forceRefresh = false) {
       if (cached) {
         const parsed = JSON.parse(cached);
         if (parsed && (parsed.allClips || parsed.twitchClips || parsed.kickClips || parsed.chatClips)) {
-          const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-          const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
-          const isWithin30Days = (clip) => {
-            const ts = getClipTimestamp(clip);
-            return !ts || ts >= thirtyDaysAgo;
-          };
-          const sanitizeAndSort = (arr) => (arr || []).filter(isWithin30Days).sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
+          const sortDesc = (arr) => [...(arr || [])].sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
           allClipsStore = {
-            all: sanitizeAndSort(parsed.allClips),
-            twitch: sanitizeAndSort(parsed.twitchClips),
-            kick: sanitizeAndSort(parsed.kickClips),
-            chat: sanitizeAndSort(parsed.chatClips),
+            all: sortDesc(parsed.allClips),
+            twitch: sortDesc(parsed.twitchClips),
+            kick: sortDesc(parsed.kickClips),
+            chat: sortDesc(parsed.chatClips),
+            canCreateLiveClip: Boolean(parsed.canCreateLiveClip),
             channel: parsed.channel || {}
           };
           applyClipsFilter();
@@ -12307,6 +12331,47 @@ async function loadClips(forceRefresh = false) {
       syncBtn.disabled = false;
       syncBtn.innerHTML = '🔄 Sincronizar Clips del Canal';
     }
+  }
+}
+
+let currentClipDateRange = 'all'; // 'all', '30d', '7d', 'year'
+let isClipGroupingEnabled = true; // Por defecto agrupado por fecha de creación
+let collapsedClipGroups = new Set();
+
+function onClipDateRangeChange(range) {
+  currentClipDateRange = range || 'all';
+  applyClipsFilter();
+}
+
+function toggleClipGrouping() {
+  isClipGroupingEnabled = !isClipGroupingEnabled;
+  const btn = document.getElementById('btnToggleClipGrouping');
+  const lbl = document.getElementById('lblClipGrouping');
+  if (lbl) {
+    lbl.textContent = `Agrupado por fecha: ${isClipGroupingEnabled ? 'ON' : 'OFF'}`;
+  }
+  if (btn) {
+    btn.style.background = isClipGroupingEnabled ? 'rgba(0,242,254,0.15)' : 'rgba(255,255,255,0.06)';
+    btn.style.borderColor = isClipGroupingEnabled ? 'rgba(0,242,254,0.35)' : 'rgba(255,255,255,0.15)';
+    btn.style.color = isClipGroupingEnabled ? '#00f2fe' : '#94a3b8';
+  }
+  applyClipsFilter();
+}
+
+function toggleGroupCollapse(groupId) {
+  if (collapsedClipGroups.has(groupId)) {
+    collapsedClipGroups.delete(groupId);
+  } else {
+    collapsedClipGroups.add(groupId);
+  }
+  const grid = document.getElementById(`group-grid-${groupId}`);
+  const icon = document.getElementById(`group-icon-${groupId}`);
+  const isCollapsed = collapsedClipGroups.has(groupId);
+  if (grid) {
+    grid.style.display = isCollapsed ? 'none' : 'grid';
+  }
+  if (icon) {
+    icon.textContent = isCollapsed ? '▶' : '▼';
   }
 }
 
@@ -12346,13 +12411,18 @@ function applyClipsFilter() {
     list = [...allClipsStore.all];
   }
 
-  // Filtrar estrictamente solo clips de los últimos 30 días
-  const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
-  const thirtyDaysAgo = Date.now() - THIRTY_DAYS_MS;
-  list = list.filter(c => {
-    const ts = getClipTimestamp(c);
-    return !ts || ts >= thirtyDaysAgo;
-  });
+  // Filtrar por rango de fechas si se especificó
+  const now = Date.now();
+  if (currentClipDateRange === '30d') {
+    const cutoff = now - (30 * 24 * 60 * 60 * 1000);
+    list = list.filter(c => getClipTimestamp(c) >= cutoff);
+  } else if (currentClipDateRange === '7d') {
+    const cutoff = now - (7 * 24 * 60 * 60 * 1000);
+    list = list.filter(c => getClipTimestamp(c) >= cutoff);
+  } else if (currentClipDateRange === 'year') {
+    const thisYear = new Date().getFullYear();
+    list = list.filter(c => new Date(getClipTimestamp(c)).getFullYear() === thisYear);
+  }
 
   // Filtrar por término de búsqueda si existe
   if (currentClipSearch) {
@@ -12364,7 +12434,7 @@ function applyClipsFilter() {
     });
   }
 
-  // Ordenar clips: por defecto de más nuevos a más antiguos
+  // Ordenar clips
   list.sort((a, b) => {
     if (currentClipSort === 'oldest') {
       return getClipTimestamp(a) - getClipTimestamp(b);
@@ -12372,16 +12442,117 @@ function applyClipsFilter() {
     if (currentClipSort === 'views') {
       const vA = Number(a.views || a.viewCount || a.view_count || 0);
       const vB = Number(b.views || b.viewCount || b.view_count || 0);
-      return vB - vA;
+      if (vB !== vA) return vB - vA;
+      return getClipTimestamp(b) - getClipTimestamp(a);
     }
     if (currentClipSort === 'title') {
       return (a.title || '').localeCompare(b.title || '');
+    }
+    if (currentClipSort === 'duration') {
+      const dA = Number(a.duration || 0);
+      const dB = Number(b.duration || 0);
+      return dB - dA;
     }
     // 'newest' por defecto (más recientes primero)
     return getClipTimestamp(b) - getClipTimestamp(a);
   });
 
   renderClips(list);
+}
+
+function buildClipCardElement(clip) {
+  const card = document.createElement('div');
+  card.id = `clip-card-${clip.id}`;
+  card.style.cssText = 'background: linear-gradient(135deg, rgba(14,18,30,0.97), rgba(10,13,22,0.99)); border: 1px solid rgba(0,242,254,0.15); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s; position: relative;';
+
+  const isTwitch = clip.platform === 'twitch';
+  const isKick = clip.platform === 'kick';
+  const platformColor = isTwitch ? '#9146ff' : isKick ? '#53fc18' : '#00f2fe';
+  const platformLabel = isTwitch ? 'Twitch' : isKick ? 'Kick' : 'Web';
+  const platformIcon = isTwitch ? '🟣' : isKick ? '🟢' : '🌐';
+
+  // Formatear duración
+  const durationSec = Number(clip.duration) || 0;
+  const durMin = Math.floor(durationSec / 60);
+  const durRestSec = durationSec % 60;
+  const durationStr = `${durMin}:${durRestSec < 10 ? '0' : ''}${durRestSec}`;
+
+  // Thumbnail con botón de reproducción
+  const thumbUrl = clip.thumbnail || '';
+  const viewsCount = Number(clip.views || clip.viewCount || 0).toLocaleString();
+
+  let thumbHtml = '';
+  if (thumbUrl) {
+    thumbHtml = `
+      <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; overflow:hidden; cursor:pointer;" onclick="openClipModalById('${clip.id}')">
+        <img src="${thumbUrl}" alt="${clip.title || ''}" style="width:100%; height:100%; object-fit:cover; display:block; transition:transform 0.3s;"
+          onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+        <div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#131826; font-size:40px;">🎬</div>
+        <div style="position:absolute; inset:0; background:rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; opacity:0.85; transition:opacity 0.2s, background 0.2s;" class="clip-thumb-overlay">
+          <div style="width:48px; height:48px; border-radius:50%; background:rgba(0,0,0,0.7); border:2px solid ${platformColor}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; box-shadow:0 0 16px ${platformColor}60;">
+            ▶
+          </div>
+        </div>
+        ${durationSec > 0 ? `<span style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.85); color:#fff; font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:0.03em;">${durationStr}</span>` : ''}
+        ${viewsCount !== '0' ? `<span style="position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.75); color:#cbd5e1; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px;">👁️ ${viewsCount}</span>` : ''}
+      </div>`;
+  } else {
+    thumbHtml = `
+      <div style="height:150px; background:linear-gradient(135deg,rgba(10,13,22,0.95),rgba(20,26,44,0.95)); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;" onclick="openClipModalById('${clip.id}')">
+        <div style="font-size:42px;">🎬</div>
+        <span style="font-size:11px; color:#94a3b8; font-weight:700;">Haz clic para ver</span>
+      </div>`;
+  }
+
+  const clipTimestamp = getClipTimestamp(clip);
+  const dateStr = clipTimestamp ? new Date(clipTimestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
+  const fullDateTitle = clipTimestamp ? new Date(clipTimestamp).toLocaleString('es-AR') : '';
+  const creatorName = clip.creator || clip.requester || 'Streamer';
+  const isDeletable = clip.source === 'chat' || !clip.source;
+
+  card.innerHTML = `
+    ${thumbHtml}
+    <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+        <span style="font-size: 13px; font-weight: 800; color: #fff; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${clip.title || ''}">${clip.title || 'Clip del stream'}</span>
+        <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(${isTwitch ? '145,70,255' : isKick ? '83,252,24' : '0,242,254'},0.15); color: ${platformColor}; border: 1px solid ${platformColor}30; flex-shrink:0;">${platformIcon} ${platformLabel}</span>
+      </div>
+      <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #94a3b8;">
+        <span title="Creado por @${creatorName}">👤 @${creatorName}</span>
+        <span title="${fullDateTitle ? 'Fecha: ' + fullDateTitle : ''}" style="color: #cbd5e1; font-weight: 600;">📅 ${dateStr || 'Reciente'}</span>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 4px;">
+        <button onclick="openClipModalById('${clip.id}')"
+          style="flex: 1; padding: 6px 10px; background: rgba(0,242,254,0.12); border: 1px solid rgba(0,242,254,0.35); border-radius: 8px; color: #00f2fe; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
+          ▶️ Ver Clip
+        </button>
+        <a href="${clip.url}" target="_blank" rel="noopener"
+          style="padding: 6px 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #cbd5e1; font-size: 12px; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;"
+          title="Abrir en ${platformLabel}">
+          🔗
+        </a>
+        ${isDeletable ? `
+          <button onclick="deleteClip('${clip.id}')"
+            style="padding: 6px 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; color: #ef4444; font-size: 12px; font-weight: 700; cursor: pointer;"
+            title="Eliminar de la lista">
+            🗑️
+          </button>` : ''}
+      </div>
+    </div>`;
+
+  // Hover effect
+  card.addEventListener('mouseenter', () => {
+    card.style.borderColor = 'rgba(0,242,254,0.45)';
+    card.style.transform = 'translateY(-2px)';
+    card.style.boxShadow = '0 6px 24px rgba(0,242,254,0.15)';
+  });
+  card.addEventListener('mouseleave', () => {
+    card.style.borderColor = 'rgba(0,242,254,0.15)';
+    card.style.transform = '';
+    card.style.boxShadow = '';
+  });
+
+  return card;
 }
 
 function renderClips(clips) {
@@ -12391,7 +12562,7 @@ function renderClips(clips) {
   const badge = document.getElementById('clipsCountBadge');
   if (!container) return;
 
-  if (badge) badge.textContent = `${clipsData.length} clip${clipsData.length !== 1 ? 's' : ''}`;
+  if (badge) badge.textContent = `${clipsData.length.toLocaleString()} clip${clipsData.length !== 1 ? 's' : ''}`;
 
   // Eliminar cards anteriores manteniendo el contenedor de empty state
   Array.from(container.children).forEach(el => {
@@ -12403,108 +12574,111 @@ function renderClips(clips) {
       emptyState.style.display = 'block';
       emptyState.innerHTML = `
         <div style="font-size: 56px; margin-bottom: 16px;">🎬</div>
-        <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">No se encontraron clips de los últimos 30 días</div>
+        <div style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 8px;">No se encontraron clips</div>
         <div style="font-size: 14px; color: #94a3b8; max-width: 440px; margin: 0 auto; line-height: 1.5;">
-          No hay clips creados en los últimos 30 días con el filtro actual. Puedes sincronizar con Twitch/Kick o compartir uno con <code style="color:#a3e635;">!clip &lt;URL&gt;</code> en el chat.
+          No hay clips con los filtros actuales. Puedes cambiar el filtro de fecha o plataforma, sincronizar con Twitch/Kick o compartir uno con <code style="color:#a3e635;">!clip &lt;URL&gt;</code> en el chat.
         </div>`;
     }
     return;
   }
   if (emptyState) emptyState.style.display = 'none';
 
+  // Si la agrupación por fecha está desactivada, mostrar cuadrícula plana
+  if (!isClipGroupingEnabled) {
+    const flatGrid = document.createElement('div');
+    flatGrid.style.cssText = 'display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; width: 100%;';
+    clipsData.forEach(clip => {
+      flatGrid.appendChild(buildClipCardElement(clip));
+    });
+    container.appendChild(flatGrid);
+    return;
+  }
+
+  // Agrupar clips por fecha de creación (Mes y Año, o Hoy / Ayer)
+  const groupsMap = new Map();
+  const now = new Date();
+  const todayStr = now.toDateString();
+  const yesterday = new Date(Date.now() - 86400000);
+  const yesterdayStr = yesterday.toDateString();
+
   clipsData.forEach(clip => {
-    const card = document.createElement('div');
-    card.id = `clip-card-${clip.id}`;
-    card.style.cssText = 'background: linear-gradient(135deg, rgba(14,18,30,0.97), rgba(10,13,22,0.99)); border: 1px solid rgba(0,242,254,0.15); border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s; position: relative;';
+    const ts = getClipTimestamp(clip);
+    const d = new Date(ts);
+    let groupKey = '';
+    let groupTitle = '';
+    let sortOrderTs = 0;
 
-    const isTwitch = clip.platform === 'twitch';
-    const isKick = clip.platform === 'kick';
-    const platformColor = isTwitch ? '#9146ff' : isKick ? '#53fc18' : '#00f2fe';
-    const platformLabel = isTwitch ? 'Twitch' : isKick ? 'Kick' : 'Web';
-    const platformIcon = isTwitch ? '🟣' : isKick ? '🟢' : '🌐';
-
-    // Formatear duración
-    const durationSec = Number(clip.duration) || 0;
-    const durMin = Math.floor(durationSec / 60);
-    const durRestSec = durationSec % 60;
-    const durationStr = `${durMin}:${durRestSec < 10 ? '0' : ''}${durRestSec}`;
-
-    // Thumbnail con botón de reproducción
-    const thumbUrl = clip.thumbnail || '';
-    const viewsCount = Number(clip.views || clip.viewCount || 0).toLocaleString();
-
-    let thumbHtml = '';
-    if (thumbUrl) {
-      thumbHtml = `
-        <div style="position:relative; width:100%; aspect-ratio:16/9; background:#000; overflow:hidden; cursor:pointer;" onclick="openClipModalById('${clip.id}')">
-          <img src="${thumbUrl}" alt="${clip.title || ''}" style="width:100%; height:100%; object-fit:cover; display:block; transition:transform 0.3s;"
-            onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-          <div style="display:none; width:100%; height:100%; align-items:center; justify-content:center; background:#131826; font-size:40px;">🎬</div>
-          <div style="position:absolute; inset:0; background:rgba(0,0,0,0.3); display:flex; align-items:center; justify-content:center; opacity:0.85; transition:opacity 0.2s, background 0.2s;" class="clip-thumb-overlay">
-            <div style="width:48px; height:48px; border-radius:50%; background:rgba(0,0,0,0.7); border:2px solid ${platformColor}; display:flex; align-items:center; justify-content:center; color:#fff; font-size:20px; box-shadow:0 0 16px ${platformColor}60;">
-              ▶
-            </div>
-          </div>
-          ${durationSec > 0 ? `<span style="position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,0.85); color:#fff; font-size:11px; font-weight:700; padding:2px 6px; border-radius:4px; letter-spacing:0.03em;">${durationStr}</span>` : ''}
-          ${viewsCount !== '0' ? `<span style="position:absolute; top:8px; left:8px; background:rgba(0,0,0,0.75); color:#cbd5e1; font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px;">👁️ ${viewsCount}</span>` : ''}
-        </div>`;
+    if (d.toDateString() === todayStr) {
+      groupKey = 'group_today';
+      groupTitle = '🔥 Hoy (' + d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) + ')';
+      sortOrderTs = Number.MAX_SAFE_INTEGER;
+    } else if (d.toDateString() === yesterdayStr) {
+      groupKey = 'group_yesterday';
+      groupTitle = '⚡ Ayer (' + d.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' }) + ')';
+      sortOrderTs = Number.MAX_SAFE_INTEGER - 1;
     } else {
-      thumbHtml = `
-        <div style="height:150px; background:linear-gradient(135deg,rgba(10,13,22,0.95),rgba(20,26,44,0.95)); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; cursor:pointer;" onclick="openClipModalById('${clip.id}')">
-          <div style="font-size:42px;">🎬</div>
-          <span style="font-size:11px; color:#94a3b8; font-weight:700;">Haz clic para ver</span>
-        </div>`;
+      const monthName = d.toLocaleString('es-AR', { month: 'long' });
+      const year = d.getFullYear();
+      groupKey = `group_${year}_${String(d.getMonth() + 1).padStart(2, '0')}`;
+      groupTitle = `📅 ${monthName.charAt(0).toUpperCase() + monthName.slice(1)} ${year}`;
+      sortOrderTs = new Date(year, d.getMonth(), 1).getTime();
     }
 
-    const clipTimestamp = getClipTimestamp(clip);
-    const dateStr = clipTimestamp ? new Date(clipTimestamp).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) : '';
-    const fullDateTitle = clipTimestamp ? new Date(clipTimestamp).toLocaleString('es-AR') : '';
-    const creatorName = clip.creator || clip.requester || 'Streamer';
-    const isDeletable = clip.source === 'chat' || !clip.source;
+    if (!groupsMap.has(groupKey)) {
+      groupsMap.set(groupKey, {
+        id: groupKey,
+        title: groupTitle,
+        sortOrderTs,
+        clips: []
+      });
+    }
+    groupsMap.get(groupKey).clips.push(clip);
+  });
 
-    card.innerHTML = `
-      ${thumbHtml}
-      <div style="padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1;">
-        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
-          <span style="font-size: 13px; font-weight: 800; color: #fff; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${clip.title || ''}">${clip.title || 'Clip del stream'}</span>
-          <span style="font-size: 10px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: rgba(${isTwitch ? '145,70,255' : isKick ? '83,252,24' : '0,242,254'},0.15); color: ${platformColor}; border: 1px solid ${platformColor}30; flex-shrink:0;">${platformIcon} ${platformLabel}</span>
-        </div>
-        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: #94a3b8;">
-          <span title="Creado por @${creatorName}">👤 @${creatorName}</span>
-          <span title="${fullDateTitle ? 'Fecha: ' + fullDateTitle : ''}" style="color: #cbd5e1; font-weight: 600;">📅 ${dateStr || 'Reciente'}</span>
-        </div>
-        <div style="display: flex; gap: 8px; margin-top: 4px;">
-          <button onclick="openClipModalById('${clip.id}')"
-            style="flex: 1; padding: 6px 10px; background: rgba(0,242,254,0.12); border: 1px solid rgba(0,242,254,0.35); border-radius: 8px; color: #00f2fe; font-size: 12px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;">
-            ▶️ Ver Clip
-          </button>
-          <a href="${clip.url}" target="_blank" rel="noopener"
-            style="padding: 6px 10px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #cbd5e1; font-size: 12px; font-weight: 700; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 4px;"
-            title="Abrir en ${platformLabel}">
-            🔗
-          </a>
-          ${isDeletable ? `
-            <button onclick="deleteClip('${clip.id}')"
-              style="padding: 6px 10px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; color: #ef4444; font-size: 12px; font-weight: 700; cursor: pointer;"
-              title="Eliminar de la lista">
-              🗑️
-            </button>` : ''}
-        </div>
-      </div>`;
+  const groups = Array.from(groupsMap.values());
+  if (currentClipSort === 'oldest') {
+    groups.sort((a, b) => a.sortOrderTs - b.sortOrderTs);
+  } else {
+    groups.sort((a, b) => b.sortOrderTs - a.sortOrderTs);
+  }
 
-    // Hover effect
-    card.addEventListener('mouseenter', () => {
-      card.style.borderColor = 'rgba(0,242,254,0.45)';
-      card.style.transform = 'translateY(-2px)';
-      card.style.boxShadow = '0 6px 24px rgba(0,242,254,0.15)';
+  groups.forEach(grp => {
+    const section = document.createElement('div');
+    section.className = 'clip-date-group-section';
+    section.style.cssText = 'background: rgba(14,20,36,0.65); border: 1px solid rgba(0,242,254,0.18); border-radius: 14px; overflow: hidden; margin-bottom: 20px; transition: border-color 0.2s;';
+
+    const isCollapsed = collapsedClipGroups.has(grp.id);
+
+    // Encabezado de grupo
+    const header = document.createElement('div');
+    header.style.cssText = 'display: flex; align-items: center; justify-content: space-between; padding: 12px 18px; background: linear-gradient(90deg, rgba(0,242,254,0.08), rgba(145,70,255,0.06)); cursor: pointer; user-select: none; border-bottom: ' + (isCollapsed ? 'none' : '1px solid rgba(0,242,254,0.15)') + ';';
+    header.onclick = () => toggleGroupCollapse(grp.id);
+
+    header.innerHTML = `
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-weight: 800; font-size: 15px; color: #fff;">${grp.title}</span>
+        <span style="background: rgba(0,242,254,0.15); color: #00f2fe; font-size: 11px; font-weight: 700; padding: 2px 10px; border-radius: 999px; border: 1px solid rgba(0,242,254,0.3);">
+          ${grp.clips.length} clip${grp.clips.length !== 1 ? 's' : ''}
+        </span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 11px; color: #94a3b8; font-weight: 600;">${isCollapsed ? 'Mostrar clips' : 'Ocultar'}</span>
+        <span id="group-icon-${grp.id}" style="font-size: 12px; color: #00f2fe; width: 18px; text-align: center;">${isCollapsed ? '▶' : '▼'}</span>
+      </div>
+    `;
+    section.appendChild(header);
+
+    // Cuadrícula de clips del grupo
+    const subGrid = document.createElement('div');
+    subGrid.id = `group-grid-${grp.id}`;
+    subGrid.style.cssText = `display: ${isCollapsed ? 'none' : 'grid'}; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 16px; padding: 16px;`;
+
+    grp.clips.forEach(clip => {
+      subGrid.appendChild(buildClipCardElement(clip));
     });
-    card.addEventListener('mouseleave', () => {
-      card.style.borderColor = 'rgba(0,242,254,0.15)';
-      card.style.transform = '';
-      card.style.boxShadow = '';
-    });
 
-    container.appendChild(card);
+    section.appendChild(subGrid);
+    container.appendChild(section);
   });
 }
 
@@ -12932,6 +13106,9 @@ window.clearAllClips = clearAllClips;
 window.handleClipWsEvent = handleClipWsEvent;
 window.handleBrowserCreateLiveClip = handleBrowserCreateLiveClip;
 window.handleBrowserSaveManualClip = handleBrowserSaveManualClip;
+window.toggleClipGrouping = toggleClipGrouping;
+window.onClipDateRangeChange = onClipDateRangeChange;
+window.toggleGroupCollapse = toggleGroupCollapse;
 
 // Hook para auto-cargar clips cuando se abre la pestaña de clips
 (function patchSwitchTabForClips() {

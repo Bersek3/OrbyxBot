@@ -1136,17 +1136,26 @@ app.get('/api/clips/random', async (req, res) => {
   }
 });
 
-// GET all manual/chat clips (filtered to last 30 days and optional streamer)
+// GET check if Twitch token has clips:edit scope
+app.get('/api/clips/check-scope', async (req, res) => {
+  try {
+    const channel = req.query.channel || req.query.twitch || '';
+    const streamerId = req.query.streamer || req.query.streamerId || '';
+    const result = await clipService.checkTwitchClipsScope(channel, streamerId);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ valid: false, hasClipsEdit: false, error: err.message });
+  }
+});
+
+// GET all manual/chat clips (optional streamer filter)
 app.get('/api/clips', (req, res) => {
-  const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
   const twitch = (req.query.twitch || req.query.twitchChannel || '').toLowerCase();
   const kick = (req.query.kick || req.query.kickChannel || '').toLowerCase();
   const streamer = (req.query.streamer || req.query.streamerId || '').toLowerCase();
 
   let clips = storage.getClips() || [];
   clips = clips.filter(c => {
-    const ts = Number(c.createdAt) || (c.created_at ? new Date(c.created_at).getTime() : 0);
-    if (ts < thirtyDaysAgo) return false;
     if (twitch || kick || streamer) {
       const cChan = (c.channel || '').toLowerCase().replace(/^[#@]/, '');
       const cStreamer = (c.streamerId || '').toLowerCase();

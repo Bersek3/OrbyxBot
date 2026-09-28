@@ -584,9 +584,11 @@ class TwitchBot {
         } else {
           // El usuario escribió !clip sin URL: CREAR UN CLIP EN VIVO DE LOS ÚLTIMOS 30 SEGUNDOS
           const cleanChan = channel.toLowerCase().replace(/^#/, '');
+          const customTitle = clipArg && !/^https?:\/\//i.test(clipArg) ? clipArg.trim() : '';
+
           this.sendMessage(channel, `⏳ @${username}, creando clip de los últimos 30 segundos del stream...`);
           try {
-            const createResult = await clipService.createLiveClip('twitch', cleanChan, username, cleanChan);
+            const createResult = await clipService.createLiveClip('twitch', cleanChan, username, cleanChan, customTitle);
             if (createResult.success && createResult.clipUrl) {
               this.sendMessage(channel, `🎬 ¡Clip creado por @${username}! 👉 ${createResult.clipUrl}`);
               this.broadcast('clip_added', createResult.clip);
@@ -594,18 +596,18 @@ class TwitchBot {
               // Si no se pudo crear (p. ej. stream offline o falta permiso), intentar mostrar el más reciente y explicar la razón
               const channelClip = await clipService.getRandomOrLatestClip('twitch', cleanChan);
               if (createResult.error === 'missing_scope') {
-                this.sendMessage(channel, `⚠️ @${username}, para crear clips en vivo el streamer debe autorizar el permiso "clips:edit" reconectando Twitch en el panel.`);
+                this.sendMessage(channel, `⚠️ @${username}, para crear clips en vivo el streamer debe autorizar el permiso "clips:edit" en el panel de OrbiBot (pestaña Clips o Conexiones).`);
               } else if (createResult.error === 'stream_offline') {
                 if (channelClip && channelClip.url) {
-                  this.sendMessage(channel, `⚠️ @${username}, el stream no está transmitiendo en vivo para clipear ahora. Clip reciente: ${channelClip.url}`);
+                  this.sendMessage(channel, `⚠️ @${username}, el stream debe estar transmitiendo en vivo para clipear ahora. Clip reciente: ${channelClip.url}`);
                 } else {
-                  this.sendMessage(channel, `⚠️ @${username}, el canal debe estar en vivo para crear un clip.`);
+                  this.sendMessage(channel, `⚠️ @${username}, el canal debe estar en vivo para crear un clip con !clip.`);
                 }
               } else {
                 if (channelClip && channelClip.url) {
                   this.sendMessage(channel, `🎬 Clip de @${channelClip.broadcaster || cleanChan}: "${channelClip.title}" 👉 ${channelClip.url}`);
                 } else {
-                  this.sendMessage(channel, `⚠️ @${username}, no se pudo crear el clip en este momento. Puedes compartir uno con !clip <URL>`);
+                  this.sendMessage(channel, `⚠️ @${username}, no se pudo crear el clip en este momento. Puedes compartir uno con: !clip <URL>`);
                 }
               }
             }

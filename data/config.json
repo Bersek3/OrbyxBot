@@ -3,33 +3,34 @@
     "widgetToken": "sec_1405777fa9222aedbf12fd1139e30421"
   },
   "twitch": {
-    "channel": "plantasi",
+    "channel": "bersek___",
     "botUsername": "orbyxbot",
-    "oauthToken": "787zxk5aqbabiw6p5lraahj8rnaome",
+    "oauthToken": "jutbd9jjk91qw965w4scfpx5a7ondj",
     "clientId": "yw1vr664ichms8an2x5lhji58v7ozk",
     "connected": true,
-    "userId": "173938343",
-    "displayName": "plantasi",
-    "profileImage": "https://static-cdn.jtvnw.net/jtv_user_pictures/1dd23e12-87f9-4c5d-a130-678ce7281e7e-profile_image-300x300.png"
+    "userId": "226055830",
+    "displayName": "Bersek___",
+    "profileImage": "https://static-cdn.jtvnw.net/jtv_user_pictures/92a6561b-8e64-4f5f-a5fe-af7782347288-profile_image-300x300.jpeg"
   },
   "kick": {
-    "channel": "",
-    "username": "",
-    "profile_picture": "",
-    "userId": "",
-    "accessToken": "",
-    "refreshToken": "",
+    "channel": "bersek",
+    "username": "Bersek",
+    "profile_picture": "https://files.kick.com/images/user/2984464/profile_image/conversion/8b4e7fba-64d9-469b-b1eb-da87178f4fab-medium.webp",
+    "userId": "2984464",
+    "accessToken": "MJI4YZEXZWQTYWFHMS0ZMZM2LTGYZWITZGNJZGRIMJHMZTK4",
+    "refreshToken": "YMY3NTGZZJETNWNMMY01ZTFKLWEWNJETZJFMZDQ4YZY2ZTRK",
     "clientId": "01M0VT0JC58YQEVGRHM8JFXQX3",
-    "connected": false
+    "connected": true,
+    "chatroomId": 2917135
   },
   "chatPlatforms": {
     "twitch": true,
-    "kick": true
+    "kick": false
   },
   "songRequest": {
     "prefix": "!sr",
     "enabled": true,
-    "maxDurationMinutes": 8,
+    "maxDurationMinutes": 10,
     "maxPerUser": 5,
     "userLevel": "all",
     "volume": 75,
@@ -41,12 +42,12 @@
     "voice": "es_tiktok",
     "volume": 90,
     "rate": 1,
-    "pitch": 1,
-    "minBits": 0,
+    "pitch": 0.8,
+    "minBits": 50,
     "allowChatCommand": true,
-    "chatCommand": "!decir",
+    "chatCommand": "!tts",
     "bannedWords": [],
-    "maxLength": 500,
+    "maxLength": 10000,
     "channelPointsRewardName": "TTS",
     "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI"
   },
