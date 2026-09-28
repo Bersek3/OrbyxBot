@@ -2,10 +2,10 @@
   {
     "id": "cmd-1790561494053",
     "name": "!voces",
-    "response": "🎙️ Voces TTS activas en el stream: {voces_tts} | Escribe el comando seguido de tu mensaje!",
-    "cooldown": 10,
-    "userLevel": "all",
     "enabled": true,
-    "isAutoTts": true
+    "cooldown": 10,
+    "response": "🎙️ Voces TTS activas en el stream: {voces_tts} | Escribe el comando seguido de tu mensaje!",
+    "isAutoTts": true,
+    "userLevel": "all"
   }
 ]

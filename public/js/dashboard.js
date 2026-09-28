@@ -243,9 +243,7 @@ async function saveToAllSupabaseScopes(key, value) {
   if (adminTargetStreamerId) {
     scopes.add(adminTargetStreamerId.toLowerCase().trim());
     const targetTwitch = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
-    const targetKick = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
     if (targetTwitch) scopes.add(targetTwitch);
-    if (targetKick) scopes.add(targetKick);
   } else {
     const session = getUserSession();
     if (!session || (!session.email && !session.id)) {
@@ -1171,10 +1169,8 @@ function updatePlatformLinkingUI() {
 
   // 2. Kick Status
   let kickConfig = appConfig?.kick || {};
-  if (!adminTargetStreamerId && (!kickConfig.channel && !kickConfig.username)) {
-    try { kickConfig = JSON.parse(localStorage.getItem('orbibot_kick_auth') || '{}'); } catch (e) { kickConfig = {}; }
-  }
-  const kickChannel = (kickConfig.channel || kickConfig.username || (!adminTargetStreamerId ? localStorage.getItem('orbibot_kick_channel') : '') || '').toLowerCase().replace(/^@/, '').trim();
+  if (!kickConfig || typeof kickConfig !== 'object') kickConfig = {};
+  const kickChannel = (kickConfig.channel || kickConfig.username || '').toLowerCase().replace(/^@/, '').trim();
   const isKickConn = Boolean(kickChannel && (kickConfig.connected !== false));
   const kickDisplayName = kickConfig.username || kickChannel;
   const kickAvatar = kickConfig.profile_picture || kickConfig.avatar || '';
@@ -2573,26 +2569,19 @@ async function loadInitialData() {
       } catch (e) { }
     }
 
-    // Sync localStorage Kick auth if present for active session
+    // Sync localStorage Kick auth only if verified for current active session
+    let effectiveKick = cfgRes.kick || {};
     const localKick = localStorage.getItem('orbibot_kick_auth');
     const localKickChan = localStorage.getItem('orbibot_kick_channel');
-    let effectiveKick = cfgRes.kick || {};
     if (localKick || localKickChan) {
       try {
         const parsedKick = localKick ? JSON.parse(localKick) : {};
         const kChan = (parsedKick.channel || parsedKick.username || localKickChan || '').toLowerCase().replace(/^@/, '').trim();
-        if (kChan) {
+        if (kChan && !effectiveKick.channel && isStreamerLoggedIn()) {
           parsedKick.channel = kChan;
           parsedKick.connected = true;
           effectiveKick = { ...effectiveKick, ...parsedKick };
           cfgRes.kick = effectiveKick;
-          fetch('/api/config', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ kick: effectiveKick })
-          }).then(() => {
-            fetch('/api/bot/kick/connect', { method: 'POST' }).catch(() => {});
-          }).catch(() => {});
         }
       } catch (e) { }
     }
@@ -11241,7 +11230,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
 
           const itemToken = item.key === 'widget_token' ? val : (val?.widgetToken || val?.security?.widgetToken);
           const isDirectMatch = item.streamer_id === streamerId;
-          const isTokenMatch = discoveredToken && itemToken && itemToken === discoveredToken;
+          const isTokenMatch = Boolean(discoveredToken && itemToken && itemToken === discoveredToken && (item.streamer_id.includes('@') || item.streamer_id.includes('-') || item.streamer_id === streamerId));
 
           if (isDirectMatch || isTokenMatch) {
             if (item.key === 'config' && val) targetCfg = targetCfg ? { ...val, ...targetCfg } : val;
@@ -11287,12 +11276,14 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     targetCfg.twitch.connected = true;
   }
 
-  if (targetKickAuth) {
+  if (targetKickAuth && (targetKickAuth.channel || targetKickAuth.username)) {
     if (!targetCfg.kick) targetCfg.kick = {};
-    targetCfg.kick.channel = targetKickAuth.channel || targetKickAuth.username || targetCfg.kick.channel || '';
-    targetCfg.kick.username = targetKickAuth.username || targetCfg.kick.username || '';
-    targetCfg.kick.profile_picture = targetKickAuth.profile_picture || targetKickAuth.avatar || targetCfg.kick.profile_picture || '';
+    targetCfg.kick.channel = targetKickAuth.channel || targetKickAuth.username || '';
+    targetCfg.kick.username = targetKickAuth.username || targetKickAuth.channel || '';
+    targetCfg.kick.profile_picture = targetKickAuth.profile_picture || targetKickAuth.avatar || '';
     targetCfg.kick.connected = true;
+  } else if (!targetCfg.kick || !targetCfg.kick.channel) {
+    targetCfg.kick = { channel: '', username: '', connected: false, profile_picture: '', userId: '', accessToken: '', refreshToken: '' };
   }
 
   // Búsqueda de respaldo en adminStreamersCache si el canal sigue siendo un email o está vacío
@@ -11303,7 +11294,6 @@ async function enterStreamerSupportMode(streamerId, displayName) {
   );
   if (cachedStreamer) {
     const cachedTwitch = cachedStreamer.twitchChannel || (Array.isArray(cachedStreamer.channels) && cachedStreamer.channels.find(c => c.startsWith('twitch:'))?.split(':')[1]?.trim());
-    const cachedKick = cachedStreamer.kickChannel || (Array.isArray(cachedStreamer.channels) && cachedStreamer.channels.find(c => c.startsWith('kick:'))?.split(':')[1]?.trim());
 
     if (cachedTwitch && (!targetCfg.twitch.channel || targetCfg.twitch.channel.includes('@'))) {
       targetCfg.twitch.channel = cachedTwitch;
@@ -11311,12 +11301,6 @@ async function enterStreamerSupportMode(streamerId, displayName) {
         targetCfg.twitch.displayName = cachedStreamer.displayName || cachedTwitch;
       }
       targetCfg.twitch.connected = true;
-    }
-    if (cachedKick && (!targetCfg.kick?.channel || targetCfg.kick.channel.includes('@'))) {
-      if (!targetCfg.kick) targetCfg.kick = {};
-      targetCfg.kick.channel = cachedKick;
-      targetCfg.kick.username = cachedKick;
-      targetCfg.kick.connected = true;
     }
   }
 

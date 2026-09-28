@@ -867,7 +867,15 @@ app.post('/api/kick/chatroom/:channel', (req, res) => {
     if (chatroomId) {
       console.log(`[Server] ChatroomId recibido del cliente para @${channel}: ${chatroomId}`);
       kickBot.chatroomId = chatroomId;
-      storage.saveConfig({ kick: { channel, chatroomId, userId: channelId ? String(channelId) : undefined, connected: true } });
+      
+      // Solo guardar en config local si coincide con el streamer o canal de Kick configurado
+      const currentStreamer = (storage.getStreamerId() || '').toLowerCase();
+      const cfg = storage.getConfig();
+      const kickConfigChan = (cfg.kick?.channel || cfg.kick?.username || '').toLowerCase();
+      if (channel === currentStreamer || channel === kickConfigChan || !currentStreamer || currentStreamer === 'default') {
+        storage.saveConfig({ kick: { channel, chatroomId, userId: channelId ? String(channelId) : undefined, connected: true } });
+      }
+
       if (kickBot.ws && kickBot.ws.readyState === 1) {
         try {
           kickBot.ws.send(JSON.stringify({

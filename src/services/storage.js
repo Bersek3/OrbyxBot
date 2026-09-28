@@ -1916,13 +1916,11 @@ class StorageService {
         for (const [otherId, otherSt] of rawStreamerData.entries()) {
           if (visitedIds.has(otherId)) continue;
 
-          // Comprobación ESTRICTA con strings no vacíos y válidos
-          const sharesToken = Array.from(otherSt.tokens).some(t => t && t.length > 5 && cluster.some(c => c.tokens.has(t)));
+          // Comprobación ESTRICTA: SOLO fusionar si comparten el mismo email o si un UUID pertenece al mismo canal de Twitch
           const sharesEmail = Array.from(otherSt.emails).some(e => e && e.includes('@') && cluster.some(c => c.emails.has(e)));
-          const sharesTwitch = Array.from(otherSt.twitches).some(tw => tw && tw.length > 1 && cluster.some(c => c.twitches.has(tw)));
-          const sharesKick = Array.from(otherSt.kicks).some(k => k && k.length > 1 && cluster.some(c => c.kicks.has(k)));
+          const isRelatedTwitch = Array.from(otherSt.twitches).some(tw => tw && tw.length > 1 && cluster.some(c => c.id === tw || c.twitches.has(tw)));
 
-          if (sharesToken || sharesEmail || sharesTwitch || sharesKick) {
+          if (sharesEmail || (isRelatedTwitch && (otherId.includes('-') || cluster.some(c => c.id.includes('-'))))) {
             cluster.push(otherSt);
             visitedIds.add(otherId);
             expanded = true;
@@ -2038,7 +2036,7 @@ class StorageService {
 
             const itemToken = item.key === 'widget_token' ? val : (val?.widgetToken || val?.security?.widgetToken);
             const matchesId = item.streamer_id === cleanId;
-            const matchesToken = targetToken && itemToken && itemToken === targetToken;
+            const matchesToken = Boolean(targetToken && itemToken && itemToken === targetToken && (item.streamer_id.includes('@') || item.streamer_id.includes('-') || item.streamer_id === cleanId));
 
             if (matchesId || matchesToken) {
               if (item.key === 'config' && val) {
