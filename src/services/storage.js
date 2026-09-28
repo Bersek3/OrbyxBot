@@ -1400,8 +1400,24 @@ class StorageService {
   }
 
   initVoiceCatalog() {
-    const codeVoices = (voiceCatalog && typeof voiceCatalog.getCodeVoices === 'function') ? voiceCatalog.getCodeVoices() : [];
-    return this.saveVoiceCatalog(codeVoices);
+    try {
+      const codeVoices = (voiceCatalog && typeof voiceCatalog.getCodeVoices === 'function') ? voiceCatalog.getCodeVoices() : [];
+      const codeIds = new Set(codeVoices.map(v => v.id.toLowerCase()));
+
+      // Leer catálogo guardado en disco para recuperar voces custom
+      const savedCatalog = readJSON('voice_catalog.json', []);
+      const customVoices = Array.isArray(savedCatalog)
+        ? savedCatalog.filter(v => v && v.id && !codeIds.has(v.id.toLowerCase()) && v.referenceId)
+        : [];
+
+      // Combinar: voces del código + voces custom con referenceId
+      const merged = [...codeVoices, ...customVoices];
+      return this.saveVoiceCatalog(merged);
+    } catch (err) {
+      console.warn('⚠️ [Storage] Error en initVoiceCatalog:', err.message);
+      const codeVoices = (voiceCatalog && typeof voiceCatalog.getCodeVoices === 'function') ? voiceCatalog.getCodeVoices() : [];
+      return this.saveVoiceCatalog(codeVoices);
+    }
   }
 
   saveVoiceCatalog(catalog) {

@@ -1415,7 +1415,11 @@ app.post('/api/admin/tts/voices/add', async (req, res) => {
 
     const cleanRefId = referenceId.trim().replace(/[^a-zA-Z0-9]/g, '');
     const cleanName = name.trim();
-    const voiceId = `custom_${cleanRefId.substring(0, 12)}`;
+    // Usar el referenceId completo como parte del voiceId para que el TTS lo resuelva directamente
+    const voiceId = `custom_${cleanRefId}`;
+    const cleanCommand = defaultCommand
+      ? (defaultCommand.startsWith('!') ? defaultCommand : `!${defaultCommand}`)
+      : `!${cleanName.toLowerCase().replace(/\s+/g, '')}`;
 
     const voiceData = {
       id: voiceId,
@@ -1423,7 +1427,7 @@ app.post('/api/admin/tts/voices/add', async (req, res) => {
       category: category || 'celebrity',
       tags: Array.isArray(tags) ? tags : (tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : ['custom', 'ia']),
       lang: lang || 'es-ES',
-      defaultCommand: defaultCommand ? (defaultCommand.startsWith('!') ? defaultCommand : `!${defaultCommand}`) : `!${cleanName.toLowerCase().replace(/\s+/g, '')}`,
+      defaultCommand: cleanCommand,
       previewText: previewText || `Hola, soy ${cleanName} hablando en el stream.`,
       gender: gender || 'unknown',
       isAI: true,
@@ -1641,11 +1645,39 @@ app.get(['/api/tts', '/api/tts/audio'], async (req, res) => {
     };
 
     let fishRefId = FISH_MODELS[voice];
+
+    // ── Atajo directo para voces custom añadidas por superadmin ──
+    // Si el voiceId empieza con "custom_", el sufijo es el referenceId de Fish Audio
+    if (!fishRefId && voice.startsWith('custom_')) {
+      const candidateRef = voice.replace(/^custom_/, '');
+      if (/^[a-f0-9]{28,}$/i.test(candidateRef)) {
+        fishRefId = candidateRef;
+      }
+    }
+
     if (!fishRefId) {
       try {
-        const voiceCatalog = require('./src/services/voiceCatalog');
-        const dbVoice = voiceCatalog.getVoiceById(voice);
-        if (dbVoice && (dbVoice.referenceId || dbVoice.isAI)) {
+        // Fuente primaria: storage.getVoiceCatalog() lee del disco + actualiza el singleton
+        // Esto garantiza que las voces custom añadidas por superadmin siempre se resuelvan
+        const liveCatalog = storage.getVoiceCatalog();
+        const cleanVoice = voice.toLowerCase().trim();
+        const liveVoice = liveCatalog.find(v =>
+          v.id.toLowerCase() === cleanVoice ||
+          (v.referenceId && v.referenceId.toLowerCase() === cleanVoice) ||
+          (v.defaultCommand && v.defaultCommand.toLowerCase().replace(/^!/, '') === cleanVoice.replace(/^!/, '')) ||
+          v.name.toLowerCase().replace(/\s+/g, '') === cleanVoice.replace(/\s+/g, '')
+        );
+        if (liveVoice && liveVoice.referenceId) {
+          fishRefId = liveVoice.referenceId;
+        }
+      } catch (e) { }
+    }
+    // Fallback: singleton en memoria (para compatibilidad con versiones anteriores)
+    if (!fishRefId) {
+      try {
+        const voiceCatalogModule = require('./src/services/voiceCatalog');
+        const dbVoice = voiceCatalogModule.getVoiceById(voice);
+        if (dbVoice && dbVoice.referenceId) {
           fishRefId = dbVoice.referenceId;
         }
       } catch (e) { }
