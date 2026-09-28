@@ -595,12 +595,36 @@ class KickBot {
             const targetUser = args[0] ? args[0].replace(/^@/, '') : username;
             const queryRest = args.join(' ');
 
-            let finalResponse = rawResponse
+            // Obtener lista dinámica de voces TTS activas (solo las que tienen enabled !== false)
+            let activeVoicesText = '';
+            try {
+              const ttsCmds = storage.getTtsCommands() || [];
+              const active = ttsCmds.filter(c => c && c.enabled !== false && c.command);
+              if (active.length > 0) {
+                activeVoicesText = active.map(c => c.command.startsWith('!') ? c.command : `!${c.command}`).join(' ');
+              } else {
+                activeVoicesText = 'No hay voces activas configuradas';
+              }
+            } catch (e) {
+              activeVoicesText = '!vegetta !elrich !rubius !auron !messi !cr7 !homero !dross !tiktok';
+            }
+
+            let effectiveResponse = rawResponse;
+            if (matchedCmd.isAutoTts && !effectiveResponse.includes('{voces') && !effectiveResponse.includes('{tts_voices}')) {
+              effectiveResponse = `🎙️ Voces TTS activas: ${activeVoicesText} | Escribe !comando [mensaje]`;
+            }
+
+            let finalResponse = effectiveResponse
+              .replace(/\{voces_tts\}|\{tts_voices\}|\{voces\}|\{vocestts\}/gi, activeVoicesText)
               .replace(/\{user\}|\{usuario\}/gi, `@${username}`)
               .replace(/\{target\}|\{objetivo\}/gi, `@${targetUser}`)
               .replace(/\{streamer\}|\{canal\}/gi, this.currentChannel)
               .replace(/\{channel\}/gi, this.currentChannel)
               .replace(/\{query\}|\{busqueda\}/gi, queryRest || '');
+
+            if (finalResponse.length > 495) {
+              finalResponse = finalResponse.substring(0, 492) + '...';
+            }
 
             this.sendMessage(this.currentChannel, finalResponse);
           }

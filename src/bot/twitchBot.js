@@ -619,7 +619,7 @@ class TwitchBot {
 
       // Check Custom Commands
       const commands = storage.getCommands();
-      const matchedCmd = commands.find(c => c.enabled && c.name.toLowerCase() === firstWord);
+      const matchedCmd = commands.find(c => c.enabled && c.name && c.name.toLowerCase() === firstWord);
 
       if (matchedCmd) {
         // Cooldown check
@@ -630,7 +630,43 @@ class TwitchBot {
 
         if (cooldown <= 0 || isMod || (now - lastUsed >= cooldownMs)) {
           this.commandCooldowns.set(matchedCmd.id, now);
-          this.sendMessage(channel, matchedCmd.response);
+
+          let rawResponse = matchedCmd.response || '';
+          const args = trimmed.split(' ').slice(1);
+          const targetUser = args[0] ? args[0].replace(/^@/, '') : username;
+          const queryRest = args.join(' ');
+
+          // Obtener lista dinámica de voces TTS activas (solo las que tienen enabled !== false)
+          let activeVoicesText = '';
+          try {
+            const ttsCmds = storage.getTtsCommands() || [];
+            const active = ttsCmds.filter(c => c && c.enabled !== false && c.command);
+            if (active.length > 0) {
+              activeVoicesText = active.map(c => c.command.startsWith('!') ? c.command : `!${c.command}`).join(' ');
+            } else {
+              activeVoicesText = 'No hay voces activas configuradas';
+            }
+          } catch (e) {
+            activeVoicesText = '!vegetta !elrich !rubius !auron !messi !cr7 !homero !dross !tiktok';
+          }
+
+          if (matchedCmd.isAutoTts && !rawResponse.includes('{voces') && !rawResponse.includes('{tts_voices}')) {
+            rawResponse = `🎙️ Voces TTS activas: ${activeVoicesText} | Escribe !comando [mensaje]`;
+          }
+
+          let finalResponse = rawResponse
+            .replace(/\{voces_tts\}|\{tts_voices\}|\{voces\}|\{vocestts\}/gi, activeVoicesText)
+            .replace(/\{user\}|\{usuario\}/gi, `@${username}`)
+            .replace(/\{target\}|\{objetivo\}/gi, `@${targetUser}`)
+            .replace(/\{streamer\}|\{canal\}/gi, channel.replace(/^#/, ''))
+            .replace(/\{channel\}/gi, channel.replace(/^#/, ''))
+            .replace(/\{query\}|\{busqueda\}/gi, queryRest || '');
+
+          if (finalResponse.length > 495) {
+            finalResponse = finalResponse.substring(0, 492) + '...';
+          }
+
+          this.sendMessage(channel, finalResponse);
         }
       }
     });

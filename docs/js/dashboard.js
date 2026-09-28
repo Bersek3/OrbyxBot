@@ -7274,6 +7274,85 @@ function toggleNoCooldown(checkbox) {
   }
 }
 
+function getActiveTtsCommandsList() {
+  let cmds = [];
+  if (typeof cachedTTSCommands !== 'undefined' && Array.isArray(cachedTTSCommands) && cachedTTSCommands.length > 0) {
+    cmds = cachedTTSCommands;
+  } else if (typeof DEFAULT_TTS_COMMANDS !== 'undefined' && Array.isArray(DEFAULT_TTS_COMMANDS)) {
+    cmds = DEFAULT_TTS_COMMANDS;
+  }
+  const active = cmds.filter(c => c && c.enabled !== false && c.command);
+  if (active.length === 0) return 'No hay voces activas en este momento';
+  return active.map(c => c.command.startsWith('!') ? c.command : `!${c.command}`).join(' ');
+}
+
+function updateCmdAutoTtsPreview() {
+  const previewBox = document.getElementById('cmdAutoTtsPreviewBox');
+  const liveEl = document.getElementById('cmdAutoTtsLiveList');
+  if (!previewBox || !liveEl) return;
+  const activeList = getActiveTtsCommandsList();
+  const rawResponse = document.getElementById('newCmdResponse')?.value || '🎙️ Voces TTS activas: {voces_tts} | Escribe el comando seguido de tu mensaje!';
+  const sample = rawResponse.includes('{voces')
+    ? rawResponse.replace(/\{voces_tts\}|\{tts_voices\}|\{voces\}|\{vocestts\}/gi, activeList)
+    : `🎙️ Voces disponibles: ${activeList}`;
+  liveEl.textContent = sample;
+}
+
+function toggleAutoTtsVoices(isChecked) {
+  const previewBox = document.getElementById('cmdAutoTtsPreviewBox');
+  const nameInput = document.getElementById('newCmdName');
+  const respInput = document.getElementById('newCmdResponse');
+
+  if (isChecked) {
+    if (nameInput && (!nameInput.value || nameInput.value.trim() === '')) {
+      nameInput.value = '!voces';
+    }
+    if (respInput && (!respInput.value || !respInput.value.includes('{voces'))) {
+      respInput.value = '🎙️ Voces TTS activas en el stream: {voces_tts} | Escribe el comando seguido de tu mensaje!';
+    }
+    if (previewBox) previewBox.style.display = 'block';
+    updateCmdAutoTtsPreview();
+  } else {
+    if (previewBox) previewBox.style.display = 'none';
+  }
+}
+window.toggleAutoTtsVoices = toggleAutoTtsVoices;
+
+function insertCmdTag(tag) {
+  const respInput = document.getElementById('newCmdResponse');
+  if (!respInput) return;
+  const start = respInput.selectionStart || 0;
+  const end = respInput.selectionEnd || 0;
+  const val = respInput.value || '';
+  respInput.value = val.substring(0, start) + tag + val.substring(end);
+  respInput.focus();
+  const newPos = start + tag.length;
+  respInput.setSelectionRange(newPos, newPos);
+
+  if (tag === '{voces_tts}') {
+    const autoSwitch = document.getElementById('newCmdAutoTts');
+    if (autoSwitch) autoSwitch.checked = true;
+    const previewBox = document.getElementById('cmdAutoTtsPreviewBox');
+    if (previewBox) previewBox.style.display = 'block';
+    updateCmdAutoTtsPreview();
+  }
+}
+window.insertCmdTag = insertCmdTag;
+
+function handleCmdResponseInput(val) {
+  const hasTag = /\{voces_tts\}|\{tts_voices\}|\{voces\}/i.test(val);
+  const autoSwitch = document.getElementById('newCmdAutoTts');
+  const previewBox = document.getElementById('cmdAutoTtsPreviewBox');
+  if (hasTag) {
+    if (autoSwitch && !autoSwitch.checked) autoSwitch.checked = true;
+    if (previewBox) previewBox.style.display = 'block';
+    updateCmdAutoTtsPreview();
+  } else if (autoSwitch && autoSwitch.checked) {
+    updateCmdAutoTtsPreview();
+  }
+}
+window.handleCmdResponseInput = handleCmdResponseInput;
+
 async function editCommand(cmdId) {
   try {
     let commands = (typeof cachedCommands !== 'undefined' && Array.isArray(cachedCommands) && cachedCommands.length > 0)
@@ -7299,6 +7378,15 @@ async function editCommand(cmdId) {
     document.getElementById('newCmdCooldown').disabled = isZero;
     document.getElementById('newCmdUserLevel').value = cmd.userLevel || 'all';
 
+    const isAuto = Boolean(cmd.isAutoTts) || /\{voces_tts\}|\{tts_voices\}|\{voces\}/i.test(cmd.response || '');
+    const autoSwitch = document.getElementById('newCmdAutoTts');
+    if (autoSwitch) autoSwitch.checked = isAuto;
+    const previewBox = document.getElementById('cmdAutoTtsPreviewBox');
+    if (previewBox) {
+      previewBox.style.display = isAuto ? 'block' : 'none';
+      if (isAuto) updateCmdAutoTtsPreview();
+    }
+
     document.getElementById('cmdFormTitle').innerText = `✏️ Editar Comando (${cmd.name})`;
     document.getElementById('btnSaveNewCommand').innerText = '💾 Actualizar Comando';
     document.getElementById('btnCancelEditCmd').style.display = 'inline-block';
@@ -7316,6 +7404,11 @@ function cancelEditCommand() {
   document.getElementById('newCmdCooldown').value = 10;
   document.getElementById('newCmdCooldown').disabled = false;
   document.getElementById('newCmdUserLevel').value = 'all';
+
+  const autoSwitch = document.getElementById('newCmdAutoTts');
+  if (autoSwitch) autoSwitch.checked = false;
+  const previewBox = document.getElementById('cmdAutoTtsPreviewBox');
+  if (previewBox) previewBox.style.display = 'none';
 
   document.getElementById('cmdFormTitle').innerText = '➕ Crear / Editar Comando';
   document.getElementById('btnSaveNewCommand').innerText = 'Guardar Comando';
@@ -9249,13 +9342,20 @@ function setupEventListeners() {
       ? commands.findIndex(c => c.id === editId)
       : commands.findIndex(c => c.name.toLowerCase() === formattedName.toLowerCase());
 
+    const isAutoTts = Boolean(document.getElementById('newCmdAutoTts')?.checked) || /\{voces_tts\}|\{tts_voices\}|\{voces\}/i.test(response);
+    let finalResp = response;
+    if (isAutoTts && !finalResp.includes('{voces') && !finalResp.includes('{tts_voices}')) {
+      finalResp = `${finalResp} | Voces TTS activas: {voces_tts}`;
+    }
+
     const newCmd = {
       id: targetIdx >= 0 ? commands[targetIdx].id : `cmd-${Date.now()}`,
       name: formattedName,
-      response,
+      response: finalResp,
       cooldown,
       userLevel,
-      enabled: true
+      enabled: true,
+      isAutoTts
     };
 
     if (targetIdx >= 0) {

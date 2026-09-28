@@ -1309,10 +1309,18 @@ class StorageService {
   getTtsCommands() {
     const list = readJSON('tts_commands.json', DEFAULT_TTS_COMMANDS);
     if (!Array.isArray(list) || list.length === 0) return DEFAULT_TTS_COMMANDS;
-    const codeVoices = (voiceCatalog && typeof voiceCatalog.getCodeVoices === 'function') ? voiceCatalog.getCodeVoices() : [];
-    const validVoiceIds = new Set(codeVoices.map(v => v.id.toLowerCase()));
-    const filtered = list.filter(c => c && c.voiceId && validVoiceIds.has(c.voiceId.toLowerCase()));
-    return filtered.length > 0 ? filtered : DEFAULT_TTS_COMMANDS;
+    try {
+      const liveCat = this.getVoiceCatalog() || [];
+      const validVoiceIds = new Set(liveCat.map(v => v.id.toLowerCase()));
+      const filtered = list.filter(c => {
+        if (!c || !c.voiceId) return false;
+        const vId = c.voiceId.toLowerCase();
+        return validVoiceIds.has(vId) || vId.startsWith('custom_') || /^[a-f0-9]{28,36}$/i.test(vId);
+      });
+      return filtered.length > 0 ? filtered : list;
+    } catch(e) {
+      return list;
+    }
   }
 
   saveTtsCommands(commands) {

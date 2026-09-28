@@ -1,5 +1,18 @@
 [
   {
+    "id": "tts_cmd_1790560271391_ccgb",
+    "voiceId": "es_vegetta",
+    "name": "Vegetta777",
+    "command": "!vegetta",
+    "permissions": [
+      "todos"
+    ],
+    "enabled": true,
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1
+  },
+  {
     "id": "tts_cmd_1789890612951_sfnz",
     "voiceId": "es_xokas",
     "name": "El Xokas",
