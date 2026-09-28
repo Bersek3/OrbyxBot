@@ -1432,6 +1432,14 @@ class StorageService {
       isAI: Boolean(voiceData.isAI)
     };
 
+    // Preservar campos de Fish Audio si están presentes
+    if (voiceData.referenceId) newVoice.referenceId = voiceData.referenceId;
+    if (voiceData.model) newVoice.model = voiceData.model;
+    if (voiceData.gender) newVoice.gender = voiceData.gender;
+    if (voiceData.addedBy) newVoice.addedBy = voiceData.addedBy;
+    if (voiceData.addedAt) newVoice.addedAt = voiceData.addedAt;
+    if (voiceData.sampleAudio) newVoice.sampleAudio = voiceData.sampleAudio;
+
     const existingIdx = catalog.findIndex(v => v.id.toLowerCase() === idKey);
     if (existingIdx >= 0) {
       catalog[existingIdx] = { ...catalog[existingIdx], ...newVoice };

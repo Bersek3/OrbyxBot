@@ -1230,11 +1230,136 @@
               </div>
             </div>
 
+            <!-- Panel Superadmin: Solo visible para el administrador -->
+            <div id="superadminVoicePanel" style="display:none; background: linear-gradient(135deg, rgba(145, 70, 255, 0.12), rgba(0, 242, 254, 0.08)); border: 1px solid rgba(145, 70, 255, 0.45); border-radius: 14px; padding: 16px 20px; margin-bottom: 18px; display: none;">
+              <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px;">
+                <div>
+                  <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 4px;">
+                    <span style="font-size: 18px;">👑</span>
+                    <span style="font-weight: 800; font-size: 14px; color: #a78bfa; letter-spacing: 0.5px;">PANEL SUPERADMIN — Gestión de Voces TTS</span>
+                  </div>
+                  <p style="font-size: 12px; color: #94a3b8; margin: 0;">Añade nuevas voces de Fish Audio al catálogo global usando el <code style="color: #00f2fe; background: rgba(0,242,254,0.1); padding: 1px 5px; border-radius: 4px;">reference_id</code>. Estarán disponibles para todos los usuarios.</p>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="openAdminAddVoiceModal()" style="background: linear-gradient(135deg, #7c3aed, #a78bfa); border: none; padding: 10px 18px; border-radius: 8px; font-weight: 700; white-space: nowrap;">
+                  <i class="fas fa-plus"></i> Añadir Voz (Fish Audio)
+                </button>
+              </div>
+            </div>
+
             <!-- Cuadrícula de Voces del Catálogo General -->
             <div id="voiceLibraryGrid" class="voice-catalog-grid">
               <div style="text-align: center; grid-column: 1 / -1; padding: 40px 20px; color: var(--text-secondary);">
                 <i class="fas fa-spinner fa-spin" style="font-size: 24px; color: #a3e635; margin-bottom: 12px; display: block;"></i>
                 Cargando biblioteca de voces...
+              </div>
+            </div>
+          </div>
+
+          <!-- MODAL: Añadir Voz Fish Audio (Solo Superadmin) -->
+          <div id="modalAdminAddVoice" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.7); backdrop-filter:blur(6px); align-items:center; justify-content:center;">
+            <div style="background: linear-gradient(145deg, #1a1f35, #0f1423); border: 1px solid rgba(145,70,255,0.5); border-radius: 20px; padding: 32px; width: 100%; max-width: 500px; margin: 20px; box-shadow: 0 25px 60px rgba(0,0,0,0.6); position:relative;">
+              <!-- Header -->
+              <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                  <div style="width:38px; height:38px; background:linear-gradient(135deg,#7c3aed,#a78bfa); border-radius:10px; display:flex; align-items:center; justify-content:center;">
+                    <i class="fas fa-microphone" style="color:#fff; font-size:16px;"></i>
+                  </div>
+                  <div>
+                    <div style="font-size:17px; font-weight:800; color:#e2e8f0;">Añadir Voz Fish Audio</div>
+                    <div style="font-size:11px; color:#7c3aed; font-weight:600; text-transform:uppercase; letter-spacing:1px;">Solo Superadmin</div>
+                  </div>
+                </div>
+                <button onclick="closeAdminAddVoiceModal()" style="background:rgba(255,255,255,0.05); border:none; border-radius:8px; padding:8px 10px; cursor:pointer; color:#94a3b8; font-size:16px; transition:all 0.2s;" onmouseover="this.style.background='rgba(255,255,255,0.1)'" onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                  <i class="fas fa-times"></i>
+                </button>
+              </div>
+
+              <!-- Campo reference_id (principal) -->
+              <div class="form-group" style="margin-bottom:16px;">
+                <label class="form-label" style="font-weight:700; color:#a78bfa; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  <i class="fas fa-fingerprint"></i> Reference ID de Fish Audio <span style="color:#ef4444;">*</span>
+                </label>
+                <div style="position:relative;">
+                  <input type="text" id="adminVoiceRefId" class="form-control" placeholder="ej: de3a4ac0cba441408eb837aa494965d8" style="font-family: monospace; letter-spacing: 0.5px; padding-right: 44px;"
+                    oninput="validateAdminVoiceRefId(this)">
+                  <span id="adminVoiceRefIdStatus" style="position:absolute; right:12px; top:50%; transform:translateY(-50%); font-size:16px;"></span>
+                </div>
+                <div class="form-help" style="margin-top:6px;">ID del modelo de voz en <a href="https://fish.audio" target="_blank" style="color:#00f2fe;">fish.audio</a>. Lo encuentras en la URL del modelo: <code style="color:#a3e635; font-size:11px;">fish.audio/m/[reference_id]</code></div>
+              </div>
+
+              <!-- Nombre de la voz -->
+              <div class="form-group" style="margin-bottom:16px;">
+                <label class="form-label" style="font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                  <i class="fas fa-user"></i> Nombre de la voz <span style="color:#ef4444;">*</span>
+                </label>
+                <input type="text" id="adminVoiceName" class="form-control" placeholder="ej: Pepito Pérez">
+              </div>
+
+              <!-- Fila: Comando + Categoría -->
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                <div class="form-group">
+                  <label class="form-label" style="font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                    <i class="fas fa-terminal"></i> Comando del chat
+                  </label>
+                  <input type="text" id="adminVoiceCommand" class="form-control" placeholder="ej: !pepito">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                    <i class="fas fa-tag"></i> Categoría
+                  </label>
+                  <select id="adminVoiceCategory" class="form-control">
+                    <option value="celebrity">Celebrity</option>
+                    <option value="streamer">Streamer</option>
+                    <option value="memes">Memes</option>
+                    <option value="anime">Anime</option>
+                    <option value="tv">TV / Cine</option>
+                    <option value="standard">Estándar</option>
+                    <option value="general">General</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Tags + Idioma -->
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                <div class="form-group">
+                  <label class="form-label" style="font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                    <i class="fas fa-hashtag"></i> Tags (separados por coma)
+                  </label>
+                  <input type="text" id="adminVoiceTags" class="form-control" placeholder="ia, popular, custom">
+                </div>
+                <div class="form-group">
+                  <label class="form-label" style="font-weight:700; display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                    <i class="fas fa-globe"></i> Idioma
+                  </label>
+                  <select id="adminVoiceLang" class="form-control">
+                    <option value="es-ES">Español (ES)</option>
+                    <option value="es-MX">Español (MX)</option>
+                    <option value="es-AR">Español (AR)</option>
+                    <option value="es-CO">Español (CO)</option>
+                    <option value="es-VE">Español (VE)</option>
+                    <option value="es-PE">Español (PE)</option>
+                    <option value="es-PR">Español (PR)</option>
+                    <option value="en-US">English (US)</option>
+                    <option value="en-GB">English (GB)</option>
+                    <option value="pt-BR">Português (BR)</option>
+                    <option value="fr-FR">Français (FR)</option>
+                    <option value="it-IT">Italiano</option>
+                    <option value="de-DE">Deutsch</option>
+                    <option value="ja-JP">日本語</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Botones de acción -->
+              <div id="adminVoiceModalError" style="display:none; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.4); border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#fca5a5;"></div>
+              <div id="adminVoiceModalSuccess" style="display:none; background:rgba(16,185,129,0.1); border:1px solid rgba(16,185,129,0.4); border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:13px; color:#6ee7b7;"></div>
+
+              <div style="display:flex; gap:12px; justify-content:flex-end;">
+                <button onclick="closeAdminAddVoiceModal()" class="btn btn-secondary" style="padding:10px 20px;">Cancelar</button>
+                <button id="btnAdminSaveVoice" onclick="handleAdminAddVoice()" style="background:linear-gradient(135deg,#7c3aed,#a78bfa); border:none; border-radius:10px; padding:10px 24px; color:#fff; font-weight:700; cursor:pointer; font-size:14px; display:flex; align-items:center; gap:8px; transition:all 0.2s;"
+                  onmouseover="this.style.opacity='0.9'" onmouseout="this.style.opacity='1'">
+                  <i class="fas fa-plus-circle"></i> Añadir al catálogo global
+                </button>
               </div>
             </div>
           </div>

@@ -1393,6 +1393,89 @@ app.post('/api/tts/library/add', (req, res) => {
   res.json({ success: true, voice: result, total: allVoices.length });
 });
 
+// ── SUPERADMIN: Añadir voz Fish Audio al catálogo global por reference_id ──
+app.post('/api/admin/tts/voices/add', async (req, res) => {
+  try {
+    // Verificar que el solicitante es superadmin
+    const email = req.body?.adminEmail || req.headers['x-admin-email'];
+    const userId = req.body?.adminUserId || req.headers['x-admin-userid'];
+    const adminCheck = await storage.isUserAdmin(email, userId);
+    if (!adminCheck || !adminCheck.isAdmin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Solo el superadmin puede añadir voces.' });
+    }
+
+    const { referenceId, name, category, tags, lang, defaultCommand, previewText, gender } = req.body;
+
+    if (!referenceId || !referenceId.trim()) {
+      return res.status(400).json({ success: false, message: 'El reference_id de Fish Audio es obligatorio.' });
+    }
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: 'El nombre de la voz es obligatorio.' });
+    }
+
+    const cleanRefId = referenceId.trim().replace(/[^a-zA-Z0-9]/g, '');
+    const cleanName = name.trim();
+    const voiceId = `custom_${cleanRefId.substring(0, 12)}`;
+
+    const voiceData = {
+      id: voiceId,
+      name: cleanName,
+      category: category || 'celebrity',
+      tags: Array.isArray(tags) ? tags : (tags ? tags.split(',').map(t => t.trim()).filter(Boolean) : ['custom', 'ia']),
+      lang: lang || 'es-ES',
+      defaultCommand: defaultCommand ? (defaultCommand.startsWith('!') ? defaultCommand : `!${defaultCommand}`) : `!${cleanName.toLowerCase().replace(/\s+/g, '')}`,
+      previewText: previewText || `Hola, soy ${cleanName} hablando en el stream.`,
+      gender: gender || 'unknown',
+      isAI: true,
+      model: 's2.1-pro-free',
+      referenceId: cleanRefId,
+      stats: { uses: '0', downloads: '0' },
+      addedBy: email || userId || 'superadmin',
+      addedAt: new Date().toISOString()
+    };
+
+    const result = storage.addVoiceToCatalog(voiceData);
+    if (!result) {
+      return res.status(400).json({ success: false, message: 'No se pudo añadir la voz al catálogo.' });
+    }
+
+    const allVoices = storage.getVoiceCatalog();
+    broadcast('tts_catalog_updated', allVoices);
+
+    console.log(`✅ [Admin TTS] Voz añadida: "${cleanName}" (ref: ${cleanRefId}) por ${email || userId}`);
+    res.json({ success: true, voice: result, total: allVoices.length, message: `Voz "${cleanName}" añadida correctamente al catálogo global.` });
+  } catch (err) {
+    console.error('[Admin TTS] Error al añadir voz:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// ── SUPERADMIN: Eliminar voz del catálogo global ──
+app.delete('/api/admin/tts/voices/:voiceId', async (req, res) => {
+  try {
+    const email = req.body?.adminEmail || req.headers['x-admin-email'];
+    const userId = req.body?.adminUserId || req.headers['x-admin-userid'];
+    const adminCheck = await storage.isUserAdmin(email, userId);
+    if (!adminCheck || !adminCheck.isAdmin) {
+      return res.status(403).json({ success: false, message: 'Acceso denegado. Solo el superadmin puede eliminar voces.' });
+    }
+
+    const { voiceId } = req.params;
+    if (!voiceId) {
+      return res.status(400).json({ success: false, message: 'voiceId es requerido.' });
+    }
+
+    const remaining = storage.deleteVoiceFromCatalog(voiceId);
+    broadcast('tts_catalog_updated', remaining);
+
+    console.log(`🗑️ [Admin TTS] Voz eliminada: "${voiceId}" por ${email || userId}`);
+    res.json({ success: true, total: remaining.length, voices: remaining, message: `Voz "${voiceId}" eliminada del catálogo.` });
+  } catch (err) {
+    console.error('[Admin TTS] Error al eliminar voz:', err.message);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 app.post('/api/tts/library/sync', (req, res) => {
   const synced = storage.initVoiceCatalog();
   broadcast('tts_catalog_updated', synced);
