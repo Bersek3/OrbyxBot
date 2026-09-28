@@ -66,37 +66,41 @@ class KickBot {
     const clean = (channelName || '').toLowerCase().replace(/^@/, '').trim();
     if (!clean) return null;
 
+    const headers = {
+      'Accept': 'application/json, text/plain, */*',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      'Accept-Language': 'es-ES,es;q=0.9,en;q=0.8',
+      'Referer': `https://kick.com/${clean}`
+    };
+
     try {
-      const res = await fetch(`https://kick.com/api/v2/channels/${clean}`, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
+      const res = await fetch(`https://kick.com/api/v1/channels/${clean}`, { headers });
       if (res.ok) {
         const data = await res.json();
-        if (data.chatroom && data.chatroom.id) {
-          return data.chatroom.id;
-        }
-        if (data.id) {
-          return data.id;
+        const cid = data.chatroom?.id || data.id;
+        if (cid) {
+          console.log(`[KickBot] Chatroom ID resuelto para @${clean}: ${cid}`);
+          try {
+            storage.saveConfig({ kick: { chatroomId: cid, userId: data.user_id ? String(data.user_id) : undefined } });
+          } catch(e) {}
+          return cid;
         }
       }
     } catch (e) {
-      console.warn(`[KickBot] Fallback fetching chatroom for ${clean}:`, e.message);
+      console.warn(`[KickBot] Fallback fetching chatroom v1 for ${clean}:`, e.message);
     }
 
     try {
-      const res2 = await fetch(`https://kick.com/api/v1/channels/${clean}`, {
-        headers: {
-          'Accept': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
-      });
+      const res2 = await fetch(`https://kick.com/api/v2/channels/${clean}`, { headers });
       if (res2.ok) {
         const data2 = await res2.json();
-        if (data2.chatroom && data2.chatroom.id) {
-          return data2.chatroom.id;
+        const cid2 = data2.chatroom?.id || data2.id;
+        if (cid2) {
+          console.log(`[KickBot] Chatroom ID (v2) resuelto para @${clean}: ${cid2}`);
+          try {
+            storage.saveConfig({ kick: { chatroomId: cid2 } });
+          } catch(e) {}
+          return cid2;
         }
       }
     } catch (e2) {}

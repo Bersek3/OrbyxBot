@@ -201,6 +201,15 @@
       davo: { id: 'es_davo', name: 'Davo Xeneize', lang: 'es-AR', gender: 'male', pitch: 1.0, rate: 1.0 },
       davoxeneize: { id: 'es_davo', name: 'Davo Xeneize', lang: 'es-AR', gender: 'male', pitch: 1.0, rate: 1.0 },
 
+      // Voces IA Vegetta777 y ElrichMC
+      es_vegetta: { id: 'es_vegetta', name: 'Vegetta777', lang: 'es-ES', gender: 'male', pitch: 1.0, rate: 1.0 },
+      vegetta: { id: 'es_vegetta', name: 'Vegetta777', lang: 'es-ES', gender: 'male', pitch: 1.0, rate: 1.0 },
+      vegetta777: { id: 'es_vegetta', name: 'Vegetta777', lang: 'es-ES', gender: 'male', pitch: 1.0, rate: 1.0 },
+      es_elrich: { id: 'es_elrich', name: 'ElrichMC', lang: 'es-ES', gender: 'male', pitch: 1.0, rate: 1.0 },
+      elrich: { id: 'es_elrich', name: 'ElrichMC', lang: 'es-ES', gender: 'male', pitch: 1.0, rate: 1.0 },
+      elrichmc: { id: 'es_elrich', name: 'ElrichMC', lang: 'es-ES', gender: 'male', pitch: 1.0, rate: 1.0 },
+      rich: { id: 'es_elrich', name: 'ElrichMC', lang: 'es-ES', gender: 'male', pitch: 1.0, rate: 1.0 },
+
       // Español Latino / Estándar
       es_mx_mia: { id: 'es_mx_mia', name: 'Mia', lang: 'es-MX', gender: 'female', pitch: 1.15, rate: 1.0 },
       mia: { id: 'es_mx_mia', name: 'Mia', lang: 'es-MX', gender: 'female', pitch: 1.15, rate: 1.0 },
@@ -666,8 +675,31 @@
         if (cfg?.tts && cfg.tts.enabled !== undefined) {
           ttsEnabled = cfg.tts.enabled !== false;
         }
-        if (cfg?.twitch?.channel) linkedChannels.add(cfg.twitch.channel.toLowerCase().replace(/^#/, ''));
-        if (cfg?.kick?.channel || cfg?.kick?.username) linkedChannels.add((cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, ''));
+        if (cfg?.twitch?.channel) {
+          const tw = cfg.twitch.channel.toLowerCase().replace(/^#/, '');
+          linkedChannels.add(tw);
+          if (!channel && !myStreamerKey) initTwitchChatIRC(tw);
+        }
+        if (cfg?.kick?.channel || cfg?.kick?.username) {
+          const kickName = (cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, '');
+          linkedChannels.add(kickName);
+          if (!kickParam) initKickChatPusher(kickName);
+        }
+      })
+      .catch(() => {});
+
+    // Cargar comandos personalizados configurados por el streamer
+    fetch('/api/tts/commands')
+      .then(r => r.json())
+      .then(cmds => {
+        if (Array.isArray(cmds)) {
+          cmds.forEach(c => {
+            if (c.command && c.voiceId) {
+              const cmdClean = c.command.toLowerCase().replace(/^!/, '').trim();
+              TTS_ALIAS_MAP[cmdClean] = c.voiceId;
+            }
+          });
+        }
       })
       .catch(() => {});
 
@@ -773,6 +805,8 @@
       closs: 'es_marianocloss', marianocloss: 'es_marianocloss', mariano_closs: 'es_marianocloss',
       lacobra: 'es_lacobra', la_cobra: 'es_lacobra', cobra: 'es_lacobra',
       davo: 'es_davo', davoxeneize: 'es_davo', davo_xeneize: 'es_davo',
+      vegetta: 'es_vegetta', vegetta777: 'es_vegetta',
+      elrich: 'es_elrichmc', elrichmc: 'es_elrichmc', rich: 'es_elrichmc',
       mia: 'es_mx_mia', miguel: 'es_us_miguel', lupe: 'es_us_lupe', penelope: 'es_us_penelope',
       enrique: 'es_es_enrique', conchita: 'es_es_conchita', lucia: 'es_es_lucia',
       brian: 'en_brian', emma: 'en_emma', joey: 'en_joey', matthew: 'en_matthew'
@@ -816,21 +850,29 @@
                 matchedVoice = 'es_mx_mia';
               } else if (TTS_ALIAS_MAP[cmdToken]) {
                 matchedVoice = TTS_ALIAS_MAP[cmdToken];
+              } else if (VOICE_PROFILES[cmdToken]) {
+                matchedVoice = cmdToken;
+              } else if (fishAudioKeys.includes(cmdToken)) {
+                matchedVoice = cmdToken;
               }
             }
 
             if (matchedVoice) {
               const voiceText = trimmed.slice(firstWord.length).trim();
               if (voiceText) {
-                console.log(`🎙️ [TTS Overlay] Comando TTS recibido de @${username} (#${ch}): '!${firstWord.slice(1)} ${voiceText}'`);
+                console.log(`🎙️ [TTS Overlay] Comando TTS Twitch recibido de @${username} (#${ch}): '!${firstWord.slice(1)} ${voiceText}'`);
                 const audioUrl = `/api/tts/audio?text=${encodeURIComponent(voiceText)}&voice=${encodeURIComponent(matchedVoice)}`;
                 const ttsData = {
-                  id: 'tts_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
+                  id: 'tts_tw_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
                   user: username,
                   text: voiceText,
                   voice: matchedVoice,
                   audioUrl: audioUrl,
                   channel: ch,
+                  room: ch,
+                  streamer: ch,
+                  token: myToken || '',
+                  platform: 'twitch',
                   timestamp: Date.now()
                 };
                 handleIncomingMessage({ event: 'tts', data: ttsData });
@@ -847,11 +889,161 @@
       }
     }
 
+    let kickPusherConnected = false;
+    function initKickChatPusher(kickChannel) {
+      if (!kickChannel || kickPusherConnected) return;
+      const clean = kickChannel.toLowerCase().replace(/^@/, '').trim();
+      if (!clean) return;
+
+      const pusherUrl = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false';
+
+      async function startKickWs() {
+        let chatroomId = null;
+        let channelId = null;
+
+        // 1. Intentar resolver vía backend
+        try {
+          const res = await fetch(`/api/kick/chatroom/${clean}`);
+          if (res.ok) {
+            const d = await res.json();
+            if (d.chatroomId) chatroomId = d.chatroomId;
+            if (d.channelId) channelId = d.channelId;
+          }
+        } catch(e) {}
+
+        // 2. Si no está en backend, resolver directo desde el navegador (CORS permitido en Kick v1)
+        if (!chatroomId) {
+          try {
+            const res2 = await fetch(`https://kick.com/api/v1/channels/${clean}`);
+            if (res2.ok) {
+              const d2 = await res2.json();
+              chatroomId = d2.chatroom?.id || d2.id;
+              channelId = d2.id;
+              // Sincronizar chatroomId con el servidor de OrbiBot
+              fetch(`/api/kick/chatroom/${clean}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ chatroomId, channelId })
+              }).catch(() => {});
+            }
+          } catch(e) {}
+        }
+
+        const targetRoom = chatroomId || clean;
+        console.log(`🟢 [TTS Overlay] Conectando a Kick Pusher @${clean} (Room: ${targetRoom})...`);
+
+        try {
+          const kws = new WebSocket(pusherUrl);
+          let pingInt = null;
+
+          kws.onopen = () => {
+            kickPusherConnected = true;
+            console.log(`✅ [TTS Overlay] Conectado exitosamente a Kick Pusher @${clean} (Room: ${targetRoom})`);
+            kws.send(JSON.stringify({
+              event: 'pusher:subscribe',
+              data: { auth: '', channel: `chatrooms.${targetRoom}.v2` }
+            }));
+            if (chatroomId && String(chatroomId) !== String(clean)) {
+              kws.send(JSON.stringify({
+                event: 'pusher:subscribe',
+                data: { auth: '', channel: `chatrooms.${clean}.v2` }
+              }));
+            }
+            if (channelId) {
+              kws.send(JSON.stringify({
+                event: 'pusher:subscribe',
+                data: { auth: '', channel: `channel.${channelId}` }
+              }));
+            }
+            pingInt = setInterval(() => {
+              if (kws.readyState === WebSocket.OPEN) {
+                kws.send(JSON.stringify({ event: 'pusher:ping', data: {} }));
+              }
+            }, 20000);
+          };
+
+          kws.onmessage = (ev) => {
+            try {
+              const pkt = JSON.parse(ev.data);
+              if (pkt.event === 'App\\Events\\ChatMessageEvent' || pkt.event === 'ChatMessageEvent') {
+                const msgData = typeof pkt.data === 'string' ? JSON.parse(pkt.data) : pkt.data;
+                const sender = msgData.sender || {};
+                const username = sender.username || sender.slug || 'KickUser';
+                const message = msgData.content || '';
+                const trimmed = (message || '').trim();
+                if (!trimmed) return;
+
+                const firstWord = trimmed.split(' ')[0].toLowerCase();
+                // Ignorar comandos de Song Request u otros
+                if (firstWord === '!sr' || firstWord === '!song' || firstWord === '!cancion' || firstWord === '!queue' || firstWord === '!cola' || firstWord === '!skip' || firstWord === '!saltar' || firstWord === '!parar' || firstWord === '!stop' || firstWord === '!srpausa' || firstWord === '!srplay') {
+                  return;
+                }
+
+                let matchedVoice = null;
+                if (firstWord.startsWith('!')) {
+                  const cmdToken = firstWord.slice(1);
+                  if (cmdToken === 'tts') {
+                    matchedVoice = 'es_mx_mia';
+                  } else if (TTS_ALIAS_MAP[cmdToken]) {
+                    matchedVoice = TTS_ALIAS_MAP[cmdToken];
+                  } else if (VOICE_PROFILES[cmdToken]) {
+                    matchedVoice = cmdToken;
+                  } else if (fishAudioKeys.includes(cmdToken)) {
+                    matchedVoice = cmdToken;
+                  }
+                }
+
+                if (matchedVoice) {
+                  const voiceText = trimmed.slice(firstWord.length).trim();
+                  if (voiceText) {
+                    console.log(`🎙️ [TTS Overlay] Comando Kick recibido de @${username} (@${clean}): '${firstWord} ${voiceText}'`);
+                    const audioUrl = `/api/tts/audio?text=${encodeURIComponent(voiceText)}&voice=${encodeURIComponent(matchedVoice)}`;
+                    const ttsData = {
+                      id: 'tts_kick_' + (msgData.id || (Date.now() + '_' + Math.random().toString(36).substring(2, 7))),
+                      user: username,
+                      text: voiceText,
+                      voice: matchedVoice,
+                      audioUrl: audioUrl,
+                      channel: myStreamerKey || clean,
+                      room: myStreamerKey || clean,
+                      streamer: myStreamerKey || clean,
+                      token: myToken || '',
+                      platform: 'kick',
+                      timestamp: Date.now()
+                    };
+                    handleIncomingMessage({ event: 'tts', data: ttsData });
+                  }
+                }
+              }
+            } catch(e) {}
+          };
+
+          kws.onclose = () => {
+            kickPusherConnected = false;
+            if (pingInt) clearInterval(pingInt);
+            setTimeout(startKickWs, 6000);
+          };
+          kws.onerror = (err) => {
+            console.warn(`⚠️ [TTS Overlay] Error en Kick Pusher:`, err);
+          };
+        } catch(e) {
+          kickPusherConnected = false;
+        }
+      }
+
+      startKickWs();
+    }
+
     let wsReconnectTimeout = null;
 
     function connectChannels() {
-      if (myStreamerKey) {
-        initTwitchChatIRC(myStreamerKey);
+      if (channel || myStreamerKey) {
+        initTwitchChatIRC(channel || myStreamerKey);
+      }
+
+      const kickToConnect = kickParam || (urlParams.get('kick') || '').toLowerCase().replace(/^@/, '').trim();
+      if (kickToConnect) {
+        initKickChatPusher(kickToConnect);
       }
 
       // 1. Local WebSocket con reconexión automática en segundo plano

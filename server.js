@@ -859,6 +859,32 @@ app.get('/api/kick/chatroom/:channel', async (req, res) => {
   }
 });
 
+app.post('/api/kick/chatroom/:channel', (req, res) => {
+  try {
+    const channel = req.params.channel.toLowerCase().replace(/^@/, '').trim();
+    const chatroomId = req.body?.chatroomId;
+    const channelId = req.body?.channelId;
+    if (chatroomId) {
+      console.log(`[Server] ChatroomId recibido del cliente para @${channel}: ${chatroomId}`);
+      kickBot.chatroomId = chatroomId;
+      storage.saveConfig({ kick: { channel, chatroomId, userId: channelId ? String(channelId) : undefined, connected: true } });
+      if (kickBot.ws && kickBot.ws.readyState === 1) {
+        try {
+          kickBot.ws.send(JSON.stringify({
+            event: 'pusher:subscribe',
+            data: { auth: '', channel: `chatrooms.${chatroomId}.v2` }
+          }));
+        } catch(e) {}
+      } else {
+        kickBot.connect().catch(() => {});
+      }
+    }
+    res.json({ success: true, channel, chatroomId });
+  } catch(e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Disconnect / Logout
 app.post(['/api/bot/disconnect', '/api/auth/logout'], async (req, res) => {
   try {
