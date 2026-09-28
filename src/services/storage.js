@@ -2092,6 +2092,24 @@ class StorageService {
       if (!result.custom_images) result.custom_images = this.getCustomImages();
     }
 
+    // Aislamiento estricto: Si el streamer no tiene kick_auth explícito ni coincide con su ID, no inyectar Kick ajeno
+    if (result.config) {
+      const hasDirectKickAuth = Boolean(result.kick_auth && (result.kick_auth.channel || result.kick_auth.username));
+      const kickChan = (result.config.kick?.channel || result.config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+      if (!hasDirectKickAuth && kickChan && kickChan !== cleanId) {
+        result.config.kick = {
+          channel: '',
+          username: '',
+          profile_picture: '',
+          userId: '',
+          accessToken: '',
+          refreshToken: '',
+          clientId: '01M0VT0JC58YQEVGRHM8JFXQX3',
+          connected: false
+        };
+      }
+    }
+
     return result;
   }
 

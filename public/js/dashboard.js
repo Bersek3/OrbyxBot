@@ -1429,36 +1429,65 @@ async function disconnectKickAccount() {
     browserKickWs = null;
   }
 
-  try {
-    await fetch('/api/auth/kick/disconnect', { method: 'POST' });
-  } catch (e) { }
-
-  // 1. Save to cloud BEFORE clearing local appConfig, so saveToAllSupabaseScopes 
-  // still knows the old kick channel and wipes it from that specific scope too!
   let tempConfig = JSON.parse(JSON.stringify(appConfig || {}));
   tempConfig.kick = {
     channel: '', username: '', profile_picture: '', userId: '',
     accessToken: '', refreshToken: '', clientId: '01M0VT0JC58YQEVGRHM8JFXQX3', connected: false
   };
-  
-  if (typeof saveToAllSupabaseScopes === 'function') {
-    // kick_auth is deprecated but clear it just in case
-    saveToAllSupabaseScopes('kick_auth', null).catch(() => {});
-    
-    // Save the new config to all current scopes (including the Kick scope we are about to leave)
-    saveToAllSupabaseScopes('config', tempConfig).catch(() => {});
+
+  if (adminTargetStreamerId) {
+    appConfig = tempConfig;
+    const session = getUserSession();
+    try {
+      await fetch(`/api/admin/streamer/${encodeURIComponent(adminTargetStreamerId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: session?.email,
+          userId: session?.id,
+          config: tempConfig
+        })
+      });
+    } catch (e) { }
+
+    if (supabaseClient) {
+      try {
+        await supabaseClient.from('orbibot_settings').delete().match({ streamer_id: adminTargetStreamerId, key: 'kick_auth' });
+        await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'config', value: tempConfig, updated_at: new Date().toISOString() });
+      } catch (e) { }
+    }
+
+    if (typeof adminStreamersCache !== 'undefined' && Array.isArray(adminStreamersCache)) {
+      const cs = adminStreamersCache.find(s => s.streamerId === adminTargetStreamerId || (s.relatedIds && s.relatedIds.includes(adminTargetStreamerId)));
+      if (cs) {
+        cs.kickChannel = '';
+        cs.channels = (cs.channels || []).filter(c => !c.startsWith('kick:'));
+      }
+    }
+  } else {
+    try {
+      await fetch('/api/auth/kick/disconnect', { method: 'POST' });
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kick: tempConfig.kick })
+      });
+    } catch (e) { }
+
+    if (typeof saveToAllSupabaseScopes === 'function') {
+      saveToAllSupabaseScopes('kick_auth', null).catch(() => {});
+      saveToAllSupabaseScopes('config', tempConfig).catch(() => {});
+    }
+
+    localStorage.removeItem('orbibot_kick_auth');
+    localStorage.removeItem('orbibot_kick_channel');
+    localStorage.removeItem('orbibot_kick_auth_event');
+    localStorage.removeItem('orbibot_kick_auth_error');
+
+    appConfig = tempConfig;
   }
 
-  // 2. Now clear local state
-  localStorage.removeItem('orbibot_kick_auth');
-  localStorage.removeItem('orbibot_kick_channel');
-  localStorage.removeItem('orbibot_kick_auth_event');
-  localStorage.removeItem('orbibot_kick_auth_error');
-
-  appConfig = tempConfig;
-
-  showToast('Canal de Kick desvinculado.', 'info');
-
+  showToast('Canal de Kick desvinculado con éxito.', 'info');
   updatePlatformLinkingUI();
   populateWidgetUrls();
 }
@@ -1469,25 +1498,52 @@ async function disconnectTwitchAccount() {
     browserTmiClient = null;
   }
 
-  try {
-    await fetch('/api/auth/twitch/disconnect', { method: 'POST' });
-  } catch (e) { }
-
   let tempConfig = JSON.parse(JSON.stringify(appConfig || {}));
   tempConfig.twitch = {
     channel: '', botUsername: '', oauthToken: '', clientId: 'yw1vr664ichms8an2x5lhji58v7ozk', connected: false
   };
 
-  if (typeof saveToAllSupabaseScopes === 'function') {
-    saveToAllSupabaseScopes('twitch_auth', null).catch(() => {});
-    saveToAllSupabaseScopes('config', tempConfig).catch(() => {});
+  if (adminTargetStreamerId) {
+    appConfig = tempConfig;
+    const session = getUserSession();
+    try {
+      await fetch(`/api/admin/streamer/${encodeURIComponent(adminTargetStreamerId)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: session?.email,
+          userId: session?.id,
+          config: tempConfig
+        })
+      });
+    } catch (e) { }
+
+    if (supabaseClient) {
+      try {
+        await supabaseClient.from('orbibot_settings').delete().match({ streamer_id: adminTargetStreamerId, key: 'twitch_auth' });
+        await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'config', value: tempConfig, updated_at: new Date().toISOString() });
+      } catch (e) { }
+    }
+  } else {
+    try {
+      await fetch('/api/auth/twitch/disconnect', { method: 'POST' });
+      await fetch('/api/config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ twitch: tempConfig.twitch })
+      });
+    } catch (e) { }
+
+    if (typeof saveToAllSupabaseScopes === 'function') {
+      saveToAllSupabaseScopes('twitch_auth', null).catch(() => {});
+      saveToAllSupabaseScopes('config', tempConfig).catch(() => {});
+    }
+
+    localStorage.removeItem('orbibot_twitch_auth');
+    appConfig = tempConfig;
   }
 
-  localStorage.removeItem('orbibot_twitch_auth');
-
-  appConfig = tempConfig;
-
-  showToast('Canal de Twitch desvinculado.', 'info');
+  showToast('Canal de Twitch desvinculado con éxito.', 'info');
   updatePlatformLinkingUI();
   populateWidgetUrls();
 }
@@ -11282,8 +11338,11 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     targetCfg.kick.username = targetKickAuth.username || targetKickAuth.channel || '';
     targetCfg.kick.profile_picture = targetKickAuth.profile_picture || targetKickAuth.avatar || '';
     targetCfg.kick.connected = true;
-  } else if (!targetCfg.kick || !targetCfg.kick.channel) {
-    targetCfg.kick = { channel: '', username: '', connected: false, profile_picture: '', userId: '', accessToken: '', refreshToken: '' };
+  } else {
+    const existingKick = (targetCfg?.kick?.channel || targetCfg?.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+    if (!existingKick || existingKick !== streamerId.toLowerCase().trim()) {
+      targetCfg.kick = { channel: '', username: '', connected: false, profile_picture: '', userId: '', accessToken: '', refreshToken: '' };
+    }
   }
 
   // Búsqueda de respaldo en adminStreamersCache si el canal sigue siendo un email o está vacío
