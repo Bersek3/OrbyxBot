@@ -1,9 +1,8 @@
 [
   {
     "id": "es_ar_messi",
-    "isAI": true,
-    "lang": "es-AR",
     "name": "Lionel Messi",
+    "category": "celebrity",
     "tags": [
       "popular",
       "trending",
@@ -11,69 +10,69 @@
       "futbol",
       "argentina"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-AR",
+    "defaultCommand": "!messi",
     "stats": {
       "uses": "1.2M",
       "downloads": "8.5k"
     },
-    "gender": "male",
-    "category": "celebrity",
     "previewText": "Hola gente del stream, ¿qué mirás bobo? Andá pa allá.",
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
     "referenceId": "e3ded66586764591a457fcdaba8a268b",
-    "sampleAudio": "/assets/sounds/messi_sample.mp3",
-    "defaultCommand": "!messi"
+    "sampleAudio": "/assets/sounds/messi_sample.mp3"
   },
   {
     "id": "es_ve_maduro",
-    "isAI": true,
-    "lang": "es-VE",
     "name": "Nicolás Maduro",
+    "category": "celebrity",
     "tags": [
       "popular",
       "trending",
       "ia",
       "politica"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-VE",
+    "defaultCommand": "!maduro",
     "stats": {
       "uses": "890k",
       "downloads": "5.1k"
     },
-    "gender": "male",
-    "category": "celebrity",
     "previewText": "Compatriotas, los saludo a todos en el stream.",
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
     "referenceId": "b011ad1198284358b766a597f6fdd171",
-    "sampleAudio": "/assets/sounds/maduro_sample.mp3",
-    "defaultCommand": "!maduro"
+    "sampleAudio": "/assets/sounds/maduro_sample.mp3"
   },
   {
     "id": "es_tiktok",
-    "isAI": true,
-    "lang": "es-MX",
     "name": "Voz TikTok",
+    "category": "memes",
     "tags": [
       "popular",
       "trending",
       "ia",
       "tiktok"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-MX",
+    "defaultCommand": "!tiktok",
     "stats": {
       "uses": "1.5M",
       "downloads": "9.2k"
     },
-    "gender": "female",
-    "category": "memes",
     "previewText": "Esta es la clásica voz que escuchas en todos los videos de TikTok.",
+    "gender": "female",
+    "isAI": true,
+    "model": "s2.1-pro-free",
     "referenceId": "1505e291ec504760a285fd163a78b5eb",
-    "sampleAudio": "/assets/sounds/tiktok_sample.mp3",
-    "defaultCommand": "!tiktok"
+    "sampleAudio": "/assets/sounds/tiktok_sample.mp3"
   },
   {
     "id": "es_mx_homero",
-    "isAI": true,
-    "lang": "es-MX",
     "name": "Homero Simpson",
+    "category": "tv",
     "tags": [
       "popular",
       "trending",
@@ -81,23 +80,23 @@
       "simpsons",
       "caricatura"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-MX",
+    "defaultCommand": "!homero",
     "stats": {
       "uses": "1.1M",
       "downloads": "7.8k"
     },
-    "gender": "male",
-    "category": "tv",
     "previewText": "¡Ouch! ¡Mmm, rosquillas! Hola muchachos del chat.",
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
     "referenceId": "134d19eda4c64cb0b2a84d93e327be3b",
-    "sampleAudio": "/assets/sounds/homero_sample.mp3",
-    "defaultCommand": "!homero"
+    "sampleAudio": "/assets/sounds/homero_sample.mp3"
   },
   {
     "id": "es_dross",
-    "isAI": true,
-    "lang": "es-VE",
     "name": "Dross Rotzank",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -105,23 +104,23 @@
       "terror",
       "youtube"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-VE",
+    "defaultCommand": "!dross",
     "stats": {
       "uses": "940k",
       "downloads": "6.4k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "Mi libro Luna de Plutón ya está disponible. Te ha hablado Dross y te deseo buenas noches.",
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
     "referenceId": "d9f0d3d3fe734af6acb5ecc9129bc49a",
-    "sampleAudio": "/assets/sounds/dross_sample.mp3",
-    "defaultCommand": "!dross"
+    "sampleAudio": "/assets/sounds/dross_sample.mp3"
   },
   {
     "id": "es_badbunny",
-    "isAI": true,
-    "lang": "es-PR",
     "name": "Bad Bunny",
+    "category": "celebrity",
     "tags": [
       "popular",
       "trending",
@@ -129,23 +128,23 @@
       "musica",
       "trap"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-PR",
+    "defaultCommand": "!badbunny",
     "stats": {
       "uses": "850k",
       "downloads": "5.9k"
     },
-    "gender": "male",
-    "category": "celebrity",
     "previewText": "Ey, Benito en el stream. La noche de anoche fue una noche de locura.",
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
     "referenceId": "9b30f7190dbe49acb731345e70366cf7",
-    "sampleAudio": "/assets/sounds/badbunny_sample.mp3",
-    "defaultCommand": "!badbunny"
+    "sampleAudio": "/assets/sounds/badbunny_sample.mp3"
   },
   {
     "id": "es_rubius",
-    "isAI": true,
-    "lang": "es-ES",
     "name": "ElRubius",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -153,23 +152,23 @@
       "streamer",
       "gaming"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-ES",
+    "defaultCommand": "!rubius",
     "stats": {
       "uses": "780k",
       "downloads": "4.8k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "¡Muy buenas criaturitas del señor! Bienvenidos al stream.",
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
     "referenceId": "39382efbc7584d428f0f789d882cd3b8",
-    "sampleAudio": "/assets/sounds/rubius_sample.mp3",
-    "defaultCommand": "!rubius"
+    "sampleAudio": "/assets/sounds/rubius_sample.mp3"
   },
   {
     "id": "es_farid",
-    "isAI": true,
-    "lang": "es-MX",
     "name": "Farid Dieck",
+    "category": "celebrity",
     "tags": [
       "popular",
       "trending",
@@ -177,22 +176,22 @@
       "reflexion",
       "motivacion"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-MX",
+    "defaultCommand": "!farid",
     "stats": {
       "uses": "890k",
       "downloads": "6.2k"
     },
-    "gender": "male",
-    "category": "celebrity",
     "previewText": "Las cosas no pasan por algo, pasan para algo. Saludos a todos en el stream.",
-    "referenceId": "dfa5b230c8054f429e434f4a6e9bbdec",
-    "defaultCommand": "!farid"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "dfa5b230c8054f429e434f4a6e9bbdec"
   },
   {
     "id": "es_westcol",
-    "isAI": true,
-    "lang": "es-CO",
     "name": "WestCol",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -200,22 +199,22 @@
       "streamer",
       "colombia"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-CO",
+    "defaultCommand": "!westcol",
     "stats": {
       "uses": "1.4M",
       "downloads": "9.8k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "¡Qué hubo pues parceros! Bienvenidos a la transmisión.",
-    "referenceId": "1e5d99568ab847f499bb1d65be15afd6",
-    "defaultCommand": "!westcol"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "1e5d99568ab847f499bb1d65be15afd6"
   },
   {
     "id": "es_cr7",
-    "isAI": true,
-    "lang": "es-ES",
     "name": "Cristiano Ronaldo",
+    "category": "celebrity",
     "tags": [
       "popular",
       "trending",
@@ -224,22 +223,22 @@
       "cr7",
       "siuuu"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-ES",
+    "defaultCommand": "!cr7",
     "stats": {
       "uses": "2.3M",
       "downloads": "18k"
     },
-    "gender": "male",
-    "category": "celebrity",
     "previewText": "¡Siuuu! Aquí el bicho mandando un saludo a toda la gente del chat.",
-    "referenceId": "3521525edb80495e9ad276fc86c7a5e9",
-    "defaultCommand": "!cr7"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "3521525edb80495e9ad276fc86c7a5e9"
   },
   {
     "id": "es_goku",
-    "isAI": true,
-    "lang": "es-MX",
     "name": "Goku (Latino)",
+    "category": "anime",
     "tags": [
       "popular",
       "trending",
@@ -247,22 +246,22 @@
       "anime",
       "dragonball"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-MX",
+    "defaultCommand": "!goku",
     "stats": {
       "uses": "1.6M",
       "downloads": "11k"
     },
-    "gender": "male",
-    "category": "anime",
     "previewText": "¡Hola, soy Goku! ¡Levanten las manos para darme su energía!",
-    "referenceId": "9f850ee9ada24b20a6866825eaefd3f8",
-    "defaultCommand": "!goku"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "9f850ee9ada24b20a6866825eaefd3f8"
   },
   {
     "id": "es_maradona",
-    "isAI": true,
-    "lang": "es-AR",
     "name": "Diego Maradona",
+    "category": "celebrity",
     "tags": [
       "popular",
       "trending",
@@ -271,22 +270,22 @@
       "argentina",
       "d10s"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-AR",
+    "defaultCommand": "!maradona",
     "stats": {
       "uses": "1.1M",
       "downloads": "7.5k"
     },
-    "gender": "male",
-    "category": "celebrity",
     "previewText": "Eeee... la pelota no se mancha. Saludos a todo el stream.",
-    "referenceId": "51f0a7c29e5f4743a84e41250898d293",
-    "defaultCommand": "!maradona"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "51f0a7c29e5f4743a84e41250898d293"
   },
   {
     "id": "es_xokas",
-    "isAI": true,
-    "lang": "es-ES",
     "name": "El Xokas",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -295,22 +294,22 @@
       "gaming",
       "twitch"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-ES",
+    "defaultCommand": "!xokas",
     "stats": {
       "uses": "1.3M",
       "downloads": "8.9k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "¡Esto es una locura! Soy el número uno y nadie me supera.",
-    "referenceId": "8f23453397d14e4d9a579bad5aab41a8",
-    "defaultCommand": "!xokas"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "8f23453397d14e4d9a579bad5aab41a8"
   },
   {
     "id": "es_illojuan",
-    "isAI": true,
-    "lang": "es-ES",
     "name": "IlloJuan",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -319,22 +318,22 @@
       "malaga",
       "twitch"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-ES",
+    "defaultCommand": "!illojuan",
     "stats": {
       "uses": "1.2M",
       "downloads": "8.1k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "¡Illo qué pasa cabeza! Un abrazo muy fuerte pa toda la gente del stream.",
-    "referenceId": "97582f301e1c4f93a514ceda15e23e26",
-    "defaultCommand": "!illojuan"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "97582f301e1c4f93a514ceda15e23e26"
   },
   {
     "id": "es_auronplay",
-    "isAI": true,
-    "lang": "es-ES",
     "name": "Auronplay",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -344,22 +343,22 @@
       "youtube",
       "espana"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-ES",
+    "defaultCommand": "!auron",
     "stats": {
       "uses": "2.1M",
       "downloads": "15k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "¡Hey, muy buenas a todos! Saludos a toda la gente del chat.",
-    "referenceId": "cfc4b2bd851a49538201d20205ba9052",
-    "defaultCommand": "!auron"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "cfc4b2bd851a49538201d20205ba9052"
   },
   {
     "id": "es_peruano",
-    "isAI": true,
-    "lang": "es-PE",
     "name": "Peruano",
+    "category": "memes",
     "tags": [
       "popular",
       "trending",
@@ -368,22 +367,22 @@
       "meme",
       "regional"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-PE",
+    "defaultCommand": "!peruano",
     "stats": {
       "uses": "1.7M",
       "downloads": "12k"
     },
-    "gender": "male",
-    "category": "memes",
     "previewText": "¡Habla causa! ¿Cómo estás pe? Saludos a toda la gente del stream.",
-    "referenceId": "fc108d05e7984d4f8845381613e04209",
-    "defaultCommand": "!peruano"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "fc108d05e7984d4f8845381613e04209"
   },
   {
     "id": "es_marianocloss",
-    "isAI": true,
-    "lang": "es-AR",
     "name": "Mariano Closs",
+    "category": "celebrity",
     "tags": [
       "popular",
       "trending",
@@ -393,22 +392,22 @@
       "argentina",
       "libertadores"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-AR",
+    "defaultCommand": "!closs",
     "stats": {
       "uses": "1.9M",
       "downloads": "14k"
     },
-    "gender": "male",
-    "category": "celebrity",
     "previewText": "¡Señoras y señores! ¡Buenas noches para todos en esta transmisión!",
-    "referenceId": "5544ecf43b14452fa0ce23d888823367",
-    "defaultCommand": "!closs"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "5544ecf43b14452fa0ce23d888823367"
   },
   {
     "id": "es_lacobra",
-    "isAI": true,
-    "lang": "es-AR",
     "name": "La Cobra",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -419,22 +418,22 @@
       "kick",
       "twitch"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-AR",
+    "defaultCommand": "!lacobra",
     "stats": {
       "uses": "1.5M",
       "downloads": "10.5k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "¡Pero qué decís amigo! ¡Es una locura total lo que estamos viviendo en este stream!",
-    "referenceId": "5458dad9c902431cb0dbb37703160cb7",
-    "defaultCommand": "!lacobra"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "5458dad9c902431cb0dbb37703160cb7"
   },
   {
     "id": "es_davo",
-    "isAI": true,
-    "lang": "es-AR",
     "name": "Davo Xeneize",
+    "category": "streamer",
     "tags": [
       "popular",
       "trending",
@@ -444,392 +443,393 @@
       "argentina",
       "twitch"
     ],
-    "model": "s2.1-pro-free",
+    "lang": "es-AR",
+    "defaultCommand": "!davo",
     "stats": {
       "uses": "1.8M",
       "downloads": "13k"
     },
-    "gender": "male",
-    "category": "streamer",
     "previewText": "Buenas noches a todos muchachos, ¿cómo andan? Bienvenidos a un nuevo stream.",
-    "referenceId": "51ea54dc9b7d46b49a58918742c1a2cd",
-    "defaultCommand": "!davo"
+    "gender": "male",
+    "isAI": true,
+    "model": "s2.1-pro-free",
+    "referenceId": "51ea54dc9b7d46b49a58918742c1a2cd"
   },
   {
     "id": "es_mx_mia",
-    "isAI": false,
-    "lang": "es-MX",
     "name": "Mia (Español Latino)",
+    "category": "standard",
     "tags": [
       "recent",
       "latino",
       "femenino"
     ],
+    "lang": "es-MX",
+    "defaultCommand": "!mia",
     "stats": {
       "uses": "620k",
       "downloads": "3.1k"
     },
-    "gender": "female",
-    "category": "standard",
     "previewText": "Hola streamer, soy Mia con voz en español latino.",
-    "defaultCommand": "!mia"
+    "gender": "female",
+    "isAI": false
   },
   {
     "id": "es_us_miguel",
-    "isAI": false,
-    "lang": "es-US",
     "name": "Miguel (Español Latino)",
+    "category": "standard",
     "tags": [
       "recent",
       "latino",
       "masculino"
     ],
+    "lang": "es-US",
+    "defaultCommand": "!miguel",
     "stats": {
       "uses": "450k",
       "downloads": "2.4k"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Saludos a toda la comunidad del canal.",
-    "defaultCommand": "!miguel"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "es_us_lupe",
-    "isAI": false,
-    "lang": "es-US",
     "name": "Lupe (Español Neutro)",
+    "category": "standard",
     "tags": [
       "recent",
       "neutro",
       "femenino"
     ],
+    "lang": "es-US",
+    "defaultCommand": "!lupe",
     "stats": {
       "uses": "310k",
       "downloads": "1.5k"
     },
-    "gender": "female",
-    "category": "standard",
     "previewText": "Esta es la voz de Lupe para tus alertas de chat.",
-    "defaultCommand": "!lupe"
+    "gender": "female",
+    "isAI": false
   },
   {
     "id": "es_us_penelope",
-    "isAI": false,
-    "lang": "es-US",
     "name": "Penélope (Español US)",
+    "category": "standard",
     "tags": [
       "recent",
       "femenino"
     ],
+    "lang": "es-US",
+    "defaultCommand": "!penelope",
     "stats": {
       "uses": "280k",
       "downloads": "1.2k"
     },
-    "gender": "female",
-    "category": "standard",
     "previewText": "Mensaje de voz en español neutro con Penélope.",
-    "defaultCommand": "!penelope"
+    "gender": "female",
+    "isAI": false
   },
   {
     "id": "es_es_enrique",
-    "isAI": false,
-    "lang": "es-ES",
     "name": "Enrique (Castellano)",
+    "category": "standard",
     "tags": [
       "recent",
       "españa",
       "masculino"
     ],
+    "lang": "es-ES",
+    "defaultCommand": "!enrique",
     "stats": {
       "uses": "510k",
       "downloads": "2.8k"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Hola a todos chavales, aquí Enrique desde España.",
-    "defaultCommand": "!enrique"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "es_es_conchita",
-    "isAI": false,
-    "lang": "es-ES",
     "name": "Conchita (Castellano)",
+    "category": "standard",
     "tags": [
       "recent",
       "españa",
       "femenino"
     ],
+    "lang": "es-ES",
+    "defaultCommand": "!conchita",
     "stats": {
       "uses": "390k",
       "downloads": "1.9k"
     },
-    "gender": "female",
-    "category": "standard",
     "previewText": "Voz clásica en castellano con Conchita.",
-    "defaultCommand": "!conchita"
+    "gender": "female",
+    "isAI": false
   },
   {
     "id": "es_es_lucia",
-    "isAI": false,
-    "lang": "es-ES",
     "name": "Lucía (Castellano Natural)",
+    "category": "standard",
     "tags": [
       "recent",
       "españa",
       "femenino"
     ],
+    "lang": "es-ES",
+    "defaultCommand": "!lucia",
     "stats": {
       "uses": "340k",
       "downloads": "1.7k"
     },
-    "gender": "female",
-    "category": "standard",
     "previewText": "Voz natural en castellano para tus mensajes de TTS.",
-    "defaultCommand": "!lucia"
+    "gender": "female",
+    "isAI": false
   },
   {
     "id": "en_brian",
-    "isAI": false,
-    "lang": "en-GB",
     "name": "Brian (English UK Classic)",
+    "category": "standard",
     "tags": [
       "popular",
       "english",
       "meme",
       "classic"
     ],
+    "lang": "en-GB",
+    "defaultCommand": "!brian",
     "stats": {
       "uses": "2.1M",
       "downloads": "15k"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Hello there, I am Brian the classic Twitch TTS voice.",
-    "defaultCommand": "!brian"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "en_emma",
-    "isAI": false,
-    "lang": "en-GB",
     "name": "Emma (English UK)",
+    "category": "standard",
     "tags": [
       "recent",
       "english",
       "femenino"
     ],
+    "lang": "en-GB",
+    "defaultCommand": "!emma",
     "stats": {
       "uses": "420k",
       "downloads": "2.1k"
     },
-    "gender": "female",
-    "category": "standard",
     "previewText": "Greetings to everyone in the stream chat.",
-    "defaultCommand": "!emma"
+    "gender": "female",
+    "isAI": false
   },
   {
     "id": "en_joey",
-    "isAI": false,
-    "lang": "en-US",
     "name": "Joey (English US)",
+    "category": "standard",
     "tags": [
       "recent",
       "english",
       "masculino"
     ],
+    "lang": "en-US",
+    "defaultCommand": "!joey",
     "stats": {
       "uses": "360k",
       "downloads": "1.8k"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Hey what is going on stream! Joey here.",
-    "defaultCommand": "!joey"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "en_matthew",
-    "isAI": false,
-    "lang": "en-US",
     "name": "Matthew (English US)",
+    "category": "standard",
     "tags": [
       "recent",
       "english",
       "masculino"
     ],
+    "lang": "en-US",
+    "defaultCommand": "!matthew",
     "stats": {
       "uses": "290k",
       "downloads": "1.4k"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Welcome to the live broadcast.",
-    "defaultCommand": "!matthew"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "en_kendra",
-    "isAI": false,
-    "lang": "en-US",
     "name": "Kendra (English US)",
+    "category": "standard",
     "tags": [
       "recent",
       "english",
       "femenino"
     ],
+    "lang": "en-US",
+    "defaultCommand": "!kendra",
     "stats": {
       "uses": "310k",
       "downloads": "1.5k"
     },
-    "gender": "female",
-    "category": "standard",
     "previewText": "This is Kendra reading your chat donation.",
-    "defaultCommand": "!kendra"
+    "gender": "female",
+    "isAI": false
   },
   {
     "id": "en_justin",
-    "isAI": false,
-    "lang": "en-US",
     "name": "Justin (English US Young)",
+    "category": "standard",
     "tags": [
       "recent",
       "english",
       "joven"
     ],
+    "lang": "en-US",
+    "defaultCommand": "!justin",
     "stats": {
       "uses": "240k",
       "downloads": "1.1k"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Hey guys, Justin speaking!",
-    "defaultCommand": "!justin"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "en_russell",
-    "isAI": false,
-    "lang": "en-AU",
     "name": "Russell (English Australia)",
+    "category": "standard",
     "tags": [
       "recent",
       "australia"
     ],
+    "lang": "en-AU",
+    "defaultCommand": "!russell",
     "stats": {
       "uses": "190k",
       "downloads": "980"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "G day mate, having a great stream today.",
-    "defaultCommand": "!russell"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "pt_cristiano",
-    "isAI": false,
-    "lang": "pt-BR",
     "name": "Cristiano (Português)",
+    "category": "standard",
     "tags": [
       "recent",
       "brasil",
       "portugal"
     ],
+    "lang": "pt-BR",
+    "defaultCommand": "!cristiano",
     "stats": {
       "uses": "370k",
       "downloads": "2.3k"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Olá a todos no chat do canal.",
-    "defaultCommand": "!cristiano"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "fr_mathieu",
-    "isAI": false,
-    "lang": "fr-FR",
     "name": "Mathieu (Français)",
+    "category": "standard",
     "tags": [
       "recent",
       "frances"
     ],
+    "lang": "fr-FR",
+    "defaultCommand": "!mathieu",
     "stats": {
       "uses": "180k",
       "downloads": "890"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Bonjour à tous sur le live stream.",
-    "defaultCommand": "!mathieu"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "it_giorgio",
-    "isAI": false,
-    "lang": "it-IT",
     "name": "Giorgio (Italiano)",
+    "category": "standard",
     "tags": [
       "recent",
       "italiano"
     ],
+    "lang": "it-IT",
+    "defaultCommand": "!giorgio",
     "stats": {
       "uses": "160k",
       "downloads": "750"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Ciao a todos, benvenuti nella diretta.",
-    "defaultCommand": "!giorgio"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "de_hans",
-    "isAI": false,
-    "lang": "de-DE",
     "name": "Hans (Deutsch)",
+    "category": "standard",
     "tags": [
       "recent",
       "aleman"
     ],
+    "lang": "de-DE",
+    "defaultCommand": "!hans",
     "stats": {
       "uses": "140k",
       "downloads": "680"
     },
-    "gender": "male",
-    "category": "standard",
     "previewText": "Hallo zusammen im Live Stream.",
-    "defaultCommand": "!hans"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "ja_takumi",
-    "isAI": false,
-    "lang": "ja-JP",
     "name": "Takumi (日本語 Anime)",
+    "category": "anime",
     "tags": [
       "popular",
       "japon",
       "anime"
     ],
+    "lang": "ja-JP",
+    "defaultCommand": "!takumi",
     "stats": {
       "uses": "490k",
       "downloads": "3.2k"
     },
-    "gender": "male",
-    "category": "anime",
     "previewText": "皆さん、こんにちは！配信へようこそ。",
-    "defaultCommand": "!takumi"
+    "gender": "male",
+    "isAI": false
   },
   {
     "id": "ja_mizuki",
-    "isAI": false,
-    "lang": "ja-JP",
     "name": "Mizuki (日本語 Femenino)",
+    "category": "anime",
     "tags": [
       "popular",
       "japon",
       "anime",
       "femenino"
     ],
+    "lang": "ja-JP",
+    "defaultCommand": "!mizuki",
     "stats": {
       "uses": "430k",
       "downloads": "2.9k"
     },
-    "gender": "female",
-    "category": "anime",
     "previewText": "こんにちは！チャットの皆さん、よろしくお願いします。",
-    "defaultCommand": "!mizuki"
+    "gender": "female",
+    "isAI": false
   }
 ]

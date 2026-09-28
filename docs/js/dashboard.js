@@ -4994,12 +4994,51 @@ const FISH_AUDIO_KEYS = [
   'es_peruano', 'peruano',
   'es_marianocloss', 'marianocloss', 'mariano_closs', 'closs',
   'es_lacobra', 'lacobra', 'la_cobra', 'cobra',
-  'es_davo', 'davo', 'davoxeneize', 'davo_xeneize'
+  'es_davo', 'davo', 'davoxeneize', 'davo_xeneize',
+  'es_vegetta', 'vegetta', 'vegetta777',
+  'es_elrich', 'elrich', 'elrichmc', 'rich'
 ];
+
+function isFishAudioVoice(voiceId) {
+  if (!voiceId) return false;
+  const clean = voiceId.toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
+  if (FISH_AUDIO_KEYS.includes(clean)) return true;
+  if (clean.startsWith('custom_')) return true;
+  if (/^[a-f0-9]{28,36}$/i.test(clean)) return true;
+
+  // Catálogo en memoria (cachedVoiceLibrary o DEFAULT_VOICE_CATALOG)
+  const catalog = (typeof cachedVoiceLibrary !== 'undefined' && Array.isArray(cachedVoiceLibrary))
+    ? cachedVoiceLibrary
+    : (typeof DEFAULT_VOICE_CATALOG !== 'undefined' ? DEFAULT_VOICE_CATALOG : []);
+
+  const found = catalog.find(v =>
+    (v.id && v.id.toLowerCase() === clean) ||
+    (v.referenceId && v.referenceId.toLowerCase() === clean) ||
+    (v.defaultCommand && v.defaultCommand.toLowerCase().replace(/^!/, '') === clean.replace(/^!/, '')) ||
+    (v.name && v.name.toLowerCase().replace(/\s+/g, '') === clean.replace(/\s+/g, ''))
+  );
+  if (found && (found.referenceId || found.isAI || found.category === 'celebrity' || found.category === 'streamer')) {
+    return true;
+  }
+
+  // Buscar en los comandos configurados (cachedTTSCommands)
+  if (typeof cachedTTSCommands !== 'undefined' && Array.isArray(cachedTTSCommands)) {
+    const cmd = cachedTTSCommands.find(c =>
+      (c.command && c.command.toLowerCase().replace(/^!/, '') === clean.replace(/^!/, '')) ||
+      (c.voiceId && c.voiceId.toLowerCase() === clean)
+    );
+    if (cmd) {
+      if (cmd.voiceId && isFishAudioVoice(cmd.voiceId)) return true;
+      if (cmd.command && isFishAudioVoice(cmd.command)) return true;
+    }
+  }
+
+  return false;
+}
 
 function getTTSAudioUrl(text, voiceId) {
   const clean = (voiceId || '').toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
-  if (FISH_AUDIO_KEYS.includes(clean)) {
+  if (isFishAudioVoice(clean)) {
     return `/api/tts/audio?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(clean)}`;
   }
   const seVoiceMap = {
@@ -5038,7 +5077,7 @@ function playTTSAudioLocal(text, voiceKey, volume = 0.9, onEnd = null) {
   const targetLang = (profile.lang || 'es-ES').split('-')[0].toLowerCase();
 
   // Si es voz IA (Fish Audio), reproducir directamente desde /api/tts/audio
-  if (FISH_AUDIO_KEYS.includes(cleanKey)) {
+  if (isFishAudioVoice(cleanKey)) {
     const directUrl = `/api/tts/audio?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(cleanKey)}`;
     const a = new Audio(directUrl);
     a.volume = volume;
@@ -5483,6 +5522,34 @@ const DEFAULT_VOICE_CATALOG = [
     isAI: true,
     model: 's2.1-pro-free',
     referenceId: '51ea54dc9b7d46b49a58918742c1a2cd'
+  },
+  {
+    id: 'es_vegetta',
+    name: 'Vegetta777',
+    category: 'streamer',
+    tags: ['popular', 'trending', 'ia', 'streamer', 'gaming', 'minecraft', 'youtube'],
+    lang: 'es-ES',
+    defaultCommand: '!vegetta',
+    stats: { uses: '2.5M', downloads: '19k' },
+    previewText: '¡Hey, muy buenas a todos, guapísimos! Aquí Vegetta777 en un directo.',
+    gender: 'male',
+    isAI: true,
+    model: 's2.1-pro-free',
+    referenceId: '856ad0a846be412aaba3248b29c7c91c'
+  },
+  {
+    id: 'es_elrich',
+    name: 'ElRichMC',
+    category: 'streamer',
+    tags: ['popular', 'trending', 'ia', 'streamer', 'gaming', 'minecraft', 'redstone'],
+    lang: 'es-ES',
+    defaultCommand: '!elrich',
+    stats: { uses: '1.4M', downloads: '10.2k' },
+    previewText: 'Ey, ¿qué pasa chavales? Aquí ElRichMC en un nuevo stream de Minecraft técnico.',
+    gender: 'male',
+    isAI: true,
+    model: 's2.1-pro-free',
+    referenceId: 'de3a4ac0cba441408eb837aa494965d8'
   },
 
   // --- Voces Estándar ---
@@ -10261,11 +10328,183 @@ function updateAdminUIElements(isAdmin) {
     switchTab('tab-dashboard');
   }
 
+  // Mostrar/ocultar panel de superadmin en la biblioteca de voces TTS
+  const voiceAdminPanel = document.getElementById('superadminVoicePanel');
+  if (voiceAdminPanel) {
+    voiceAdminPanel.style.display = isAdmin ? 'flex' : 'none';
+  }
+
   if (isAdmin) {
     loadStreamersSupportList();
     loadAdminsList();
   }
 }
+
+// ── SUPERADMIN: Funciones del Modal de Añadir Voz Fish Audio ──
+
+function openAdminAddVoiceModal() {
+  if (!isUserSuperAdmin) {
+    showToastNotification('⛔ Solo el superadmin puede añadir voces.', 'error');
+    return;
+  }
+  const modal = document.getElementById('modalAdminAddVoice');
+  if (!modal) return;
+  // Limpiar formulario
+  ['adminVoiceRefId', 'adminVoiceName', 'adminVoiceCommand', 'adminVoiceTags'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  const refStatus = document.getElementById('adminVoiceRefIdStatus');
+  if (refStatus) refStatus.textContent = '';
+  const errDiv = document.getElementById('adminVoiceModalError');
+  const okDiv = document.getElementById('adminVoiceModalSuccess');
+  if (errDiv) errDiv.style.display = 'none';
+  if (okDiv) okDiv.style.display = 'none';
+  // Restaurar botón
+  const saveBtn = document.getElementById('btnAdminSaveVoice');
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.innerHTML = '<i class="fas fa-plus-circle"></i> Añadir al catálogo global';
+  }
+  modal.style.display = 'flex';
+  setTimeout(() => {
+    const refInput = document.getElementById('adminVoiceRefId');
+    if (refInput) refInput.focus();
+  }, 100);
+}
+
+function closeAdminAddVoiceModal() {
+  const modal = document.getElementById('modalAdminAddVoice');
+  if (modal) modal.style.display = 'none';
+}
+
+function validateAdminVoiceRefId(input) {
+  const statusEl = document.getElementById('adminVoiceRefIdStatus');
+  if (!input || !statusEl) return;
+  const val = input.value.trim().replace(/[^a-zA-Z0-9]/g, '');
+  if (!val) {
+    statusEl.textContent = '';
+  } else if (val.length >= 28 && val.length <= 36) {
+    statusEl.textContent = '✅';
+  } else if (val.length < 28) {
+    statusEl.textContent = '⏳';
+  } else {
+    statusEl.textContent = '❌';
+  }
+}
+
+async function handleAdminAddVoice() {
+  if (!isUserSuperAdmin) {
+    showToastNotification('⛔ Solo el superadmin puede añadir voces.', 'error');
+    return;
+  }
+
+  const errDiv = document.getElementById('adminVoiceModalError');
+  const okDiv = document.getElementById('adminVoiceModalSuccess');
+  const saveBtn = document.getElementById('btnAdminSaveVoice');
+
+  function showError(msg) {
+    if (errDiv) { errDiv.textContent = '⚠️ ' + msg; errDiv.style.display = 'block'; }
+    if (okDiv) okDiv.style.display = 'none';
+  }
+  function showSuccess(msg) {
+    if (okDiv) { okDiv.textContent = '✅ ' + msg; okDiv.style.display = 'block'; }
+    if (errDiv) errDiv.style.display = 'none';
+  }
+
+  const referenceId = (document.getElementById('adminVoiceRefId')?.value || '').trim().replace(/[^a-zA-Z0-9]/g, '');
+  const name = (document.getElementById('adminVoiceName')?.value || '').trim();
+  const command = (document.getElementById('adminVoiceCommand')?.value || '').trim();
+  const category = document.getElementById('adminVoiceCategory')?.value || 'celebrity';
+  const tags = (document.getElementById('adminVoiceTags')?.value || '').trim();
+  const lang = document.getElementById('adminVoiceLang')?.value || 'es-ES';
+
+  if (!referenceId || referenceId.length < 28) {
+    return showError('El reference_id debe tener al menos 28 caracteres alfanuméricos.');
+  }
+  if (!name) {
+    return showError('El nombre de la voz es obligatorio.');
+  }
+
+  // Deshabilitar botón durante la petición
+  if (saveBtn) {
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Añadiendo...';
+  }
+  if (errDiv) errDiv.style.display = 'none';
+  if (okDiv) okDiv.style.display = 'none';
+
+  try {
+    const session = getUserSession();
+    const adminEmail = (session?.email || '').trim().toLowerCase();
+    const adminUserId = session?.id || session?.user_id || '';
+
+    const res = await fetch('/api/admin/tts/voices/add', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(adminEmail && { 'x-admin-email': adminEmail }),
+        ...(adminUserId && { 'x-admin-userid': adminUserId })
+      },
+      body: JSON.stringify({
+        referenceId,
+        name,
+        category,
+        tags,
+        lang,
+        defaultCommand: command || `!${name.toLowerCase().replace(/\s+/g, '')}`,
+        adminEmail,
+        adminUserId
+      })
+    });
+
+    const data = await res.json();
+    if (res.ok && data.success) {
+      showSuccess(`Voz "${name}" añadida correctamente al catálogo global (${data.total} voces totales).`);
+
+      // Actualizar la biblioteca local
+      if (data.voice) {
+        cachedVoiceLibrary = cachedVoiceLibrary || [];
+        const existingIdx = cachedVoiceLibrary.findIndex(v => v.id === data.voice.id);
+        if (existingIdx >= 0) {
+          cachedVoiceLibrary[existingIdx] = data.voice;
+        } else {
+          cachedVoiceLibrary.push(data.voice);
+        }
+      }
+
+      // Recargar la biblioteca de voces
+      setTimeout(() => {
+        const searchEl = document.getElementById('voiceLibrarySearch');
+        loadVoiceLibrary(searchEl?.value || '', activeVoiceCategory || 'popular');
+      }, 800);
+
+      // Cerrar modal después de 2 segundos
+      setTimeout(() => closeAdminAddVoiceModal(), 2200);
+    } else {
+      showError(data.message || 'Error desconocido al añadir la voz.');
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-plus-circle"></i> Añadir al catálogo global';
+      }
+    }
+  } catch (err) {
+    showError('Error de conexión: ' + err.message);
+    if (saveBtn) {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = '<i class="fas fa-plus-circle"></i> Añadir al catálogo global';
+    }
+  }
+}
+
+// Cerrar modal al hacer clic fuera
+document.addEventListener('click', function(e) {
+  const modal = document.getElementById('modalAdminAddVoice');
+  if (modal && modal.style.display === 'flex' && e.target === modal) {
+    closeAdminAddVoiceModal();
+  }
+});
+
 
 // Variables globales para administración y ocultación de streamers
 let adminShowHiddenStreamers = false;

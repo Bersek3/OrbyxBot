@@ -4994,12 +4994,51 @@ const FISH_AUDIO_KEYS = [
   'es_peruano', 'peruano',
   'es_marianocloss', 'marianocloss', 'mariano_closs', 'closs',
   'es_lacobra', 'lacobra', 'la_cobra', 'cobra',
-  'es_davo', 'davo', 'davoxeneize', 'davo_xeneize'
+  'es_davo', 'davo', 'davoxeneize', 'davo_xeneize',
+  'es_vegetta', 'vegetta', 'vegetta777',
+  'es_elrich', 'elrich', 'elrichmc', 'rich'
 ];
+
+function isFishAudioVoice(voiceId) {
+  if (!voiceId) return false;
+  const clean = voiceId.toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
+  if (FISH_AUDIO_KEYS.includes(clean)) return true;
+  if (clean.startsWith('custom_')) return true;
+  if (/^[a-f0-9]{28,36}$/i.test(clean)) return true;
+
+  // Catálogo en memoria (cachedVoiceLibrary o DEFAULT_VOICE_CATALOG)
+  const catalog = (typeof cachedVoiceLibrary !== 'undefined' && Array.isArray(cachedVoiceLibrary))
+    ? cachedVoiceLibrary
+    : (typeof DEFAULT_VOICE_CATALOG !== 'undefined' ? DEFAULT_VOICE_CATALOG : []);
+
+  const found = catalog.find(v =>
+    (v.id && v.id.toLowerCase() === clean) ||
+    (v.referenceId && v.referenceId.toLowerCase() === clean) ||
+    (v.defaultCommand && v.defaultCommand.toLowerCase().replace(/^!/, '') === clean.replace(/^!/, '')) ||
+    (v.name && v.name.toLowerCase().replace(/\s+/g, '') === clean.replace(/\s+/g, ''))
+  );
+  if (found && (found.referenceId || found.isAI || found.category === 'celebrity' || found.category === 'streamer')) {
+    return true;
+  }
+
+  // Buscar en los comandos configurados (cachedTTSCommands)
+  if (typeof cachedTTSCommands !== 'undefined' && Array.isArray(cachedTTSCommands)) {
+    const cmd = cachedTTSCommands.find(c =>
+      (c.command && c.command.toLowerCase().replace(/^!/, '') === clean.replace(/^!/, '')) ||
+      (c.voiceId && c.voiceId.toLowerCase() === clean)
+    );
+    if (cmd) {
+      if (cmd.voiceId && isFishAudioVoice(cmd.voiceId)) return true;
+      if (cmd.command && isFishAudioVoice(cmd.command)) return true;
+    }
+  }
+
+  return false;
+}
 
 function getTTSAudioUrl(text, voiceId) {
   const clean = (voiceId || '').toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
-  if (FISH_AUDIO_KEYS.includes(clean)) {
+  if (isFishAudioVoice(clean)) {
     return `/api/tts/audio?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(clean)}`;
   }
   const seVoiceMap = {
@@ -5038,7 +5077,7 @@ function playTTSAudioLocal(text, voiceKey, volume = 0.9, onEnd = null) {
   const targetLang = (profile.lang || 'es-ES').split('-')[0].toLowerCase();
 
   // Si es voz IA (Fish Audio), reproducir directamente desde /api/tts/audio
-  if (FISH_AUDIO_KEYS.includes(cleanKey)) {
+  if (isFishAudioVoice(cleanKey)) {
     const directUrl = `/api/tts/audio?text=${encodeURIComponent(text)}&voice=${encodeURIComponent(cleanKey)}`;
     const a = new Audio(directUrl);
     a.volume = volume;
@@ -5483,6 +5522,34 @@ const DEFAULT_VOICE_CATALOG = [
     isAI: true,
     model: 's2.1-pro-free',
     referenceId: '51ea54dc9b7d46b49a58918742c1a2cd'
+  },
+  {
+    id: 'es_vegetta',
+    name: 'Vegetta777',
+    category: 'streamer',
+    tags: ['popular', 'trending', 'ia', 'streamer', 'gaming', 'minecraft', 'youtube'],
+    lang: 'es-ES',
+    defaultCommand: '!vegetta',
+    stats: { uses: '2.5M', downloads: '19k' },
+    previewText: '¡Hey, muy buenas a todos, guapísimos! Aquí Vegetta777 en un directo.',
+    gender: 'male',
+    isAI: true,
+    model: 's2.1-pro-free',
+    referenceId: '856ad0a846be412aaba3248b29c7c91c'
+  },
+  {
+    id: 'es_elrich',
+    name: 'ElRichMC',
+    category: 'streamer',
+    tags: ['popular', 'trending', 'ia', 'streamer', 'gaming', 'minecraft', 'redstone'],
+    lang: 'es-ES',
+    defaultCommand: '!elrich',
+    stats: { uses: '1.4M', downloads: '10.2k' },
+    previewText: 'Ey, ¿qué pasa chavales? Aquí ElRichMC en un nuevo stream de Minecraft técnico.',
+    gender: 'male',
+    isAI: true,
+    model: 's2.1-pro-free',
+    referenceId: 'de3a4ac0cba441408eb837aa494965d8'
   },
 
   // --- Voces Estándar ---

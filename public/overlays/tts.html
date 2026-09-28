@@ -276,7 +276,9 @@
       'es_peruano', 'peruano',
       'es_marianocloss', 'marianocloss', 'mariano_closs', 'closs',
       'es_lacobra', 'lacobra', 'la_cobra', 'cobra',
-      'es_davo', 'davo', 'davoxeneize', 'davo_xeneize'
+      'es_davo', 'davo', 'davoxeneize', 'davo_xeneize',
+      'es_vegetta', 'vegetta', 'vegetta777',
+      'es_elrich', 'elrich', 'elrichmc', 'rich'
     ];
 
     let audioCtx = null;
@@ -504,7 +506,10 @@
         };
 
         const segAudioUrl = seg.audioUrl || `/api/tts/audio?text=${encodeURIComponent(seg.text)}&voice=${encodeURIComponent(seg.voice || 'es_mx_mia')}`;
-        const isFish = seg.engine === 'fish_audio' || fishAudioKeys.includes(seg.voice) || (segAudioUrl && (segAudioUrl.includes('/api/tts/audio') || segAudioUrl.includes('/api/tts')));
+        const isFish = seg.engine === 'fish_audio' ||
+          fishAudioKeys.includes(seg.voice) ||
+          (seg.voice && (seg.voice.startsWith('custom_') || /^[a-f0-9]{28,36}$/i.test(seg.voice))) ||
+          (segAudioUrl && (segAudioUrl.includes('/api/tts/audio') || segAudioUrl.includes('/api/tts')));
 
         if (isFish && segAudioUrl) {
           stopCurrentAudio();

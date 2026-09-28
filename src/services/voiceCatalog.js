@@ -278,6 +278,34 @@ const VOICE_CATALOG = [
     model: 's2.1-pro-free',
     referenceId: '51ea54dc9b7d46b49a58918742c1a2cd'
   },
+  {
+    id: 'es_vegetta',
+    name: 'Vegetta777',
+    category: 'streamer',
+    tags: ['popular', 'trending', 'ia', 'streamer', 'gaming', 'minecraft', 'youtube'],
+    lang: 'es-ES',
+    defaultCommand: '!vegetta',
+    stats: { uses: '2.5M', downloads: '19k' },
+    previewText: '¡Hey, muy buenas a todos, guapísimos! Aquí Vegetta777 en un directo.',
+    gender: 'male',
+    isAI: true,
+    model: 's2.1-pro-free',
+    referenceId: '856ad0a846be412aaba3248b29c7c91c'
+  },
+  {
+    id: 'es_elrich',
+    name: 'ElRichMC',
+    category: 'streamer',
+    tags: ['popular', 'trending', 'ia', 'streamer', 'gaming', 'minecraft', 'redstone'],
+    lang: 'es-ES',
+    defaultCommand: '!elrich',
+    stats: { uses: '1.4M', downloads: '10.2k' },
+    previewText: 'Ey, ¿qué pasa chavales? Aquí ElRichMC en un nuevo stream de Minecraft técnico.',
+    gender: 'male',
+    isAI: true,
+    model: 's2.1-pro-free',
+    referenceId: 'de3a4ac0cba441408eb837aa494965d8'
+  },
 
   // --- Voces Multilingües Estándar ---
   {

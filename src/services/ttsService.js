@@ -70,6 +70,11 @@ class TTSService {
     if (!voiceId) return defaultVoice;
     const v = voiceId.toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
 
+    // Si ya es un voiceId custom o referenceId, preservarlo directamente
+    if (v.startsWith('custom_') || /^[a-f0-9]{28,36}$/i.test(v)) {
+      return v;
+    }
+
     // 1. Buscar coincidencia en el catálogo activo de la base de datos
     const dbVoice = voiceCatalog.getVoiceById(v);
     if (dbVoice) {
@@ -137,6 +142,11 @@ class TTSService {
       davo: 'es_davo',
       davoxeneize: 'es_davo',
       davo_xeneize: 'es_davo',
+      vegetta: 'es_vegetta',
+      vegetta777: 'es_vegetta',
+      elrich: 'es_elrich',
+      elrichmc: 'es_elrich',
+      rich: 'es_elrich',
 
       // Voces Estándar / Multilingües
       mia: 'es_mx_mia',
@@ -174,13 +184,26 @@ class TTSService {
   }
 
   isFishAudioVoice(voiceId) {
+    if (!voiceId) return false;
+    const raw = voiceId.toString().toLowerCase().trim().replace(/^[-@/]/, '').replace(/^voice:/, '');
+    if (raw.startsWith('custom_') || /^[a-f0-9]{28,36}$/i.test(raw)) return true;
+
     const normalized = this.normalizeVoice(voiceId);
+    if (normalized.startsWith('custom_') || /^[a-f0-9]{28,36}$/i.test(normalized)) return true;
+
     const dbVoice = voiceCatalog.getVoiceById(normalized);
-    if (dbVoice && dbVoice.isAI) return true;
+    if (dbVoice && (dbVoice.isAI || dbVoice.referenceId)) return true;
+
+    try {
+      const liveCatalog = storage.getVoiceCatalog() || [];
+      const liveVoice = liveCatalog.find(lv => lv.id.toLowerCase() === normalized || lv.id.toLowerCase() === raw);
+      if (liveVoice && (liveVoice.isAI || liveVoice.referenceId)) return true;
+    } catch(e) {}
+
     return [
       'es_ar_messi', 'es_ve_maduro', 'es_tiktok', 'es_mx_homero', 'es_dross', 'es_badbunny', 'es_rubius',
       'es_farid', 'es_westcol', 'es_cr7', 'es_goku', 'es_maradona', 'es_xokas', 'es_illojuan', 'es_auronplay',
-      'es_peruano', 'es_marianocloss', 'es_lacobra', 'es_davo'
+      'es_peruano', 'es_marianocloss', 'es_lacobra', 'es_davo', 'es_vegetta', 'es_elrich'
     ].includes(normalized);
   }
 

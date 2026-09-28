@@ -1641,16 +1641,30 @@ app.get(['/api/tts', '/api/tts/audio'], async (req, res) => {
       'es_davo': '51ea54dc9b7d46b49a58918742c1a2cd',
       'davo': '51ea54dc9b7d46b49a58918742c1a2cd',
       'davoxeneize': '51ea54dc9b7d46b49a58918742c1a2cd',
-      'davo_xeneize': '51ea54dc9b7d46b49a58918742c1a2cd'
+      'davo_xeneize': '51ea54dc9b7d46b49a58918742c1a2cd',
+
+      'es_vegetta': '856ad0a846be412aaba3248b29c7c91c',
+      'vegetta': '856ad0a846be412aaba3248b29c7c91c',
+      'vegetta777': '856ad0a846be412aaba3248b29c7c91c',
+
+      'es_elrich': 'de3a4ac0cba441408eb837aa494965d8',
+      'elrich': 'de3a4ac0cba441408eb837aa494965d8',
+      'elrichmc': 'de3a4ac0cba441408eb837aa494965d8',
+      'rich': 'de3a4ac0cba441408eb837aa494965d8'
     };
 
     let fishRefId = FISH_MODELS[voice];
+
+    // ── Atajo directo si voice ya es un referenceId hexadecimal directo (28-36 chars) ──
+    if (!fishRefId && /^[a-f0-9]{28,36}$/i.test(voice)) {
+      fishRefId = voice;
+    }
 
     // ── Atajo directo para voces custom añadidas por superadmin ──
     // Si el voiceId empieza con "custom_", el sufijo es el referenceId de Fish Audio
     if (!fishRefId && voice.startsWith('custom_')) {
       const candidateRef = voice.replace(/^custom_/, '');
-      if (/^[a-f0-9]{28,}$/i.test(candidateRef)) {
+      if (/^[a-f0-9]{28,36}$/i.test(candidateRef)) {
         fishRefId = candidateRef;
       }
     }
@@ -1669,6 +1683,27 @@ app.get(['/api/tts', '/api/tts/audio'], async (req, res) => {
         );
         if (liveVoice && liveVoice.referenceId) {
           fishRefId = liveVoice.referenceId;
+        }
+      } catch (e) { }
+    }
+    // Fallback: buscar en comandos configurados por el streamer
+    if (!fishRefId) {
+      try {
+        const userCmds = storage.getTtsCommands() || [];
+        const cleanVoice = voice.toLowerCase().trim().replace(/^!/, '');
+        const matched = userCmds.find(c =>
+          (c.command && c.command.toLowerCase().replace(/^!/, '') === cleanVoice) ||
+          (c.voiceId && c.voiceId.toLowerCase() === cleanVoice)
+        );
+        if (matched && matched.voiceId) {
+          const vId = matched.voiceId.toLowerCase().trim();
+          if (vId.startsWith('custom_')) {
+            fishRefId = vId.replace(/^custom_/, '');
+          } else if (FISH_MODELS[vId]) {
+            fishRefId = FISH_MODELS[vId];
+          } else if (/^[a-f0-9]{28,36}$/i.test(vId)) {
+            fishRefId = vId;
+          }
         }
       } catch (e) { }
     }
