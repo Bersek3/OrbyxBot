@@ -259,6 +259,10 @@
     let isSpinning = false;
     let spinQueue = [];
     let lastTickIndex = -1;
+    let spinAnimId = null;
+    let spinWatchdog = null;
+    let bannerTimeoutId = null;
+    const recentSpinDedupeSet = new Set();
 
     // High DPI Support
     function setupCanvasDPI() {
@@ -528,13 +532,28 @@
     }
 
     // ================= SPIN PHYSICS & ANIMATION =================
-    function spinWheelTo(winningIndex, user, prize) {
+    function spinWheelTo(winningIndex, user, prize, dedupeId) {
       if (isSpinning) {
-        spinQueue.push({ winningIndex, user, prize });
+        // Prevent queue accumulation & duplicates
+        if (spinQueue.length >= 2) {
+          console.warn('[Roulette] Cola llena, ignorando solicitud extra');
+          return;
+        }
+        const isDuplicateQueued = spinQueue.some(item => 
+          (dedupeId && item.dedupeId === dedupeId) || 
+          (item.user === user && item.winningIndex === winningIndex)
+        );
+        if (!isDuplicateQueued) {
+          spinQueue.push({ winningIndex, user, prize, dedupeId, queuedAt: Date.now() });
+        }
         return;
       }
 
       isSpinning = true;
+      if (bannerTimeoutId) {
+        clearTimeout(bannerTimeoutId);
+        bannerTimeoutId = null;
+      }
       winnerBanner.classList.remove('active');
 
       const prizes = Array.isArray(rouletteConfig.prizes) && rouletteConfig.prizes.length > 0
@@ -545,15 +564,16 @@
       const sliceAngle = (2 * Math.PI) / numSlices;
 
       // Needle pointer is at the very top (angle: -PI/2 or 3*PI/2)
-      // When wheel rotates by currentAngle, slice i is at (startAngle + currentAngle)
-      // To have slice winningIndex at top:
-      // (winningIndex * sliceAngle + sliceAngle/2 + targetAngle) mod 2PI == 3*PI/2
-      const jitter = (Math.random() - 0.5) * (sliceAngle * 0.65);
+      const jitter = (Math.random() - 0.5) * (sliceAngle * 0.6);
       const targetSliceCenter = (winningIndex * sliceAngle) + (sliceAngle / 2) + jitter;
       const topPointerAngle = 3 * Math.PI / 2;
 
       let targetNormalized = (topPointerAngle - targetSliceCenter) % (2 * Math.PI);
       if (targetNormalized < 0) targetNormalized += 2 * Math.PI;
+
+      // Keep currentAngle within [0, 2PI)
+      currentAngle = currentAngle % (2 * Math.PI);
+      if (currentAngle < 0) currentAngle += 2 * Math.PI;
 
       // 6 to 9 full rotations for anticipation and excitement
       const fullRotations = (6 + Math.floor(Math.random() * 3)) * 2 * Math.PI;
@@ -564,13 +584,35 @@
       const durationMs = Math.max(4000, Math.min(14000, (Number(rouletteConfig.duration) || 7) * 1000));
       const startTime = performance.now();
 
+      if (spinAnimId) {
+        cancelAnimationFrame(spinAnimId);
+        spinAnimId = null;
+      }
+      if (spinWatchdog) {
+        clearTimeout(spinWatchdog);
+        spinWatchdog = null;
+      }
+
+      // Failsafe watchdog timer: asegura que la ruleta pare incluso si requestAnimationFrame se congela o desincroniza
+      spinWatchdog = setTimeout(() => {
+        if (isSpinning) {
+          console.warn('[Roulette] Watchdog activado - finalizando giro de seguridad');
+          if (spinAnimId) cancelAnimationFrame(spinAnimId);
+          spinAnimId = null;
+          isSpinning = false;
+          currentAngle = finalAngle % (2 * Math.PI);
+          drawWheel();
+          handleSpinFinished(user, prize || prizes[winningIndex]);
+        }
+      }, durationMs + 1200);
+
       function quinticEaseOut(t) {
         return 1 - Math.pow(1 - t, 4);
       }
 
       function stepSpin(now) {
-        const elapsed = now - startTime;
-        const progress = Math.min(1, elapsed / durationMs);
+        const elapsed = (now || performance.now()) - startTime;
+        const progress = Math.min(1, Math.max(0, elapsed / durationMs));
         const ease = quinticEaseOut(progress);
 
         currentAngle = startAngle + totalDelta * ease;
@@ -591,17 +633,22 @@
         }
 
         if (progress < 1) {
-          requestAnimationFrame(stepSpin);
+          spinAnimId = requestAnimationFrame(stepSpin);
         } else {
-          // Finished spinning!
+          // Finished spinning cleanly!
+          if (spinWatchdog) {
+            clearTimeout(spinWatchdog);
+            spinWatchdog = null;
+          }
+          spinAnimId = null;
           isSpinning = false;
-          currentAngle = finalAngle;
+          currentAngle = finalAngle % (2 * Math.PI);
           drawWheel();
           handleSpinFinished(user, prize || prizes[winningIndex]);
         }
       }
 
-      requestAnimationFrame(stepSpin);
+      spinAnimId = requestAnimationFrame(stepSpin);
     }
 
     function handleSpinFinished(user, winningPrize) {
@@ -614,14 +661,22 @@
       winnerPrizeDisplay.textContent = winningPrize?.text || '¡Gran Premio!';
       winnerBanner.classList.add('active');
 
-      const bannerDuration = Math.max(4000, Math.min(15000, (Number(rouletteConfig.bannerDuration) || 6) * 1000));
-      setTimeout(() => {
+      const bannerDuration = Math.max(3000, Math.min(12000, (Number(rouletteConfig.bannerDuration) || 6) * 1000));
+      if (bannerTimeoutId) clearTimeout(bannerTimeoutId);
+      
+      bannerTimeoutId = setTimeout(() => {
         winnerBanner.classList.remove('active');
+        bannerTimeoutId = null;
+
+        // Clean queue of expired items (> 30s old)
+        const now = Date.now();
+        spinQueue = spinQueue.filter(item => (now - (item.queuedAt || now)) < 30000);
+
         setTimeout(() => {
-          // If other spins are waiting in queue, run next spin
+          // If another unique spin is waiting in queue, run next spin
           if (spinQueue.length > 0) {
             const next = spinQueue.shift();
-            spinWheelTo(next.winningIndex, next.user, next.prize);
+            spinWheelTo(next.winningIndex, next.user, next.prize, next.dedupeId);
           }
         }, 800);
       }, bannerDuration);
@@ -657,10 +712,19 @@
 
       if (event === 'roulette_spin' || data.event === 'roulette_spin') {
         const payload = data.spin || data;
+
+        // Deduplication across multiple simultaneous transports (WS, MQTT, BroadcastChannel, localStorage)
+        const dedupeId = String(payload.spinId || payload.id || `${payload.user || 'anon'}_${payload.winningIndex}_${payload.winningPrize?.text || ''}_${Math.floor((payload.timestamp || Date.now()) / 12000)}`);
+        if (recentSpinDedupeSet.has(dedupeId)) {
+          return; // Ignore duplicate delivered by secondary transport
+        }
+        recentSpinDedupeSet.add(dedupeId);
+        setTimeout(() => recentSpinDedupeSet.delete(dedupeId), 25000);
+
         const prizes = rouletteConfig.prizes || [];
         let winIdx = Number.isInteger(payload.winningIndex) ? payload.winningIndex : 0;
         if (winIdx < 0 || winIdx >= prizes.length) winIdx = 0;
-        spinWheelTo(winIdx, payload.user || 'Espectador', payload.winningPrize || prizes[winIdx]);
+        spinWheelTo(winIdx, payload.user || 'Espectador', payload.winningPrize || prizes[winIdx], dedupeId);
       } else if (event === 'roulette_updated' || data.event === 'roulette_updated') {
         const updated = data.roulette || data;
         if (updated && typeof updated === 'object') {

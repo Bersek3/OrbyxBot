@@ -7415,6 +7415,9 @@ function bindRouletteConfigToUI() {
   const nameEl = document.getElementById('rouletteRewardName');
   if (nameEl) nameEl.value = rouletteConfig.rewardName || 'Girar Ruleta';
 
+  const idEl = document.getElementById('rouletteRewardId');
+  if (idEl) idEl.value = rouletteConfig.rewardId || '';
+
   const durEl = document.getElementById('rouletteDuration');
   if (durEl) {
     durEl.value = rouletteConfig.duration || 7;
@@ -7434,6 +7437,10 @@ function bindRouletteConfigToUI() {
 
   const chatEl = document.getElementById('rouletteChatAnnouncement');
   if (chatEl) chatEl.checked = rouletteConfig.chatAnnouncement !== false;
+
+  if (typeof cachedTwitchHelixRewards !== 'undefined' && cachedTwitchHelixRewards.length > 0) {
+    populateTwitchRewardsDropdown(cachedTwitchHelixRewards);
+  }
 }
 
 function handleRouletteToggle(enabled) {
@@ -7683,6 +7690,9 @@ async function saveRouletteConfigUI(showSuccessToast = true) {
   const nameEl = document.getElementById('rouletteRewardName');
   if (nameEl) rouletteConfig.rewardName = nameEl.value.trim() || 'Girar Ruleta';
 
+  const idEl = document.getElementById('rouletteRewardId');
+  if (idEl) rouletteConfig.rewardId = idEl.value.trim() || '';
+
   const durEl = document.getElementById('rouletteDuration');
   if (durEl) rouletteConfig.duration = parseInt(durEl.value, 10) || 7;
 
@@ -7738,7 +7748,11 @@ async function testRouletteSpinUI() {
   }
   const winningPrize = prizes[winningIndex];
 
+  // Unique spin ID prevents multiple simultaneous transports (WS, MQTT, BroadcastChannel, localStorage) from queuing duplicates
+  const uniqueSpinId = 'spin_test_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
   const spinPayload = {
+    spinId: uniqueSpinId,
+    id: uniqueSpinId,
     user: testUser,
     winningIndex,
     winningPrize,
@@ -7751,7 +7765,7 @@ async function testRouletteSpinUI() {
     await fetch('/api/roulette/spin', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ user: testUser, prizeIndex: winningIndex, prize: winningPrize })
+      body: JSON.stringify({ spinId: uniqueSpinId, user: testUser, prizeIndex: winningIndex, prize: winningPrize })
     });
   } catch(e) {}
 
@@ -7764,7 +7778,7 @@ async function testRouletteSpinUI() {
   if (targetNormalized < 0) targetNormalized += 2 * Math.PI;
 
   const fullRotations = 5 * 2 * Math.PI;
-  const startAngle = roulettePreviewAngle;
+  const startAngle = roulettePreviewAngle % (2 * Math.PI);
   const finalAngle = startAngle + fullRotations + ((targetNormalized - (startAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI));
   const totalDelta = finalAngle - startAngle;
   const durationMs = 3500;
@@ -7782,7 +7796,7 @@ async function testRouletteSpinUI() {
       requestAnimationFrame(step);
     } else {
       isPreviewSpinning = false;
-      roulettePreviewAngle = finalAngle;
+      roulettePreviewAngle = finalAngle % (2 * Math.PI);
       drawRoulettePreview();
 
       const resBox = document.getElementById('rouletteTestResultBox');
@@ -7816,7 +7830,10 @@ function triggerRouletteSpinFromRedemption(username, rewardTitle) {
   }
   const winningPrize = prizes[winningIndex];
 
+  const uniqueSpinId = 'spin_redeem_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
   const spinPayload = {
+    spinId: uniqueSpinId,
+    id: uniqueSpinId,
     user: username || 'Espectador',
     winningIndex,
     winningPrize,
@@ -7828,22 +7845,61 @@ function triggerRouletteSpinFromRedemption(username, rewardTitle) {
   showToast(`🎡 @${username} canjeó la Ruleta! Resultado en OBS: ${winningPrize.text}`, 'success');
 }
 
-function syncRouletteTwitchRewardSelect() {
-  if (typeof cachedTwitchHelixRewards !== 'undefined' && Array.isArray(cachedTwitchHelixRewards) && cachedTwitchHelixRewards.length > 0) {
-    const titles = cachedTwitchHelixRewards.map(r => r.title);
-    const input = document.getElementById('rouletteRewardName');
-    if (input && titles.length > 0) {
-      const match = titles.find(t => t.toLowerCase().includes('ruleta') || t.toLowerCase().includes('wheel'));
-      if (match) {
-        input.value = match;
-        rouletteConfig.rewardName = match;
-        showToast(`🎯 Recompensa vinculada: "${match}"`, 'success');
-        saveRouletteConfigUI(false);
-        return;
-      }
+function onRouletteRewardQuickSelectChange(val) {
+  const nameInput = document.getElementById('rouletteRewardName');
+  const idInput = document.getElementById('rouletteRewardId');
+  if (!nameInput) return;
+
+  if (val === '__custom__') {
+    nameInput.value = '';
+    nameInput.focus();
+    if (idInput) idInput.value = '';
+    rouletteConfig.rewardName = '';
+    rouletteConfig.rewardId = '';
+  } else if (val) {
+    nameInput.value = val;
+    rouletteConfig.rewardName = val;
+    const match = (cachedTwitchHelixRewards || []).find(r => r.title === val);
+    const rewardId = match ? match.id : '';
+    if (idInput) idInput.value = rewardId;
+    rouletteConfig.rewardId = rewardId;
+    showToast(`🎯 Ruleta vinculada a recompensa: "${val}"`, 'success');
+    saveRouletteConfigUI(false);
+  }
+}
+
+async function syncTwitchRewardsForRoulette() {
+  await syncTwitchRewardsUI();
+  if (cachedTwitchHelixRewards && cachedTwitchHelixRewards.length > 0) {
+    const rSelect = document.getElementById('rouletteRewardQuickSelect');
+    const rInput = document.getElementById('rouletteRewardName');
+    const rId = document.getElementById('rouletteRewardId');
+
+    let currentName = (rouletteConfig && rouletteConfig.rewardName) ? rouletteConfig.rewardName.trim().toLowerCase() : '';
+    let match = null;
+    if (currentName) {
+      match = cachedTwitchHelixRewards.find(r => r.title.trim().toLowerCase() === currentName);
+    }
+    if (!match) {
+      match = cachedTwitchHelixRewards.find(r => r.title.toLowerCase().includes('ruleta') || r.title.toLowerCase().includes('wheel'));
+    }
+
+    if (match) {
+      if (rSelect) rSelect.value = match.title;
+      if (rInput) rInput.value = match.title;
+      if (rId) rId.value = match.id || '';
+      rouletteConfig.rewardName = match.title;
+      rouletteConfig.rewardId = match.id || '';
+      saveRouletteConfigUI(false);
+      showToast(`🎡 Ruleta vinculada automáticamente a: "${match.title}"`, 'success');
+    } else {
+      showToast(`✅ Se detectaron ${cachedTwitchHelixRewards.length} recompensas de Twitch. Selecciona una del menú desplegable.`, 'info');
     }
   }
-  showToast('💡 Escribe el nombre exacto de la recompensa de tu canal de Twitch.', 'info');
+}
+
+function syncRouletteTwitchRewardSelect() {
+  syncTwitchRewardsForRoulette();
 }
 
 window.handleRouletteToggle = handleRouletteToggle;
@@ -7856,6 +7912,8 @@ window.applyRoulettePreset = applyRoulettePreset;
 window.saveRouletteConfigUI = saveRouletteConfigUI;
 window.testRouletteSpinUI = testRouletteSpinUI;
 window.syncRouletteTwitchRewardSelect = syncRouletteTwitchRewardSelect;
+window.syncTwitchRewardsForRoulette = syncTwitchRewardsForRoulette;
+window.onRouletteRewardQuickSelectChange = onRouletteRewardQuickSelectChange;
 window.initRouletteSystem = initRouletteSystem;
 
 // ================= COMMANDS =================
@@ -8158,6 +8216,7 @@ function populateTwitchRewardsDropdown(twRewards) {
   cachedTwitchHelixRewards = Array.isArray(twRewards) ? twRewards : [];
   const select = document.getElementById('rewardQuickSelect');
   const datalist = document.getElementById('twitchRewardsDatalist');
+  const rSelect = document.getElementById('rouletteRewardQuickSelect');
 
   if (datalist) {
     datalist.innerHTML = '';
@@ -8168,9 +8227,9 @@ function populateTwitchRewardsDropdown(twRewards) {
     });
   }
 
+  // 1. Selector en pestaña "Puntos de Canal"
   if (select) {
     select.innerHTML = '';
-    
     if (cachedTwitchHelixRewards.length === 0) {
       select.innerHTML = `
         <option value="">✨ -- No hay recompensas sincronizadas (Haz clic en Sincronizar) --</option>
@@ -8194,6 +8253,46 @@ function populateTwitchRewardsDropdown(twRewards) {
       customOpt.value = '__custom__';
       customOpt.innerText = '✏️ Escribir otro nombre manualmente...';
       select.appendChild(customOpt);
+    }
+  }
+
+  // 2. Selector en pestaña "Ruleta Interactiva" (Vinculación con Recompensa de Twitch)
+  if (rSelect) {
+    rSelect.innerHTML = '';
+    if (cachedTwitchHelixRewards.length === 0) {
+      rSelect.innerHTML = `
+        <option value="">✨ -- No hay recompensas sincronizadas (Haz clic en Sincronizar de Twitch) --</option>
+        <option value="__custom__">✏️ Escribir nombre manualmente...</option>
+      `;
+    } else {
+      const rDefaultOpt = document.createElement('option');
+      rDefaultOpt.value = '';
+      rDefaultOpt.innerText = `✨ -- Selecciona la recompensa para la Ruleta (${cachedTwitchHelixRewards.length} encontradas) --`;
+      rSelect.appendChild(rDefaultOpt);
+
+      const curId = (typeof rouletteConfig !== 'undefined' && rouletteConfig.rewardId) ? rouletteConfig.rewardId.trim().toLowerCase() : '';
+      const curName = (typeof rouletteConfig !== 'undefined' && rouletteConfig.rewardName) ? rouletteConfig.rewardName.trim().toLowerCase() : '';
+
+      cachedTwitchHelixRewards.forEach(tr => {
+        const opt = document.createElement('option');
+        opt.value = tr.title;
+        opt.dataset.rewardId = tr.id || '';
+        const costStr = tr.cost !== undefined ? ` [${Number(tr.cost).toLocaleString()} pts]` : '';
+        opt.innerText = `🎡 ${tr.title}${costStr}`;
+
+        if (
+          (curId && tr.id && curId === tr.id.toLowerCase()) ||
+          (curName && tr.title && curName === tr.title.trim().toLowerCase())
+        ) {
+          opt.selected = true;
+        }
+        rSelect.appendChild(opt);
+      });
+
+      const rCustomOpt = document.createElement('option');
+      rCustomOpt.value = '__custom__';
+      rCustomOpt.innerText = '✏️ Escribir otro nombre manualmente...';
+      rSelect.appendChild(rCustomOpt);
     }
   }
 }

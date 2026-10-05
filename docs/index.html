@@ -1882,16 +1882,31 @@
                     <span style="font-size: 11px; color: #c084fc; background: rgba(145, 70, 255, 0.2); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Detección Automática</span>
                   </div>
 
-                  <div class="form-group" style="margin-bottom: 12px;">
-                    <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Nombre exacto de la Recompensa en Twitch:</label>
-                    <div style="display: flex; gap: 8px;">
-                      <input type="text" id="rouletteRewardName" class="form-control" value="Girar Ruleta" placeholder="Ej: Girar Ruleta, Ruleta de la Suerte..." style="font-weight: 700; color: #00f2fe;">
-                      <button type="button" class="btn btn-secondary btn-sm" onclick="syncRouletteTwitchRewardSelect()" title="Buscar entre tus recompensas de Twitch">
-                        🔄 Vincular
+                  <!-- 1. Menú Desplegable con Autodetección de Recompensas de Twitch -->
+                  <div style="margin-bottom: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+                      <label style="font-size: 12px; font-weight: 600; color: #c4b5fd; margin: 0;">
+                        📋 1. Seleccionar de tus recompensas de Twitch:
+                      </label>
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="syncTwitchRewardsForRoulette()" style="font-size: 11px; padding: 2px 8px; display: inline-flex; align-items: center; gap: 4px;" title="Cargar o actualizar recompensas desde Twitch">
+                        🔄 Sincronizar de Twitch
                       </button>
                     </div>
+                    <select id="rouletteRewardQuickSelect" class="form-control" onchange="onRouletteRewardQuickSelectChange(this.value)"
+                      style="font-size: 13.5px; font-weight: 600; color: #ffffff; background: #0c101d; border: 1.5px solid rgba(145, 70, 255, 0.6); padding: 9px 12px; border-radius: 8px; cursor: pointer; width: 100%;">
+                      <option value="">✨ -- Elige una recompensa de tu canal de Twitch --</option>
+                    </select>
+                  </div>
+
+                  <!-- 2. Campo de Entrada / Nombre editable vinculado -->
+                  <div style="margin-bottom: 10px;">
+                    <label style="display: block; font-size: 12px; font-weight: 600; color: #c4b5fd; margin-bottom: 6px;">
+                      ✏️ 2. Nombre de la recompensa vinculada (o escribir manual):
+                    </label>
+                    <input type="text" id="rouletteRewardName" class="form-control" value="Girar Ruleta" placeholder="Ej: Girar Ruleta, Ruleta de la Suerte..." style="font-weight: 700; color: #00f2fe; background: #070a12; border: 1.5px solid var(--primary-purple); padding: 8px 12px; border-radius: 8px;">
+                    <input type="hidden" id="rouletteRewardId" value="">
                     <small style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; display: block;">
-                      Crea una recompensa en tu Panel de Creador de Twitch con este mismo nombre (o selecciónala). Al ser canjeada, la ruleta girará sola.
+                      💡 Puedes seleccionar una recompensa existente de tu canal arriba, o escribir su nombre exacto a mano.
                     </small>
                   </div>
 

@@ -889,6 +889,7 @@ class TwitchBot {
       const winningPrize = prizes[winningIndex];
 
       const spinEvent = {
+        spinId: 'spin_bot_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7),
         user: username,
         winningIndex,
         winningPrize,

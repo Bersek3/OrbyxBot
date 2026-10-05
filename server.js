@@ -2028,6 +2028,7 @@ app.post('/api/roulette/spin', (req, res) => {
 
   const winningPrize = prize || prizes[selectedIndex];
   const spinPayload = {
+    spinId: req.body?.spinId || ('spin_srv_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7)),
     user: user || 'Espectador',
     winningIndex: selectedIndex,
     winningPrize,
