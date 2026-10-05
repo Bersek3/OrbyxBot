@@ -156,7 +156,8 @@ wss.on('connection', (ws, req) => {
     data: {
       botStatus: { status: twitchBot.status, message: twitchBot.statusMessage },
       srState: songRequest.getState(targetRoom),
-      goals: storage.getConfig().goals,
+      goals: storage.getConfig().goals || storage.getGoals(),
+      roulette: storage.getRoulette(),
       alerts: storage.getAlerts()
     }
   };
@@ -1987,6 +1988,70 @@ app.post('/api/goals/delete', (req, res) => {
   storage.saveGoals(goals);
   broadcast('goals_updated', goals);
   res.json({ success: true, goals });
+});
+
+// ================= 🎡 RULETA INTERACTIVA (PUNTOS DE CANAL) =================
+app.get('/api/roulette', (req, res) => {
+  res.json(storage.getRoulette());
+});
+
+app.post('/api/roulette', (req, res) => {
+  const updated = storage.saveRoulette(req.body);
+  const targetRoom = req.body?.channel || undefined;
+  broadcast('roulette_updated', updated, targetRoom);
+  res.json({ success: true, roulette: updated });
+});
+
+app.post('/api/roulette/spin', (req, res) => {
+  const { user, prizeIndex, prize, rewardTitle, channel } = req.body;
+  const rouletteCfg = storage.getRoulette();
+  const prizes = Array.isArray(rouletteCfg.prizes) && rouletteCfg.prizes.length > 0
+    ? rouletteCfg.prizes
+    : [{ id: 'p1', text: 'Premio Especial', color: '#9146ff' }];
+
+  let selectedIndex = (Number.isInteger(prizeIndex) && prizeIndex >= 0 && prizeIndex < prizes.length)
+    ? prizeIndex
+    : -1;
+
+  if (selectedIndex === -1) {
+    let totalWeight = prizes.reduce((acc, p) => acc + (Number(p.weight) || 1), 0);
+    let rand = Math.random() * totalWeight;
+    for (let i = 0; i < prizes.length; i++) {
+      rand -= (Number(prizes[i].weight) || 1);
+      if (rand <= 0) {
+        selectedIndex = i;
+        break;
+      }
+    }
+    if (selectedIndex < 0) selectedIndex = 0;
+  }
+
+  const winningPrize = prize || prizes[selectedIndex];
+  const spinPayload = {
+    user: user || 'Espectador',
+    winningIndex: selectedIndex,
+    winningPrize,
+    rewardTitle: rewardTitle || rouletteCfg.rewardName || 'Ruleta',
+    timestamp: Date.now()
+  };
+
+  const targetRoom = channel || rouletteCfg.channel || undefined;
+  broadcast('roulette_spin', spinPayload, targetRoom);
+
+  if (rouletteCfg.chatAnnouncement !== false) {
+    const activeChannel = channel || twitchBot.channel || storage.getConfig().twitch?.channel;
+    if (activeChannel) {
+      const spinDuration = (Number(rouletteCfg.duration) || 7) * 1000;
+      setTimeout(() => {
+        let chatMsg = (rouletteCfg.chatMessageTemplate || '🎉 ¡@{user} giró la ruleta y ha ganado: {prize}! 🎡')
+          .replace(/\{user\}|\{usuario\}/gi, spinPayload.user)
+          .replace(/\{prize\}|\{premio\}/gi, winningPrize.text || 'un premio');
+        twitchBot.sendMessage(activeChannel, chatMsg);
+      }, spinDuration + 500);
+    }
+  }
+
+  res.json({ success: true, spin: spinPayload });
 });
 
 // Auto-connect bot if credentials are saved and enabled

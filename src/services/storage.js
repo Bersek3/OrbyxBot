@@ -65,6 +65,27 @@ const DEFAULT_CONFIG = {
     channelPointsRewardName: 'TTS',
     fishApiKey: 'sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI'
   },
+  roulette: {
+    enabled: true,
+    rewardName: 'Girar Ruleta',
+    rewardId: '',
+    duration: 7,
+    theme: 'neon',
+    soundEnabled: true,
+    bannerDuration: 6,
+    chatAnnouncement: true,
+    chatMessageTemplate: '🎉 ¡@{user} giró la ruleta y ha ganado: {prize}! 🎡',
+    prizes: [
+      { id: 'p1', text: 'VIP 1 Semana 👑', color: '#9146ff', textColor: '#ffffff', weight: 1 },
+      { id: 'p2', text: 'Cantar Canción 🎤', color: '#00f2fe', textColor: '#000000', weight: 1 },
+      { id: 'p3', text: 'Timeout 5 Min ⏳', color: '#ff3366', textColor: '#ffffff', weight: 1 },
+      { id: 'p4', text: '1,000 Puntos ⭐', color: '#facc15', textColor: '#000000', weight: 1 },
+      { id: 'p5', text: 'Meme en Pantalla 🎭', color: '#10b981', textColor: '#ffffff', weight: 1 },
+      { id: 'p6', text: 'Ban a un Amigo 🔨', color: '#f97316', textColor: '#ffffff', weight: 1 },
+      { id: 'p7', text: 'Seguir en Redes 📱', color: '#8b5cf6', textColor: '#ffffff', weight: 1 },
+      { id: 'p8', text: 'Premio Misterioso 🎁', color: '#ec4899', textColor: '#ffffff', weight: 1 }
+    ]
+  },
   goals: []
 };
 
@@ -661,6 +682,7 @@ class StorageService {
           if (item.key === 'alerts') writeJSON('alerts.json', item.value);
           if (item.key === 'channel_points') writeJSON('channel_points.json', item.value);
           if (item.key === 'goals') writeJSON('goals.json', item.value);
+          if (item.key === 'roulette') writeJSON('roulette.json', item.value);
           if (item.key === 'custom_sounds') {
             writeJSON('custom_sounds.json', item.value);
           }
@@ -725,6 +747,7 @@ class StorageService {
           if (item.key === 'alerts') writeJSON('alerts.json', item.value);
           if (item.key === 'channel_points') writeJSON('channel_points.json', item.value);
           if (item.key === 'goals') writeJSON('goals.json', item.value);
+          if (item.key === 'roulette') writeJSON('roulette.json', item.value);
           if (item.key === 'custom_sounds') {
             writeJSON('custom_sounds.json', item.value);
           }
@@ -845,6 +868,7 @@ class StorageService {
           if (item.key === 'alerts') writeJSON('alerts.json', item.value);
           if (item.key === 'channel_points') writeJSON('channel_points.json', item.value);
           if (item.key === 'goals') writeJSON('goals.json', item.value);
+          if (item.key === 'roulette') writeJSON('roulette.json', item.value);
           if (item.key === 'tts_commands' && Array.isArray(item.value)) {
             const codeVoices = (voiceCatalog && typeof voiceCatalog.getCodeVoices === 'function') ? voiceCatalog.getCodeVoices() : [];
             const validVoiceIds = new Set(codeVoices.map(v => v.id.toLowerCase()));
@@ -1270,6 +1294,29 @@ class StorageService {
     writeJSON('goals.json', list);
     this.syncToCloud('goals', list);
     return list;
+  }
+
+  // ================= 🎡 RULETA INTERACTIVA (PUNTOS DE CANAL) =================
+  getRoulette() {
+    const defaultRoulette = DEFAULT_CONFIG.roulette;
+    const r = readJSON('roulette.json', null);
+    if (r && typeof r === 'object') {
+      return { ...defaultRoulette, ...r };
+    }
+    const cfg = readJSON('config.json', DEFAULT_CONFIG);
+    if (cfg && cfg.roulette) {
+      writeJSON('roulette.json', { ...defaultRoulette, ...cfg.roulette });
+      return { ...defaultRoulette, ...cfg.roulette };
+    }
+    return defaultRoulette;
+  }
+
+  saveRoulette(rouletteConfig) {
+    const current = this.getRoulette();
+    const merged = { ...current, ...(rouletteConfig || {}) };
+    writeJSON('roulette.json', merged);
+    this.syncToCloud('roulette', merged);
+    return merged;
   }
 
   // ================= 🎬 CLIPS DEL CHAT =================
@@ -2121,7 +2168,7 @@ class StorageService {
     if (!cleanId) throw new Error('streamerId es obligatorio.');
     if (!bundle || typeof bundle !== 'object') throw new Error('Datos inválidos para guardar.');
 
-    const keysToSave = ['config', 'alerts', 'commands', 'tts_commands', 'channel_points', 'goals', 'custom_sounds', 'custom_images', 'widget_token'];
+    const keysToSave = ['config', 'alerts', 'commands', 'tts_commands', 'channel_points', 'goals', 'roulette', 'custom_sounds', 'custom_images', 'widget_token'];
     const now = new Date().toISOString();
 
     for (const key of keysToSave) {
@@ -2161,6 +2208,7 @@ class StorageService {
       if (bundle.tts_commands) this.saveTtsCommands(bundle.tts_commands);
       if (bundle.channel_points) this.saveRewards(bundle.channel_points);
       if (bundle.goals) this.saveGoals(bundle.goals);
+      if (bundle.roulette) this.saveRoulette(bundle.roulette);
       if (bundle.custom_sounds) this.saveCustomSounds(bundle.custom_sounds);
       if (bundle.custom_images) this.saveCustomImages(bundle.custom_images);
     }

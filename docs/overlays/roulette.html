@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <title>OBS Roulette Widget Overlay - OrbiBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800;900&family=Montserrat:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../css/overlays.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"></script>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background: transparent !important;
+      overflow: hidden;
+      font-family: 'Outfit', sans-serif;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+    }
+
+    #rouletteStage {
+      position: relative;
+      width: 680px;
+      height: 680px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease;
+    }
+
+    #wheelCanvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      filter: drop-shadow(0 15px 35px rgba(0, 0, 0, 0.7)) drop-shadow(0 0 25px rgba(145, 70, 255, 0.35));
+    }
+
+    /* Top Needle Indicator */
+    .wheel-pointer-wrap {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 20;
+      filter: drop-shadow(0 6px 12px rgba(0,0,0,0.8));
+      transition: transform 0.08s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+    }
+    .wheel-pointer {
+      width: 44px;
+      height: 48px;
+    }
+
+    /* Winner Pop-up Banner */
+    #winnerBanner {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%) scale(0.6);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
+      width: 580px;
+      max-width: 90vw;
+      background: linear-gradient(135deg, rgba(14, 18, 30, 0.96), rgba(24, 15, 42, 0.97));
+      border: 3px solid #00f2fe;
+      border-radius: 28px;
+      padding: 36px 30px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.85), 0 0 50px rgba(0, 242, 254, 0.45);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      transition: all 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    #winnerBanner.active {
+      transform: translate(-50%, -50%) scale(1);
+      opacity: 1;
+    }
+
+    .winner-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 2.5px;
+      padding: 6px 20px;
+      border-radius: 999px;
+      background: linear-gradient(90deg, #9146ff, #00f2fe);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(145, 70, 255, 0.6);
+      margin-bottom: 14px;
+      animation: pulseGlow 1.8s infinite alternate;
+    }
+
+    .winner-username {
+      font-size: 26px;
+      font-weight: 900;
+      color: #ffffff;
+      margin-bottom: 10px;
+      text-shadow: 0 2px 10px rgba(0,0,0,0.8);
+      word-break: break-word;
+    }
+    .winner-username span {
+      color: #00f2fe;
+    }
+
+    .winner-prize-card {
+      background: rgba(0, 0, 0, 0.4);
+      border: 2px dashed rgba(250, 204, 21, 0.6);
+      border-radius: 18px;
+      padding: 16px 20px;
+      margin-top: 10px;
+      box-shadow: 0 0 25px rgba(250, 204, 21, 0.2);
+    }
+
+    .winner-prize-label {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #94a3b8;
+      font-weight: 700;
+      margin-bottom: 4px;
+    }
+
+    .winner-prize-text {
+      font-size: 32px;
+      font-weight: 900;
+      color: #fde047;
+      text-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
+      line-height: 1.2;
+    }
+
+    /* Fullscreen Confetti Canvas */
+    #confettiCanvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 40;
+    }
+
+    @keyframes pulseGlow {
+      from { box-shadow: 0 4px 15px rgba(145, 70, 255, 0.5); }
+      to { box-shadow: 0 4px 30px rgba(0, 242, 254, 0.8); }
+    }
+  </style>
+</head>
+<body>
+  <canvas id="confettiCanvas"></canvas>
+
+  <div id="rouletteStage">
+    <!-- Needle Pointer at top center -->
+    <div class="wheel-pointer-wrap" id="wheelPointerWrap">
+      <svg class="wheel-pointer" viewBox="0 0 44 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M22 46L6 10C4 6 7 2 11 2H33C37 2 40 6 38 10L22 46Z" fill="#ff3366" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="22" cy="14" r="5" fill="#ffffff" filter="drop-shadow(0 0 4px #ff3366)"/>
+      </svg>
+    </div>
+
+    <!-- Main Wheel Canvas -->
+    <canvas id="wheelCanvas" width="680" height="680"></canvas>
+
+    <!-- Winner Pop-up Card -->
+    <div id="winnerBanner">
+      <div class="winner-badge">
+        <span>✨</span> <span>¡PREMIO RULETA!</span> <span>✨</span>
+      </div>
+      <div class="winner-username">
+        ¡<span id="winnerUserDisplay">@Espectador</span> ha girado la ruleta!
+      </div>
+      <div class="winner-prize-card">
+        <div class="winner-prize-label">Premio Obtenido</div>
+        <div class="winner-prize-text" id="winnerPrizeDisplay">VIP 1 Semana 👑</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ================= URL PARAMS & CONFIG =================
+    const urlParams = new URLSearchParams(window.location.search);
+    const channel = (urlParams.get('channel') || '').toLowerCase().replace(/^#/, '');
+    const token = (urlParams.get('token') || urlParams.get('key') || '').trim();
+    const isTestMode = urlParams.get('test') === '1';
+
+    let rouletteConfig = {
+      enabled: true,
+      rewardName: 'Girar Ruleta',
+      rewardId: '',
+      duration: 7,
+      theme: 'neon',
+      soundEnabled: true,
+      bannerDuration: 6,
+      chatAnnouncement: true,
+      prizes: [
+        { id: 'p1', text: 'VIP 1 Semana 👑', color: '#9146ff', textColor: '#ffffff', weight: 1 },
+        { id: 'p2', text: 'Cantar Canción 🎤', color: '#00f2fe', textColor: '#000000', weight: 1 },
+        { id: 'p3', text: 'Timeout 5 Min ⏳', color: '#ff3366', textColor: '#ffffff', weight: 1 },
+        { id: 'p4', text: '1,000 Puntos ⭐', color: '#facc15', textColor: '#000000', weight: 1 },
+        { id: 'p5', text: 'Meme en Pantalla 🎭', color: '#10b981', textColor: '#ffffff', weight: 1 },
+        { id: 'p6', text: 'Ban a un Amigo 🔨', color: '#f97316', textColor: '#ffffff', weight: 1 },
+        { id: 'p7', text: 'Seguir en Redes 📱', color: '#8b5cf6', textColor: '#ffffff', weight: 1 },
+        { id: 'p8', text: 'Premio Misterioso 🎁', color: '#ec4899', textColor: '#ffffff', weight: 1 }
+      ]
+    };
+
+    // Load initial config from LocalStorage
+    try {
+      const saved = localStorage.getItem('orbibot_roulette');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          rouletteConfig = { ...rouletteConfig, ...parsed };
+        }
+      }
+    } catch(e) {}
+
+    // Load config from server API
+    async function fetchRouletteConfig() {
+      try {
+        const res = await fetch('/api/roulette');
+        if (res.ok) {
+          const data = await res.json();
+          if (data && typeof data === 'object') {
+            rouletteConfig = { ...rouletteConfig, ...data };
+            drawWheel();
+          }
+        }
+      } catch(e) {}
+    }
+    fetchRouletteConfig();
+
+    // ================= CANVAS & WHEEL RENDERING =================
+    const canvas = document.getElementById('wheelCanvas');
+    const ctx = canvas.getContext('2d');
+    const pointerWrap = document.getElementById('wheelPointerWrap');
+    const winnerBanner = document.getElementById('winnerBanner');
+    const winnerUserDisplay = document.getElementById('winnerUserDisplay');
+    const winnerPrizeDisplay = document.getElementById('winnerPrizeDisplay');
+
+    let currentAngle = 0; // Current rotation in radians
+    let isSpinning = false;
+    let spinQueue = [];
+    let lastTickIndex = -1;
+
+    // High DPI Support
+    function setupCanvasDPI() {
+      const dpr = window.devicePixelRatio || 1;
+      const rect = canvas.getBoundingClientRect();
+      canvas.width = (rect.width || 680) * dpr;
+      canvas.height = (rect.height || 680) * dpr;
+      ctx.scale(dpr, dpr);
+    }
+    setupCanvasDPI();
+    window.addEventListener('resize', () => {
+      setupCanvasDPI();
+      drawWheel();
+    });
+
+    function drawWheel() {
+      const prizes = Array.isArray(rouletteConfig.prizes) && rouletteConfig.prizes.length > 0
+        ? rouletteConfig.prizes
+        : [{ id: 'p1', text: 'Sin Premios', color: '#666' }];
+
+      const numSlices = prizes.length;
+      const sliceAngle = (2 * Math.PI) / numSlices;
+      const size = 680;
+      const center = size / 2;
+      const radius = center - 24;
+
+      ctx.clearRect(0, 0, size, size);
+
+      // Outer Glow Ring
+      ctx.save();
+      ctx.translate(center, center);
+      ctx.rotate(currentAngle);
+
+      // 1. Draw Slices
+      for (let i = 0; i < numSlices; i++) {
+        const p = prizes[i];
+        const start = i * sliceAngle;
+        const end = start + sliceAngle;
+
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.arc(0, 0, radius, start, end);
+        ctx.closePath();
+
+        // Fill color
+        ctx.fillStyle = p.color || `hsl(${(i * 360) / numSlices}, 80%, 55%)`;
+        ctx.fill();
+
+        // Slice borders
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+        ctx.stroke();
+
+        // Slice Text Label
+        ctx.save();
+        ctx.rotate(start + sliceAngle / 2);
+        ctx.textAlign = 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = p.textColor || '#ffffff';
+        ctx.font = 'bold 17px "Outfit", sans-serif';
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+        ctx.shadowBlur = 4;
+
+        // Truncate long text
+        let displayText = p.text || `Premio ${i + 1}`;
+        if (displayText.length > 18) displayText = displayText.substring(0, 16) + '…';
+        ctx.fillText(displayText, radius - 24, 0);
+        ctx.restore();
+      }
+
+      // 2. Outer Rim Border with Glowing Bulbs
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+      ctx.lineWidth = 14;
+      ctx.strokeStyle = '#0f1422';
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#9146ff';
+      ctx.stroke();
+
+      // Bulbs / Pins on perimeter
+      const numPins = numSlices * 2;
+      for (let i = 0; i < numPins; i++) {
+        const pinAngle = (i * 2 * Math.PI) / numPins;
+        const px = Math.cos(pinAngle) * (radius - 2);
+        const py = Math.sin(pinAngle) * (radius - 2);
+
+        ctx.beginPath();
+        ctx.arc(px, py, 4.5, 0, 2 * Math.PI);
+        ctx.fillStyle = (i % 2 === 0) ? '#00f2fe' : '#ffffff';
+        ctx.shadowColor = (i % 2 === 0) ? '#00f2fe' : '#ffffff';
+        ctx.shadowBlur = 6;
+        ctx.fill();
+      }
+      ctx.restore(); // restore rotation
+
+      // 3. Center Hub (Static Bezel with Glowing Core)
+      ctx.save();
+      ctx.translate(center, center);
+
+      // Outer bezel
+      ctx.beginPath();
+      ctx.arc(0, 0, 56, 0, 2 * Math.PI);
+      ctx.fillStyle = '#0a0d17';
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+      ctx.shadowBlur = 18;
+      ctx.fill();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#00f2fe';
+      ctx.stroke();
+
+      // Inner hub
+      const hubGrad = ctx.createRadialGradient(0, 0, 5, 0, 0, 42);
+      hubGrad.addColorStop(0, '#9146ff');
+      hubGrad.addColorStop(1, '#0e1222');
+      ctx.beginPath();
+      ctx.arc(0, 0, 42, 0, 2 * Math.PI);
+      ctx.fillStyle = hubGrad;
+      ctx.fill();
+
+      // Center Icon
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '28px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🎡', 0, 2);
+
+      ctx.restore();
+    }
+
+    drawWheel();
+
+    // ================= SOUND SYNTHESIS (WEB AUDIO API) =================
+    let audioCtx = null;
+    function getAudioContext() {
+      if (!audioCtx) {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) audioCtx = new AudioContext();
+      }
+      if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      return audioCtx;
+    }
+
+    function playTickSound() {
+      if (rouletteConfig.soundEnabled === false) return;
+      try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800 + Math.random() * 200, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(180, ctx.currentTime + 0.04);
+
+        gain.gain.setValueAtTime(0.2, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start();
+        osc.stop(ctx.currentTime + 0.04);
+      } catch(e) {}
+    }
+
+    function playVictoryFanfare() {
+      if (rouletteConfig.soundEnabled === false) return;
+      try {
+        const ctx = getAudioContext();
+        if (!ctx) return;
+        const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99]; // C Major arpeggio
+        notes.forEach((freq, idx) => {
+          setTimeout(() => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+            gain.gain.setValueAtTime(0.28, ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+
+            osc.connect(gain);
+            gain.connect(ctx.destination);
+
+            osc.start();
+            osc.stop(ctx.currentTime + 0.55);
+          }, idx * 90);
+        });
+      } catch(e) {}
+    }
+
+    // ================= FULLSCREEN CONFETTI CANNON =================
+    const confettiCanvas = document.getElementById('confettiCanvas');
+    const cCtx = confettiCanvas.getContext('2d');
+    let confettiParticles = [];
+    let confettiAnimId = null;
+
+    function resizeConfetti() {
+      confettiCanvas.width = window.innerWidth;
+      confettiCanvas.height = window.innerHeight;
+    }
+    resizeConfetti();
+    window.addEventListener('resize', resizeConfetti);
+
+    function launchConfetti() {
+      confettiParticles = [];
+      const colors = ['#9146ff', '#00f2fe', '#fde047', '#ff3366', '#10b981', '#ffffff'];
+      const count = 120;
+      const startX = window.innerWidth / 2;
+      const startY = window.innerHeight / 2;
+
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * 2 * Math.PI;
+        const speed = 6 + Math.random() * 12;
+        confettiParticles.push({
+          x: startX,
+          y: startY,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed - 4,
+          gravity: 0.28,
+          rotation: Math.random() * 360,
+          rotationSpeed: (Math.random() - 0.5) * 12,
+          size: 6 + Math.random() * 6,
+          color: colors[Math.floor(Math.random() * colors.length)],
+          alpha: 1,
+          decay: 0.008 + Math.random() * 0.008
+        });
+      }
+
+      if (confettiAnimId) cancelAnimationFrame(confettiAnimId);
+      animateConfetti();
+    }
+
+    function animateConfetti() {
+      cCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      let alive = false;
+
+      for (let p of confettiParticles) {
+        if (p.alpha <= 0) continue;
+        alive = true;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += p.gravity;
+        p.rotation += p.rotationSpeed;
+        p.alpha -= p.decay;
+
+        cCtx.save();
+        cCtx.translate(p.x, p.y);
+        cCtx.rotate((p.rotation * Math.PI) / 180);
+        cCtx.fillStyle = p.color;
+        cCtx.globalAlpha = Math.max(0, p.alpha);
+        cCtx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.5);
+        cCtx.restore();
+      }
+
+      if (alive) {
+        confettiAnimId = requestAnimationFrame(animateConfetti);
+      } else {
+        cCtx.clearRect(0, 0, confettiCanvas.width, confettiCanvas.height);
+      }
+    }
+
+    // ================= SPIN PHYSICS & ANIMATION =================
+    function spinWheelTo(winningIndex, user, prize) {
+      if (isSpinning) {
+        spinQueue.push({ winningIndex, user, prize });
+        return;
+      }
+
+      isSpinning = true;
+      winnerBanner.classList.remove('active');
+
+      const prizes = Array.isArray(rouletteConfig.prizes) && rouletteConfig.prizes.length > 0
+        ? rouletteConfig.prizes
+        : [{ id: 'p1', text: 'Premio Especial', color: '#9146ff' }];
+
+      const numSlices = prizes.length;
+      const sliceAngle = (2 * Math.PI) / numSlices;
+
+      const jitter = (Math.random() - 0.5) * (sliceAngle * 0.65);
+      const targetSliceCenter = (winningIndex * sliceAngle) + (sliceAngle / 2) + jitter;
+      const topPointerAngle = 3 * Math.PI / 2;
+
+      let targetNormalized = (topPointerAngle - targetSliceCenter) % (2 * Math.PI);
+      if (targetNormalized < 0) targetNormalized += 2 * Math.PI;
+
+      const fullRotations = (6 + Math.floor(Math.random() * 3)) * 2 * Math.PI;
+      const startAngle = currentAngle;
+      const finalAngle = startAngle + fullRotations + ((targetNormalized - (startAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI));
+      const totalDelta = finalAngle - startAngle;
+
+      const durationMs = Math.max(4000, Math.min(14000, (Number(rouletteConfig.duration) || 7) * 1000));
+      const startTime = performance.now();
+
+      function quinticEaseOut(t) {
+        return 1 - Math.pow(1 - t, 4);
+      }
+
+      function stepSpin(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(1, elapsed / durationMs);
+        const ease = quinticEaseOut(progress);
+
+        currentAngle = startAngle + totalDelta * ease;
+        drawWheel();
+
+        const normalizedAngle = (topPointerAngle - (currentAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+        const currentSliceIdx = Math.floor(normalizedAngle / sliceAngle) % numSlices;
+
+        if (currentSliceIdx !== lastTickIndex) {
+          lastTickIndex = currentSliceIdx;
+          playTickSound();
+          pointerWrap.style.transform = 'translateX(-50%) rotate(-18deg)';
+          setTimeout(() => {
+            pointerWrap.style.transform = 'translateX(-50%) rotate(0deg)';
+          }, 60);
+        }
+
+        if (progress < 1) {
+          requestAnimationFrame(stepSpin);
+        } else {
+          isSpinning = false;
+          currentAngle = finalAngle;
+          drawWheel();
+          handleSpinFinished(user, prize || prizes[winningIndex]);
+        }
+      }
+
+      requestAnimationFrame(stepSpin);
+    }
+
+    function handleSpinFinished(user, winningPrize) {
+      playVictoryFanfare();
+      launchConfetti();
+
+      winnerUserDisplay.textContent = user ? `@${user}` : '@Espectador';
+      winnerPrizeDisplay.textContent = winningPrize?.text || '¡Gran Premio!';
+      winnerBanner.classList.add('active');
+
+      const bannerDuration = Math.max(4000, Math.min(15000, (Number(rouletteConfig.bannerDuration) || 6) * 1000));
+      setTimeout(() => {
+        winnerBanner.classList.remove('active');
+        setTimeout(() => {
+          if (spinQueue.length > 0) {
+            const next = spinQueue.shift();
+            spinWheelTo(next.winningIndex, next.user, next.prize);
+          }
+        }, 800);
+      }, bannerDuration);
+    }
+
+    // ================= REAL-TIME NETWORKING =================
+    const myStreamerKey = channel || '';
+    const myToken = token || '';
+
+    function handleIncomingMessage(msg) {
+      if (!msg) return;
+
+      if (myStreamerKey || myToken) {
+        const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').trim();
+        const targetToken = (msg.token || msg.data?.token || '').trim();
+
+        if (myStreamerKey) {
+          if (targetRoom && targetRoom !== 'default' && targetRoom !== myStreamerKey && targetRoom !== myToken) {
+            return;
+          }
+          if (targetRoom === 'default' && myStreamerKey !== 'default') {
+            return;
+          }
+        }
+        if (myToken && targetToken && targetToken !== myToken) {
+          return;
+        }
+      }
+
+      const event = msg.event;
+      const data = msg.data || msg;
+
+      if (event === 'roulette_spin' || data.event === 'roulette_spin') {
+        const payload = data.spin || data;
+        const prizes = rouletteConfig.prizes || [];
+        let winIdx = Number.isInteger(payload.winningIndex) ? payload.winningIndex : 0;
+        if (winIdx < 0 || winIdx >= prizes.length) winIdx = 0;
+        spinWheelTo(winIdx, payload.user || 'Espectador', payload.winningPrize || prizes[winIdx]);
+      } else if (event === 'roulette_updated' || data.event === 'roulette_updated') {
+        const updated = data.roulette || data;
+        if (updated && typeof updated === 'object') {
+          rouletteConfig = { ...rouletteConfig, ...updated };
+          drawWheel();
+        }
+      } else if (event === 'init_state' && data.roulette) {
+        rouletteConfig = { ...rouletteConfig, ...data.roulette };
+        drawWheel();
+      }
+    }
+
+    function connectLocalWs() {
+      const isGitHubPages = location.hostname.endsWith('github.io');
+      const wsUrl = !isGitHubPages
+        ? `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`
+        : 'ws://localhost:3000';
+
+      let ws;
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.onopen = () => {
+          const targetRoom = channel || token;
+          if (targetRoom) {
+            ws.send(JSON.stringify({ action: 'join', room: targetRoom }));
+          }
+        };
+        ws.onmessage = (event) => {
+          try { handleIncomingMessage(JSON.parse(event.data)); } catch(e) {}
+        };
+        ws.onerror = () => setTimeout(connectLocalWs, 3000);
+        ws.onclose = () => setTimeout(connectLocalWs, 3000);
+      } catch(e) {
+        setTimeout(connectLocalWs, 3000);
+      }
+    }
+    connectLocalWs();
+
+    function connectMqtt() {
+      if (typeof Paho !== 'undefined' && channel) {
+        const clientId = 'orbi_roulette_' + Math.random().toString(36).substring(2, 9);
+        try {
+          const mqttClient = new Paho.MQTT.Client('broker.emqx.io', 8084, clientId);
+          mqttClient.onConnectionLost = () => setTimeout(connectMqtt, 3500);
+          mqttClient.onMessageArrived = (message) => {
+            try { handleIncomingMessage(JSON.parse(message.payloadString)); } catch(e) {}
+          };
+          mqttClient.connect({
+            useSSL: true,
+            timeout: 6,
+            keepAliveInterval: 30,
+            onSuccess: () => {
+              if (token) {
+                mqttClient.subscribe(`orbibot/${channel}_${token}/events`);
+              } else {
+                mqttClient.subscribe(`orbibot/${channel}/events`);
+              }
+            },
+            onFailure: () => setTimeout(connectMqtt, 3500)
+          });
+        } catch(e) {
+          setTimeout(connectMqtt, 3500);
+        }
+      }
+    }
+    connectMqtt();
+
+    if (typeof BroadcastChannel !== 'undefined' && (myStreamerKey || myToken)) {
+      const chanName = myStreamerKey || myToken;
+      try {
+        const scopedBc = new BroadcastChannel('orbyxbot_stream_' + chanName);
+        scopedBc.onmessage = (e) => handleIncomingMessage(e.data);
+      } catch(e) {}
+    }
+
+    window.addEventListener('storage', (e) => {
+      if (myStreamerKey && e.key === ('orbibot_last_event_' + myStreamerKey) && e.newValue) {
+        try { handleIncomingMessage(JSON.parse(e.newValue)); } catch (err) {}
+      }
+      if (myToken && e.key === ('orbibot_last_event_' + myToken) && e.newValue) {
+        try { handleIncomingMessage(JSON.parse(e.newValue)); } catch (err) {}
+      }
+      if (e.key === 'orbibot_roulette' && e.newValue) {
+        try {
+          rouletteConfig = { ...rouletteConfig, ...JSON.parse(e.newValue) };
+          drawWheel();
+        } catch(err) {}
+      }
+    });
+
+    if (isTestMode) {
+      setTimeout(() => {
+        spinWheelTo(0, 'Espectador_VIP', rouletteConfig.prizes[0]);
+      }, 1200);
+    }
+  </script>
+</body>
+</html>

@@ -1772,6 +1772,214 @@
               <!-- Se renderiza dinámicamente con renderGoals() -->
             </div>
           </div>
+
+          <!-- ================= WIDGET: RULETA INTERACTIVA CON PUNTOS DE CANAL ================= -->
+          <div class="card" style="margin-top: 30px; margin-bottom: 24px; border: 1.5px solid rgba(250, 204, 21, 0.4); background: radial-gradient(circle at top right, rgba(250, 204, 21, 0.08), rgba(15, 20, 32, 0.95)); position: relative; overflow: hidden;">
+            <div style="position: absolute; top:0; left:0; right:0; height:3px; background: linear-gradient(90deg, #facc15, #ff3366, #9146ff, #00f2fe);"></div>
+
+            <!-- Header de la Ruleta -->
+            <div class="card-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 16px; margin-bottom: 18px; display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 14px;">
+              <div style="display: flex; align-items: center; gap: 14px;">
+                <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #facc15, #ff3366); display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 4px 20px rgba(250, 204, 21, 0.4);">
+                  🎡
+                </div>
+                <div>
+                  <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                    <h4 style="font-size: 18px; font-weight: 800; color: #fff; margin: 0;">Ruleta Interactiva de la Suerte</h4>
+                    <span class="badge" style="background: rgba(250, 204, 21, 0.15); color: #facc15; border: 1px solid rgba(250, 204, 21, 0.4); font-size: 11px; padding: 3px 10px; border-radius: 999px; font-weight: 700;">⭐ Puntos de Canal Twitch</span>
+                    <span class="badge" style="background: rgba(0, 242, 254, 0.15); color: #00f2fe; border: 1px solid rgba(0, 242, 254, 0.4); font-size: 11px; padding: 3px 10px; border-radius: 999px; font-weight: 700;">100% Personalizable</span>
+                  </div>
+                  <p style="font-size: 13px; color: var(--text-secondary); margin-top: 4px; line-height: 1.4;">
+                    Crea tu ruleta personalizada con los premios y colores que quieras. Cuando un espectador canjee la recompensa de puntos de canal en Twitch, <strong>la ruleta girará automáticamente en tu OBS Studio</strong> y mostrará en pantalla el resultado junto con el nombre del ganador.
+                  </p>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+                <label class="switch-label" style="margin: 0; display: inline-flex; align-items: center; gap: 8px;">
+                  <input type="checkbox" id="toggleRouletteEnabled" class="switch-input" checked onchange="handleRouletteToggle(this.checked)">
+                  <span class="switch-slider" style="width: 40px; height: 22px;"></span>
+                  <span style="font-size: 13px; font-weight: 700; color: #fff;">Ruleta Activa</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- OBS Browser Source Link Box -->
+            <div style="background: rgba(0,0,0,0.45); border: 1px solid rgba(250, 204, 21, 0.25); border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; flex-wrap: wrap; gap: 8px;">
+                <label style="font-size: 12.5px; font-weight: 700; color: #fde047; display: flex; align-items: center; gap: 6px;">
+                  <span>🔗 Enlace de Navegador para OBS Studio / Streamlabs</span>
+                </label>
+                <span style="font-size: 11px; color: var(--text-muted);">Resolución recomendada en OBS: <strong>800 x 800</strong> (Fondo Transparente)</span>
+              </div>
+              <div class="widget-url-box" style="margin-bottom: 8px;">
+                <input type="password" readonly class="widget-url-input" id="urlRouletteWidget" style="font-family: monospace; letter-spacing: 1px;">
+                <button type="button" class="btn btn-secondary btn-sm" onclick="toggleWidgetUrlVisibility('urlRouletteWidget', this)" title="Mostrar u ocultar enlace">👁️</button>
+                <button type="button" class="btn btn-primary btn-sm" onclick="copyWidgetUrl('urlRouletteWidget')">📋 Copiar Enlace OBS</button>
+              </div>
+              <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--text-secondary);">
+                <span>💡 Pega este enlace como fuente Navegador (Browser Source) en tu OBS o Streamlabs.</span>
+                <div style="display: flex; gap: 8px;">
+                  <a id="btnPreviewRoulette" href="./overlays/roulette.html" target="_blank" class="btn btn-secondary btn-sm" style="display: inline-flex; align-items: center; gap: 5px;">
+                    <span>🌐 Abrir Overlay</span> ↗
+                  </a>
+                  <button type="button" class="btn btn-accent btn-sm" onclick="testRouletteSpinUI()" style="display: inline-flex; align-items: center; gap: 6px; background: linear-gradient(90deg, #facc15, #ff3366); color: #000; font-weight: 800; border: none; box-shadow: 0 4px 15px rgba(250, 204, 21, 0.4);">
+                    <span>⚡ Probar Giro en OBS</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Main Roulette Grid: Interactive Preview (Left) & Configuration (Right) -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 24px; align-items: start;">
+              
+              <!-- Columna Izquierda: Vista Previa Interactiva en Vivo & Probador -->
+              <div style="background: rgba(14, 18, 28, 0.85); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 20px; display: flex; flex-direction: column; align-items: center; text-align: center;">
+                <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 14px;">
+                  <span style="font-size: 13.5px; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px;">
+                    <span>👁️</span> <span>Vista Previa en Vivo</span>
+                  </span>
+                  <span id="rouletteSliceCountBadge" class="badge" style="background: rgba(145, 70, 255, 0.2); color: #c084fc; font-size: 11px;">8 Premios</span>
+                </div>
+
+                <!-- Canvas Preview Container -->
+                <div style="position: relative; width: 280px; height: 280px; margin: 10px auto 16px;">
+                  <!-- Little Pointer Top -->
+                  <div id="previewPointer" style="position: absolute; top: -6px; left: 50%; transform: translateX(-50%); z-index: 10; width: 20px; height: 22px; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.8));">
+                    <svg viewBox="0 0 44 48" fill="none">
+                      <path d="M22 46L6 10C4 6 7 2 11 2H33C37 2 40 6 38 10L22 46Z" fill="#ff3366" stroke="#ffffff" stroke-width="2"/>
+                    </svg>
+                  </div>
+                  <canvas id="roulettePreviewCanvas" width="280" height="280" style="width: 100%; height: 100%; border-radius: 50%; filter: drop-shadow(0 8px 20px rgba(0,0,0,0.6)); cursor: pointer;" onclick="testRouletteSpinUI()" title="Haz clic para probar girar"></canvas>
+                </div>
+
+                <!-- Resultado de Prueba en Panel -->
+                <div id="rouletteTestResultBox" style="display: none; width: 100%; background: rgba(0, 242, 254, 0.1); border: 1.5px solid rgba(0, 242, 254, 0.4); border-radius: 10px; padding: 10px 14px; margin-bottom: 14px; text-align: center;">
+                  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #38bdf8; font-weight: 700;">¡Giro Completado!</div>
+                  <div style="font-size: 14px; font-weight: 800; color: #fff; margin-top: 2px;">
+                    <span id="rouletteWinnerNameDisplay" style="color: #00f2fe;">@Espectador</span> ganó: <span id="rouletteWinnerPrizeDisplay" style="color: #fde047;">VIP 1 Semana 👑</span>
+                  </div>
+                </div>
+
+                <!-- Input de Espectador de Prueba y Botón -->
+                <div style="width: 100%; display: flex; gap: 8px;">
+                  <input type="text" id="rouletteTestUsername" class="form-control" placeholder="Nombre para probar (ej: JuanPerez)" value="Espectador_Suerte" style="font-size: 13px;">
+                  <button type="button" class="btn btn-primary" onclick="testRouletteSpinUI()" style="white-space: nowrap; font-size: 13px; font-weight: 700; padding: 8px 16px;">
+                    🎡 Girar Ruleta
+                  </button>
+                </div>
+                <small style="color: var(--text-muted); font-size: 11px; margin-top: 8px;">Haz clic en Girar para simular el giro tanto en este panel como en OBS.</small>
+              </div>
+
+              <!-- Columna Derecha: Configuración de Recompensa de Twitch y Opciones -->
+              <div style="display: flex; flex-direction: column; gap: 18px;">
+                
+                <!-- Vinculación con Twitch Channel Points -->
+                <div style="background: rgba(145, 70, 255, 0.08); border: 1.5px solid rgba(145, 70, 255, 0.35); border-radius: 12px; padding: 18px;">
+                  <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px;">
+                    <h5 style="color: #fff; font-size: 14px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                      <span>🎟️</span> <span>Vinculación con Recompensa de Twitch</span>
+                    </h5>
+                    <span style="font-size: 11px; color: #c084fc; background: rgba(145, 70, 255, 0.2); padding: 2px 8px; border-radius: 4px; font-weight: 700;">Detección Automática</span>
+                  </div>
+
+                  <div class="form-group" style="margin-bottom: 12px;">
+                    <label class="form-label" style="font-size: 12.5px; font-weight: 600;">Nombre exacto de la Recompensa en Twitch:</label>
+                    <div style="display: flex; gap: 8px;">
+                      <input type="text" id="rouletteRewardName" class="form-control" value="Girar Ruleta" placeholder="Ej: Girar Ruleta, Ruleta de la Suerte..." style="font-weight: 700; color: #00f2fe;">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="syncRouletteTwitchRewardSelect()" title="Buscar entre tus recompensas de Twitch">
+                        🔄 Vincular
+                      </button>
+                    </div>
+                    <small style="font-size: 11.5px; color: var(--text-secondary); margin-top: 4px; display: block;">
+                      Crea una recompensa en tu Panel de Creador de Twitch con este mismo nombre (o selecciónala). Al ser canjeada, la ruleta girará sola.
+                    </small>
+                  </div>
+
+                  <div style="display: flex; flex-direction: column; gap: 8px; padding-top: 4px;">
+                    <label class="switch-label" style="margin: 0; font-size: 12.5px; color: #cbd5e1;">
+                      <input type="checkbox" id="rouletteChatAnnouncement" class="switch-input" checked>
+                      <span class="switch-slider" style="width: 36px; height: 18px;"></span>
+                      <span>Anunciar resultado automáticamente en el chat de Twitch / Kick</span>
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Duración y Sonido -->
+                <div style="background: rgba(15, 20, 32, 0.7); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 18px;">
+                  <h5 style="color: #fff; font-size: 14px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;">
+                    <span>⚙️</span> <span>Animación & Efectos</span>
+                  </h5>
+
+                  <div class="grid-2" style="margin-bottom: 12px;">
+                    <div class="form-group">
+                      <label class="form-label" style="font-size: 12.5px;">Duración del Giro:</label>
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="range" id="rouletteDuration" min="4" max="12" step="1" value="7" class="form-range" style="flex: 1;" oninput="document.getElementById('rouletteDurationVal').innerText=this.value+'s'">
+                        <span id="rouletteDurationVal" style="font-size: 13px; font-weight: 700; color: #facc15; min-width: 32px;">7s</span>
+                      </div>
+                    </div>
+
+                    <div class="form-group">
+                      <label class="form-label" style="font-size: 12.5px;">Tiempo Banner Ganador:</label>
+                      <div style="display: flex; align-items: center; gap: 10px;">
+                        <input type="range" id="rouletteBannerDuration" min="3" max="10" step="1" value="6" class="form-range" style="flex: 1;" oninput="document.getElementById('rouletteBannerDurationVal').innerText=this.value+'s'">
+                        <span id="rouletteBannerDurationVal" style="font-size: 13px; font-weight: 700; color: #00f2fe; min-width: 32px;">6s</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style="display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.06);">
+                    <label class="switch-label" style="margin: 0; font-size: 12.5px; color: #cbd5e1;">
+                      <input type="checkbox" id="rouletteSoundEnabled" class="switch-input" checked>
+                      <span class="switch-slider" style="width: 36px; height: 18px;"></span>
+                      <span>Sonidos de Giro (Ticks mecánicos) y Fanfarria al Ganar</span>
+                    </label>
+
+                    <!-- Presets rápidos -->
+                    <div style="display: flex; gap: 6px;">
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="applyRoulettePreset('standard')" style="font-size: 11px; padding: 4px 8px;">🎲 Estándar</button>
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="applyRoulettePreset('punishments')" style="font-size: 11px; padding: 4px 8px;">🌶️ Retos</button>
+                      <button type="button" class="btn btn-secondary btn-sm" onclick="applyRoulettePreset('vip')" style="font-size: 11px; padding: 4px 8px;">👑 VIP & Puntos</button>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+            <!-- Lista de Premios 100% Personalizable (Tabla / Tarjetas) -->
+            <div style="margin-top: 24px; background: rgba(10, 14, 24, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 14px; padding: 20px;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 12px;">
+                <div>
+                  <h5 style="color: #fff; font-size: 15px; font-weight: 700; margin: 0; display: flex; align-items: center; gap: 8px;">
+                    <span>🎁</span> <span>Premios de la Ruleta (Casillas Personalizables)</span>
+                  </h5>
+                  <p style="font-size: 12px; color: var(--text-secondary); margin-top: 2px;">
+                    Personaliza cada casilla: escribe el premio que quieras, escoge su color y ajusta su probabilidad relativa.
+                  </p>
+                </div>
+                <div style="display: flex; gap: 10px;">
+                  <button type="button" class="btn btn-secondary btn-sm" onclick="addRoulettePrizeUI()" style="font-weight: 700; font-size: 12.5px; border-color: rgba(0, 242, 254, 0.4); color: #00f2fe;">
+                    + Agregar Premio
+                  </button>
+                  <button type="button" class="btn btn-primary btn-sm" onclick="saveRouletteConfigUI()" style="font-weight: 700; font-size: 12.5px; background: linear-gradient(90deg, #10b981, #059669); border: none; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.35);">
+                    💾 Guardar Ruleta
+                  </button>
+                </div>
+              </div>
+
+              <!-- Contenedor dinámico de casillas/premios -->
+              <div id="roulettePrizesContainer" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; max-height: 420px; overflow-y: auto; padding-right: 4px;">
+                <!-- Se rellena dinámicamente con renderRoulettePrizesUI() -->
+              </div>
+
+              <div style="display: flex; justify-content: flex-end; margin-top: 16px; padding-top: 12px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+                <button type="button" class="btn btn-primary" onclick="saveRouletteConfigUI()" style="font-weight: 700; padding: 10px 24px; font-size: 13.5px; background: linear-gradient(90deg, #10b981, #059669); border: none; box-shadow: 0 4px 15px rgba(16, 185, 129, 0.4);">
+                  💾 Guardar Todos los Cambios de la Ruleta
+                </button>
+              </div>
+            </div>
+          </div>
         </section>
 
         <!-- ================= TAB 6: PUNTOS DE CANAL ================= -->
@@ -1909,6 +2117,7 @@
                     <option value="tts">🗣️ Voz TTS de IA (Lee en voz alta en OBS con voz y mensaje personalizado)</option>
                     <option value="song_request">🎶 Pedir Canción (Prioridad VIP: entra en puesto #1 de la cola de música)</option>
                     <option value="sound">🔊 Efecto de Sonido Personalizado (Reproduce un audio en OBS Studio)</option>
+                    <option value="roulette">🎡 Ruleta Interactiva (Gira la ruleta de premios en pantalla al canjear)</option>
                   </select>
                 </div>
 

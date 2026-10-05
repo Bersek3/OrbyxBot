@@ -861,6 +861,55 @@ class TwitchBot {
 
     const activeChannel = channel || this.channel || (storage.getConfig().twitch?.channel || '');
 
+    // 0. Comprobar si corresponde a la Ruleta Interactiva
+    const rouletteCfg = storage.getRoulette();
+    const isRouletteRedemption = rouletteCfg && rouletteCfg.enabled !== false && (
+      (matchedReward && matchedReward.action === 'roulette') ||
+      (rouletteCfg.rewardId && customRewardId && rouletteCfg.rewardId.toLowerCase() === customRewardId.toLowerCase()) ||
+      (rouletteCfg.rewardName && norm(rouletteCfg.rewardName) === norm(rewardTitle)) ||
+      (matchedReward && rouletteCfg.rewardName && norm(rouletteCfg.rewardName) === norm(matchedReward.rewardName))
+    );
+
+    if (isRouletteRedemption) {
+      console.log(`[TwitchBot] 🎡 Canje de Ruleta activado por @${username}!`);
+      const prizes = Array.isArray(rouletteCfg.prizes) && rouletteCfg.prizes.length > 0
+        ? rouletteCfg.prizes
+        : [{ id: 'p1', text: 'Premio Especial', color: '#9146ff' }];
+
+      let totalWeight = prizes.reduce((acc, p) => acc + (Number(p.weight) || 1), 0);
+      let rand = Math.random() * totalWeight;
+      let winningIndex = 0;
+      for (let i = 0; i < prizes.length; i++) {
+        rand -= (Number(prizes[i].weight) || 1);
+        if (rand <= 0) {
+          winningIndex = i;
+          break;
+        }
+      }
+      const winningPrize = prizes[winningIndex];
+
+      const spinEvent = {
+        user: username,
+        winningIndex,
+        winningPrize,
+        rewardTitle: rewardTitle || matchedReward?.rewardName || rouletteCfg.rewardName || 'Ruleta',
+        timestamp: Date.now()
+      };
+
+      this.broadcast('roulette_spin', spinEvent);
+
+      if (rouletteCfg.chatAnnouncement !== false && activeChannel) {
+        const spinDuration = (Number(rouletteCfg.duration) || 7) * 1000;
+        setTimeout(() => {
+          let chatMsg = (rouletteCfg.chatMessageTemplate || '🎉 ¡@{user} giró la ruleta y ha ganado: {prize}! 🎡')
+            .replace(/\{user\}|\{usuario\}/gi, username)
+            .replace(/\{prize\}|\{premio\}/gi, winningPrize.text || 'un premio');
+          this.sendMessage(activeChannel, chatMsg);
+        }, spinDuration + 500);
+      }
+      return;
+    }
+
     if (matchedReward && matchedReward.enabled) {
       console.log(`[TwitchBot] 🎁 Canje procesado: "${matchedReward.rewardName}" (${matchedReward.action}) por @${username}`);
       if (matchedReward.action === 'sound') {

@@ -1,56 +1,32 @@
 {
-  "security": {
-    "widgetToken": "sec_1405777fa9222aedbf12fd1139e30421"
+  "tts": {
+    "rate": 1,
+    "pitch": 0.8,
+    "voice": "es_tiktok",
+    "volume": 90,
+    "enabled": true,
+    "minBits": 50,
+    "maxLength": 10000,
+    "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI",
+    "bannedWords": [],
+    "chatCommand": "!tts",
+    "allowChatCommand": true
   },
   "twitch": {
+    "userId": "226055830",
     "channel": "bersek___",
-    "botUsername": "orbyxbot",
-    "oauthToken": "jutbd9jjk91qw965w4scfpx5a7ondj",
     "clientId": "yw1vr664ichms8an2x5lhji58v7ozk",
     "connected": true,
-    "userId": "226055830",
+    "oauthToken": "jutbd9jjk91qw965w4scfpx5a7ondj",
+    "botUsername": "orbyxbot",
     "displayName": "Bersek___",
     "profileImage": "https://static-cdn.jtvnw.net/jtv_user_pictures/92a6561b-8e64-4f5f-a5fe-af7782347288-profile_image-300x300.jpeg"
-  },
-  "kick": {
-    "channel": "bersek",
-    "username": "Bersek",
-    "profile_picture": "https://files.kick.com/images/user/2984464/profile_image/conversion/8b4e7fba-64d9-469b-b1eb-da87178f4fab-medium.webp",
-    "userId": "2984464",
-    "accessToken": "MJI4YZEXZWQTYWFHMS0ZMZM2LTGYZWITZGNJZGRIMJHMZTK4",
-    "refreshToken": "YMY3NTGZZJETNWNMMY01ZTFKLWEWNJETZJFMZDQ4YZY2ZTRK",
-    "clientId": "01M0VT0JC58YQEVGRHM8JFXQX3",
-    "connected": true,
-    "chatroomId": 2917135
-  },
-  "chatPlatforms": {
-    "twitch": true,
-    "kick": false
   },
   "songRequest": {
     "prefix": "!sr",
     "enabled": true,
-    "maxDurationMinutes": 10,
-    "maxPerUser": 5,
     "userLevel": "all",
-    "volume": 75,
-    "autoplay": true
-  },
-  "tts": {
-    "enabled": true,
-    "engine": "streamelements",
-    "voice": "es_tiktok",
-    "volume": 90,
-    "rate": 1,
-    "pitch": 0.8,
-    "minBits": 50,
-    "allowChatCommand": true,
-    "chatCommand": "!tts",
-    "bannedWords": [],
-    "maxLength": 10000,
-    "channelPointsRewardName": "TTS",
-    "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI"
-  },
-  "goals": [],
-  "widgetStyles": {}
+    "maxPerUser": 5,
+    "maxDurationMinutes": 10
+  }
 }

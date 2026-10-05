@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     connectWebSocket();
     initDashboardMqtt();
     updatePlatformLinkingUI();
+    try { if (typeof initRouletteSystem === 'function') initRouletteSystem(); } catch(e) {}
   } catch (initErr) {
     console.error('⚠️ [DOMContentLoaded] Error en la inicialización principal:', initErr);
   } finally {
@@ -487,6 +488,13 @@ async function loadUserDataFromSupabase(userIdentifier) {
           if (typeof renderGoals === 'function') {
             renderGoals(item.value);
           }
+        }
+        if (item.key === 'roulette' && item.value && typeof item.value === 'object') {
+          localStorage.setItem('orbibot_roulette', JSON.stringify(item.value));
+          rouletteConfig = { ...rouletteConfig, ...item.value };
+          if (typeof bindRouletteConfigToUI === 'function') bindRouletteConfigToUI();
+          if (typeof renderRoulettePrizesUI === 'function') renderRoulettePrizesUI();
+          if (typeof drawRoulettePreview === 'function') drawRoulettePreview();
         }
         if (item.key === 'custom_sounds' && Array.isArray(item.value)) {
           localStorage.setItem('orbibot_custom_sounds', JSON.stringify(item.value));
@@ -2545,6 +2553,7 @@ async function loadStandaloneData() {
   updatePlatformLinkingUI();
   populateWidgetUrls();
   await loadSounds();
+  if (typeof initRouletteSystem === 'function') initRouletteSystem();
 
   // In-browser Twitch IRC connection (solo si hay canal explícito)
   if (twitchData.channel && window.tmi && (!browserTmiClient || browserTmiClient.readyState() !== 'OPEN')) {
@@ -2671,6 +2680,7 @@ async function loadInitialData() {
     updatePlatformLinkingUI();
     populateWidgetUrls();
     await loadSounds();
+    if (typeof initRouletteSystem === 'function') initRouletteSystem();
 
     if (effectiveTwitch.channel && window.tmi && (!browserTmiClient || browserTmiClient.readyState() !== 'OPEN')) {
       connectInBrowserTwitchBot(effectiveTwitch);
@@ -3226,6 +3236,26 @@ async function handleBrowserChannelPointRedemption(customRewardId, username, mes
   if (browserRecentRedemptions.has(dedupeKey)) return;
   browserRecentRedemptions.add(dedupeKey);
   setTimeout(() => browserRecentRedemptions.delete(dedupeKey), 12000);
+
+  // 0. Comprobar si corresponde a la Ruleta Interactiva
+  const rCfg = (typeof rouletteConfig !== 'undefined' && rouletteConfig)
+    ? rouletteConfig
+    : JSON.parse(localStorage.getItem('orbibot_roulette') || 'null');
+
+  const isRouletteRedemption = rCfg && rCfg.enabled !== false && (
+    (matchedReward && matchedReward.action === 'roulette') ||
+    (rCfg.rewardId && customRewardId && rCfg.rewardId.toLowerCase() === customRewardId.toLowerCase()) ||
+    (rCfg.rewardName && norm(rCfg.rewardName) === norm(rewardTitle)) ||
+    (matchedReward && rCfg.rewardName && norm(rCfg.rewardName) === norm(matchedReward.rewardName))
+  );
+
+  if (isRouletteRedemption) {
+    console.log(`[Dashboard] 🎡 Canje de Ruleta detectado para @${username}!`);
+    if (typeof triggerRouletteSpinFromRedemption === 'function') {
+      triggerRouletteSpinFromRedemption(username, rewardTitle || matchedReward?.rewardName);
+    }
+    return;
+  }
 
   if (matchedReward && matchedReward.enabled) {
     console.log(`[Dashboard] 🎁 Canje procesado: "${matchedReward.rewardName}" (${matchedReward.action}) por @${username}`);
@@ -4819,6 +4849,7 @@ function populateWidgetUrls() {
   const musicPlayerUrl = `${baseUrl}/overlays/music_player.html${qs}`;
   const ttsUrl = `${baseUrl}/overlays/tts.html${ttsQs}`;
   const chatUrl = `${baseUrl}/overlays/chat.html${chatQs}`;
+  const rouletteUrl = `${baseUrl}/overlays/roulette.html${qs}`;
 
   if (document.getElementById('urlAlertsWidget')) document.getElementById('urlAlertsWidget').value = alertsUrl;
   if (document.getElementById('urlNowPlayingWidget')) document.getElementById('urlNowPlayingWidget').value = npUrl;
@@ -4826,6 +4857,7 @@ function populateWidgetUrls() {
   if (document.getElementById('urlMusicPlayerWidget')) document.getElementById('urlMusicPlayerWidget').value = musicPlayerUrl;
   if (document.getElementById('urlTtsWidget')) document.getElementById('urlTtsWidget').value = ttsUrl;
   if (document.getElementById('urlChatWidget')) document.getElementById('urlChatWidget').value = chatUrl;
+  if (document.getElementById('urlRouletteWidget')) document.getElementById('urlRouletteWidget').value = rouletteUrl;
 
   // URLs en la pestaña de Puntos de Canal
   if (document.getElementById('urlPointsTtsWidget')) document.getElementById('urlPointsTtsWidget').value = ttsUrl;
@@ -4840,6 +4872,7 @@ function populateWidgetUrls() {
   if (document.getElementById('btnPreviewChat')) document.getElementById('btnPreviewChat').href = chatUrl;
   if (document.getElementById('btnPreviewPointsTts')) document.getElementById('btnPreviewPointsTts').href = ttsUrl;
   if (document.getElementById('btnPreviewPointsAlerts')) document.getElementById('btnPreviewPointsAlerts').href = alertsUrl;
+  if (document.getElementById('btnPreviewRoulette')) document.getElementById('btnPreviewRoulette').href = rouletteUrl;
 
   const appBaseUrl = `${baseUrl}/`;
   if (document.getElementById('displayRedirectUri')) {
@@ -7322,6 +7355,508 @@ async function syncGoalsToStorageAndCloud(goals) {
   // 2. Direct Multi-Scope Supabase Cloud Sync
   await saveToAllSupabaseScopes('goals', cleanGoals);
 }
+
+// ================= 🎡 RULETA INTERACTIVA (PUNTOS DE CANAL) =================
+let rouletteConfig = {
+  enabled: true,
+  rewardName: 'Girar Ruleta',
+  rewardId: '',
+  duration: 7,
+  theme: 'neon',
+  soundEnabled: true,
+  bannerDuration: 6,
+  chatAnnouncement: true,
+  chatMessageTemplate: '🎉 ¡@{user} giró la ruleta y ha ganado: {prize}! 🎡',
+  prizes: [
+    { id: 'p1', text: 'VIP 1 Semana 👑', color: '#9146ff', textColor: '#ffffff', weight: 1 },
+    { id: 'p2', text: 'Cantar Canción 🎤', color: '#00f2fe', textColor: '#000000', weight: 1 },
+    { id: 'p3', text: 'Timeout 5 Min ⏳', color: '#ff3366', textColor: '#ffffff', weight: 1 },
+    { id: 'p4', text: '1,000 Puntos ⭐', color: '#facc15', textColor: '#000000', weight: 1 },
+    { id: 'p5', text: 'Meme en Pantalla 🎭', color: '#10b981', textColor: '#ffffff', weight: 1 },
+    { id: 'p6', text: 'Ban a un Amigo 🔨', color: '#f97316', textColor: '#ffffff', weight: 1 },
+    { id: 'p7', text: 'Seguir en Redes 📱', color: '#8b5cf6', textColor: '#ffffff', weight: 1 },
+    { id: 'p8', text: 'Premio Misterioso 🎁', color: '#ec4899', textColor: '#ffffff', weight: 1 }
+  ]
+};
+
+let roulettePreviewAngle = 0;
+let isPreviewSpinning = false;
+
+async function initRouletteSystem() {
+  try {
+    const saved = localStorage.getItem('orbibot_roulette');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      if (parsed && typeof parsed === 'object') {
+        rouletteConfig = { ...rouletteConfig, ...parsed };
+      }
+    }
+  } catch(e) {}
+
+  try {
+    const res = await fetch('/api/roulette');
+    if (res.ok) {
+      const data = await res.json();
+      if (data && typeof data === 'object') {
+        rouletteConfig = { ...rouletteConfig, ...data };
+      }
+    }
+  } catch(e) {}
+
+  bindRouletteConfigToUI();
+  renderRoulettePrizesUI();
+  drawRoulettePreview();
+}
+
+function bindRouletteConfigToUI() {
+  const toggleEl = document.getElementById('toggleRouletteEnabled');
+  if (toggleEl) toggleEl.checked = rouletteConfig.enabled !== false;
+
+  const nameEl = document.getElementById('rouletteRewardName');
+  if (nameEl) nameEl.value = rouletteConfig.rewardName || 'Girar Ruleta';
+
+  const durEl = document.getElementById('rouletteDuration');
+  if (durEl) {
+    durEl.value = rouletteConfig.duration || 7;
+    const durVal = document.getElementById('rouletteDurationVal');
+    if (durVal) durVal.innerText = durEl.value + 's';
+  }
+
+  const banEl = document.getElementById('rouletteBannerDuration');
+  if (banEl) {
+    banEl.value = rouletteConfig.bannerDuration || 6;
+    const banVal = document.getElementById('rouletteBannerDurationVal');
+    if (banVal) banVal.innerText = banEl.value + 's';
+  }
+
+  const soundEl = document.getElementById('rouletteSoundEnabled');
+  if (soundEl) soundEl.checked = rouletteConfig.soundEnabled !== false;
+
+  const chatEl = document.getElementById('rouletteChatAnnouncement');
+  if (chatEl) chatEl.checked = rouletteConfig.chatAnnouncement !== false;
+}
+
+function handleRouletteToggle(enabled) {
+  rouletteConfig.enabled = Boolean(enabled);
+  saveRouletteConfigUI(false);
+  showToast(enabled ? '🎡 Ruleta interactiva activada' : '🎡 Ruleta desactivada', 'info');
+}
+
+function renderRoulettePrizesUI() {
+  const container = document.getElementById('roulettePrizesContainer');
+  if (!container) return;
+
+  const prizes = Array.isArray(rouletteConfig.prizes) ? rouletteConfig.prizes : [];
+  container.innerHTML = '';
+
+  const countBadge = document.getElementById('rouletteSliceCountBadge');
+  if (countBadge) countBadge.innerText = `${prizes.length} Casilla${prizes.length !== 1 ? 's' : ''}`;
+
+  prizes.forEach((prize, idx) => {
+    const card = document.createElement('div');
+    card.className = 'roulette-prize-card';
+    card.style.cssText = `
+      background: rgba(18, 24, 38, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-left: 4px solid ${prize.color || '#9146ff'};
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+      position: relative;
+    `;
+
+    card.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between;">
+        <span style="font-size: 11px; font-weight: 800; color: #94a3b8; text-transform: uppercase;">
+          Casilla #${idx + 1}
+        </span>
+        <button type="button" class="btn btn-danger btn-sm" onclick="removeRoulettePrizeUI('${prize.id || idx}')" style="padding: 2px 7px; font-size: 11px;" ${prizes.length <= 2 ? 'disabled title="Mínimo 2 casillas"' : ''}>
+          ✕
+        </button>
+      </div>
+
+      <div style="display: flex; gap: 8px; align-items: center;">
+        <input type="color" value="${prize.color || '#9146ff'}" onchange="updateRoulettePrizeColor('${prize.id || idx}', this.value)" style="width: 38px; height: 34px; border: none; border-radius: 6px; cursor: pointer; background: transparent; padding: 0;">
+        <input type="text" value="${escapeHtml(prize.text || '')}" placeholder="Nombre del premio..." onchange="updateRoulettePrizeText('${prize.id || idx}', this.value)" class="form-control" style="font-size: 13px; font-weight: 700; color: #fff; padding: 6px 10px;">
+      </div>
+
+      <div style="display: flex; align-items: center; justify-content: space-between; font-size: 11px; color: var(--text-muted);">
+        <span>Probabilidad / Peso:</span>
+        <input type="number" min="1" max="100" value="${prize.weight || 1}" onchange="updateRoulettePrizeWeight('${prize.id || idx}', this.value)" class="form-control" style="width: 60px; font-size: 11px; padding: 2px 6px; text-align: center;">
+      </div>
+    `;
+
+    container.appendChild(card);
+  });
+}
+
+function updateRoulettePrizeColor(idOrIdx, color) {
+  const p = findRoulettePrize(idOrIdx);
+  if (p) {
+    p.color = color;
+    renderRoulettePrizesUI();
+    drawRoulettePreview();
+  }
+}
+
+function updateRoulettePrizeText(idOrIdx, text) {
+  const p = findRoulettePrize(idOrIdx);
+  if (p) {
+    p.text = text.trim() || 'Premio';
+    drawRoulettePreview();
+  }
+}
+
+function updateRoulettePrizeWeight(idOrIdx, weight) {
+  const p = findRoulettePrize(idOrIdx);
+  if (p) {
+    p.weight = Math.max(1, parseInt(weight, 10) || 1);
+  }
+}
+
+function findRoulettePrize(idOrIdx) {
+  if (!rouletteConfig.prizes) rouletteConfig.prizes = [];
+  return rouletteConfig.prizes.find((p, idx) => p.id === idOrIdx || String(idx) === String(idOrIdx));
+}
+
+function addRoulettePrizeUI() {
+  if (!rouletteConfig.prizes) rouletteConfig.prizes = [];
+  const palette = ['#9146ff', '#00f2fe', '#facc15', '#ff3366', '#10b981', '#f97316', '#ec4899', '#38bdf8', '#a855f7'];
+  const nextColor = palette[rouletteConfig.prizes.length % palette.length];
+  
+  const newPrize = {
+    id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+    text: `Premio #${rouletteConfig.prizes.length + 1} 🎁`,
+    color: nextColor,
+    textColor: '#ffffff',
+    weight: 1
+  };
+  rouletteConfig.prizes.push(newPrize);
+  renderRoulettePrizesUI();
+  drawRoulettePreview();
+  showToast('🎁 Nueva casilla de premio agregada', 'info');
+}
+
+function removeRoulettePrizeUI(idOrIdx) {
+  if (!rouletteConfig.prizes || rouletteConfig.prizes.length <= 2) {
+    showToast('La ruleta debe tener al menos 2 premios', 'warning');
+    return;
+  }
+  rouletteConfig.prizes = rouletteConfig.prizes.filter((p, idx) => p.id !== idOrIdx && String(idx) !== String(idOrIdx));
+  renderRoulettePrizesUI();
+  drawRoulettePreview();
+}
+
+function applyRoulettePreset(presetName) {
+  if (presetName === 'standard') {
+    rouletteConfig.prizes = [
+      { id: 'p1', text: 'VIP 1 Semana 👑', color: '#9146ff', textColor: '#ffffff', weight: 1 },
+      { id: 'p2', text: 'Cantar Canción 🎤', color: '#00f2fe', textColor: '#000000', weight: 1 },
+      { id: 'p3', text: 'Timeout 5 Min ⏳', color: '#ff3366', textColor: '#ffffff', weight: 1 },
+      { id: 'p4', text: '1,000 Puntos ⭐', color: '#facc15', textColor: '#000000', weight: 1 },
+      { id: 'p5', text: 'Meme en Pantalla 🎭', color: '#10b981', textColor: '#ffffff', weight: 1 },
+      { id: 'p6', text: 'Ban a un Amigo 🔨', color: '#f97316', textColor: '#ffffff', weight: 1 },
+      { id: 'p7', text: 'Seguir en Redes 📱', color: '#8b5cf6', textColor: '#ffffff', weight: 1 },
+      { id: 'p8', text: 'Premio Misterioso 🎁', color: '#ec4899', textColor: '#ffffff', weight: 1 }
+    ];
+  } else if (presetName === 'punishments') {
+    rouletteConfig.prizes = [
+      { id: 'p1', text: 'Hacer 10 Sentadillas 🏋️', color: '#ef4444', textColor: '#ffffff', weight: 1 },
+      { id: 'p2', text: 'Jugar con 1 Mano ✋', color: '#f97316', textColor: '#ffffff', weight: 1 },
+      { id: 'p3', text: 'Cantar a Capella 🎵', color: '#facc15', textColor: '#000000', weight: 1 },
+      { id: 'p4', text: 'Tomar Agua de Golpe 💧', color: '#06b6d4', textColor: '#ffffff', weight: 1 },
+      { id: 'p5', text: 'Voz Aguda 5 Minutos 🐭', color: '#8b5cf6', textColor: '#ffffff', weight: 1 },
+      { id: 'p6', text: 'Te Salvaste de Castigo 🛡️', color: '#10b981', textColor: '#ffffff', weight: 1 }
+    ];
+  } else if (presetName === 'vip') {
+    rouletteConfig.prizes = [
+      { id: 'p1', text: 'VIP Mensual 👑', color: '#9146ff', textColor: '#ffffff', weight: 1 },
+      { id: 'p2', text: 'Mod por 1 Día 🛡️', color: '#00f2fe', textColor: '#000000', weight: 1 },
+      { id: 'p3', text: '5,000 Puntos del Canal ⭐', color: '#facc15', textColor: '#000000', weight: 2 },
+      { id: 'p4', text: 'Elegir Próximo Juego 🎮', color: '#10b981', textColor: '#ffffff', weight: 1 },
+      { id: 'p5', text: 'Emote Exclusivo en Chat 🎨', color: '#ec4899', textColor: '#ffffff', weight: 2 },
+      { id: 'p6', text: 'Canción VIP Prioritaria 🎶', color: '#3b82f6', textColor: '#ffffff', weight: 2 }
+    ];
+  }
+  renderRoulettePrizesUI();
+  drawRoulettePreview();
+  showToast(`Plantilla "${presetName}" aplicada`, 'info');
+}
+
+function drawRoulettePreview() {
+  const canvas = document.getElementById('roulettePreviewCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const prizes = Array.isArray(rouletteConfig.prizes) && rouletteConfig.prizes.length > 0
+    ? rouletteConfig.prizes
+    : [{ id: 'p1', text: 'Sin Premios', color: '#666' }];
+
+  const numSlices = prizes.length;
+  const sliceAngle = (2 * Math.PI) / numSlices;
+  const size = 280;
+  const center = size / 2;
+  const radius = center - 12;
+
+  ctx.clearRect(0, 0, size, size);
+
+  ctx.save();
+  ctx.translate(center, center);
+  ctx.rotate(roulettePreviewAngle);
+
+  // Slices
+  for (let i = 0; i < numSlices; i++) {
+    const p = prizes[i];
+    const start = i * sliceAngle;
+    const end = start + sliceAngle;
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, radius, start, end);
+    ctx.closePath();
+
+    ctx.fillStyle = p.color || `hsl(${(i * 360) / numSlices}, 75%, 55%)`;
+    ctx.fill();
+
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.stroke();
+
+    // Text Label
+    ctx.save();
+    ctx.rotate(start + sliceAngle / 2);
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = p.textColor || '#ffffff';
+    ctx.font = 'bold 9.5px "Outfit", sans-serif';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.8)';
+    ctx.shadowBlur = 3;
+
+    let displayText = p.text || `P${i + 1}`;
+    if (displayText.length > 13) displayText = displayText.substring(0, 11) + '…';
+    ctx.fillText(displayText, radius - 14, 0);
+    ctx.restore();
+  }
+
+  // Rim
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = '#0f1422';
+  ctx.stroke();
+
+  ctx.beginPath();
+  ctx.arc(0, 0, radius, 0, 2 * Math.PI);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#9146ff';
+  ctx.stroke();
+
+  ctx.restore();
+
+  // Center hub
+  ctx.save();
+  ctx.translate(center, center);
+  ctx.beginPath();
+  ctx.arc(0, 0, 22, 0, 2 * Math.PI);
+  ctx.fillStyle = '#0a0d17';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur = 6;
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = '#00f2fe';
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff';
+  ctx.font = '12px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('🎡', 0, 1);
+  ctx.restore();
+}
+
+async function saveRouletteConfigUI(showSuccessToast = true) {
+  const enabledEl = document.getElementById('toggleRouletteEnabled');
+  if (enabledEl) rouletteConfig.enabled = enabledEl.checked;
+
+  const nameEl = document.getElementById('rouletteRewardName');
+  if (nameEl) rouletteConfig.rewardName = nameEl.value.trim() || 'Girar Ruleta';
+
+  const durEl = document.getElementById('rouletteDuration');
+  if (durEl) rouletteConfig.duration = parseInt(durEl.value, 10) || 7;
+
+  const banEl = document.getElementById('rouletteBannerDuration');
+  if (banEl) rouletteConfig.bannerDuration = parseInt(banEl.value, 10) || 6;
+
+  const soundEl = document.getElementById('rouletteSoundEnabled');
+  if (soundEl) rouletteConfig.soundEnabled = soundEl.checked;
+
+  const chatEl = document.getElementById('rouletteChatAnnouncement');
+  if (chatEl) rouletteConfig.chatAnnouncement = chatEl.checked;
+
+  if (!adminTargetStreamerId) {
+    localStorage.setItem('orbibot_roulette', JSON.stringify(rouletteConfig));
+  }
+
+  await saveToAllSupabaseScopes('roulette', rouletteConfig);
+
+  try {
+    await fetch('/api/roulette', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(rouletteConfig)
+    });
+  } catch(e) {}
+
+  broadcastEvent('roulette_updated', rouletteConfig);
+  drawRoulettePreview();
+
+  if (showSuccessToast) {
+    showToast('🎉 ¡Configuración de la Ruleta guardada con éxito!', 'success');
+  }
+}
+
+async function testRouletteSpinUI() {
+  if (isPreviewSpinning) return;
+  const usernameInput = document.getElementById('rouletteTestUsername');
+  const testUser = (usernameInput?.value || 'Espectador_Suerte').trim();
+
+  const prizes = Array.isArray(rouletteConfig.prizes) && rouletteConfig.prizes.length > 0
+    ? rouletteConfig.prizes
+    : [{ id: 'p1', text: 'Premio Especial', color: '#9146ff' }];
+
+  let totalWeight = prizes.reduce((acc, p) => acc + (Number(p.weight) || 1), 0);
+  let rand = Math.random() * totalWeight;
+  let winningIndex = 0;
+  for (let i = 0; i < prizes.length; i++) {
+    rand -= (Number(prizes[i].weight) || 1);
+    if (rand <= 0) {
+      winningIndex = i;
+      break;
+    }
+  }
+  const winningPrize = prizes[winningIndex];
+
+  const spinPayload = {
+    user: testUser,
+    winningIndex,
+    winningPrize,
+    rewardTitle: rouletteConfig.rewardName || 'Ruleta',
+    timestamp: Date.now()
+  };
+  broadcastEvent('roulette_spin', spinPayload);
+
+  try {
+    await fetch('/api/roulette/spin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user: testUser, prizeIndex: winningIndex, prize: winningPrize })
+    });
+  } catch(e) {}
+
+  isPreviewSpinning = true;
+  const numSlices = prizes.length;
+  const sliceAngle = (2 * Math.PI) / numSlices;
+  const targetSliceCenter = (winningIndex * sliceAngle) + (sliceAngle / 2);
+  const topPointerAngle = 3 * Math.PI / 2;
+  let targetNormalized = (topPointerAngle - targetSliceCenter) % (2 * Math.PI);
+  if (targetNormalized < 0) targetNormalized += 2 * Math.PI;
+
+  const fullRotations = 5 * 2 * Math.PI;
+  const startAngle = roulettePreviewAngle;
+  const finalAngle = startAngle + fullRotations + ((targetNormalized - (startAngle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI));
+  const totalDelta = finalAngle - startAngle;
+  const durationMs = 3500;
+  const startTime = performance.now();
+
+  function quinticEase(t) { return 1 - Math.pow(1 - t, 4); }
+
+  function step(now) {
+    const elapsed = now - startTime;
+    const progress = Math.min(1, elapsed / durationMs);
+    roulettePreviewAngle = startAngle + totalDelta * quinticEase(progress);
+    drawRoulettePreview();
+
+    if (progress < 1) {
+      requestAnimationFrame(step);
+    } else {
+      isPreviewSpinning = false;
+      roulettePreviewAngle = finalAngle;
+      drawRoulettePreview();
+
+      const resBox = document.getElementById('rouletteTestResultBox');
+      const nameDisp = document.getElementById('rouletteWinnerNameDisplay');
+      const prizeDisp = document.getElementById('rouletteWinnerPrizeDisplay');
+      if (resBox && nameDisp && prizeDisp) {
+        nameDisp.innerText = `@${testUser}`;
+        prizeDisp.innerText = winningPrize.text || 'un premio';
+        resBox.style.display = 'block';
+        showToast(`🎡 ¡Giro de prueba en OBS! @${testUser} ganó: ${winningPrize.text}`, 'success');
+      }
+    }
+  }
+  requestAnimationFrame(step);
+}
+
+function triggerRouletteSpinFromRedemption(username, rewardTitle) {
+  const prizes = Array.isArray(rouletteConfig.prizes) && rouletteConfig.prizes.length > 0
+    ? rouletteConfig.prizes
+    : [{ id: 'p1', text: 'Premio Especial', color: '#9146ff' }];
+
+  let totalWeight = prizes.reduce((acc, p) => acc + (Number(p.weight) || 1), 0);
+  let rand = Math.random() * totalWeight;
+  let winningIndex = 0;
+  for (let i = 0; i < prizes.length; i++) {
+    rand -= (Number(prizes[i].weight) || 1);
+    if (rand <= 0) {
+      winningIndex = i;
+      break;
+    }
+  }
+  const winningPrize = prizes[winningIndex];
+
+  const spinPayload = {
+    user: username || 'Espectador',
+    winningIndex,
+    winningPrize,
+    rewardTitle: rewardTitle || rouletteConfig.rewardName || 'Ruleta',
+    timestamp: Date.now()
+  };
+
+  broadcastEvent('roulette_spin', spinPayload);
+  showToast(`🎡 @${username} canjeó la Ruleta! Resultado en OBS: ${winningPrize.text}`, 'success');
+}
+
+function syncRouletteTwitchRewardSelect() {
+  if (typeof cachedTwitchHelixRewards !== 'undefined' && Array.isArray(cachedTwitchHelixRewards) && cachedTwitchHelixRewards.length > 0) {
+    const titles = cachedTwitchHelixRewards.map(r => r.title);
+    const input = document.getElementById('rouletteRewardName');
+    if (input && titles.length > 0) {
+      const match = titles.find(t => t.toLowerCase().includes('ruleta') || t.toLowerCase().includes('wheel'));
+      if (match) {
+        input.value = match;
+        rouletteConfig.rewardName = match;
+        showToast(`🎯 Recompensa vinculada: "${match}"`, 'success');
+        saveRouletteConfigUI(false);
+        return;
+      }
+    }
+  }
+  showToast('💡 Escribe el nombre exacto de la recompensa de tu canal de Twitch.', 'info');
+}
+
+window.handleRouletteToggle = handleRouletteToggle;
+window.addRoulettePrizeUI = addRoulettePrizeUI;
+window.removeRoulettePrizeUI = removeRoulettePrizeUI;
+window.updateRoulettePrizeColor = updateRoulettePrizeColor;
+window.updateRoulettePrizeText = updateRoulettePrizeText;
+window.updateRoulettePrizeWeight = updateRoulettePrizeWeight;
+window.applyRoulettePreset = applyRoulettePreset;
+window.saveRouletteConfigUI = saveRouletteConfigUI;
+window.testRouletteSpinUI = testRouletteSpinUI;
+window.syncRouletteTwitchRewardSelect = syncRouletteTwitchRewardSelect;
+window.initRouletteSystem = initRouletteSystem;
 
 // ================= COMMANDS =================
 function renderCommands(commands) {
