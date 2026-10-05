@@ -257,12 +257,14 @@
 
     let currentAngle = 0; // Current rotation in radians
     let isSpinning = false;
+    let activeSpinUser = null;
     let spinQueue = [];
     let lastTickIndex = -1;
     let spinAnimId = null;
     let spinWatchdog = null;
     let bannerTimeoutId = null;
-    const recentSpinDedupeSet = new Set();
+    const recentSpinIdSet = new Set();
+    const userLastSpinTimeMap = new Map();
 
     // High DPI Support
     function setupCanvasDPI() {
@@ -532,24 +534,34 @@
     }
 
     // ================= SPIN PHYSICS & ANIMATION =================
-    function spinWheelTo(winningIndex, user, prize, dedupeId) {
+    function spinWheelTo(winningIndex, user, prize, dedupeId, normUser) {
+      const userKey = normUser || (user ? String(user).toLowerCase().replace(/^@/, '').trim() : 'espectador');
+
       if (isSpinning) {
-        // Prevent queue accumulation & duplicates
-        if (spinQueue.length >= 2) {
-          console.warn('[Roulette] Cola llena, ignorando solicitud extra');
+        // A. Si la ruleta ya está girando para este mismo usuario, es 100% un duplicado del canje actual
+        if (activeSpinUser && activeSpinUser === userKey) {
+          console.warn(`[Roulette] ⚠️ Omitiendo giro duplicado para @${user} porque ya está girando`);
           return;
         }
-        const isDuplicateQueued = spinQueue.some(item => 
-          (dedupeId && item.dedupeId === dedupeId) || 
-          (item.user === user && item.winningIndex === winningIndex)
-        );
-        if (!isDuplicateQueued) {
-          spinQueue.push({ winningIndex, user, prize, dedupeId, queuedAt: Date.now() });
+
+        // B. Si en la cola ya existe un giro de este mismo usuario, descartarlo
+        if (spinQueue.some(item => item.userKey === userKey)) {
+          console.warn(`[Roulette] ⚠️ Omitiendo giro duplicado para @${user} porque ya está en cola`);
+          return;
         }
+
+        // C. Límite de seguridad en cola (máximo 2 usuarios distintos esperando)
+        if (spinQueue.length >= 2) {
+          console.warn('[Roulette] ⚠️ Cola llena, ignorando solicitud extra');
+          return;
+        }
+
+        spinQueue.push({ winningIndex, user, userKey, prize, dedupeId, queuedAt: Date.now() });
         return;
       }
 
       isSpinning = true;
+      activeSpinUser = userKey;
       if (bannerTimeoutId) {
         clearTimeout(bannerTimeoutId);
         bannerTimeoutId = null;
@@ -667,6 +679,7 @@
       bannerTimeoutId = setTimeout(() => {
         winnerBanner.classList.remove('active');
         bannerTimeoutId = null;
+        activeSpinUser = null;
 
         // Clean queue of expired items (> 30s old)
         const now = Date.now();
@@ -676,7 +689,7 @@
           // If another unique spin is waiting in queue, run next spin
           if (spinQueue.length > 0) {
             const next = spinQueue.shift();
-            spinWheelTo(next.winningIndex, next.user, next.prize, next.dedupeId);
+            spinWheelTo(next.winningIndex, next.user, next.prize, next.dedupeId, next.userKey);
           }
         }, 800);
       }, bannerDuration);
@@ -712,19 +725,38 @@
 
       if (event === 'roulette_spin' || data.event === 'roulette_spin') {
         const payload = data.spin || data;
+        const rawUser = String(payload.user || 'Espectador').trim();
+        const normUser = rawUser.toLowerCase().replace(/^@/, '');
+        const now = Date.now();
 
-        // Deduplication across multiple simultaneous transports (WS, MQTT, BroadcastChannel, localStorage)
-        const dedupeId = String(payload.spinId || payload.id || `${payload.user || 'anon'}_${payload.winningIndex}_${payload.winningPrize?.text || ''}_${Math.floor((payload.timestamp || Date.now()) / 12000)}`);
-        if (recentSpinDedupeSet.has(dedupeId)) {
-          return; // Ignore duplicate delivered by secondary transport
+        // 1. Filtrar por spinId si ya fue procesado
+        if (payload.spinId && recentSpinIdSet.has(payload.spinId)) {
+          console.log('[Roulette] Descartando evento duplicado por spinId:', payload.spinId);
+          return;
         }
-        recentSpinDedupeSet.add(dedupeId);
-        setTimeout(() => recentSpinDedupeSet.delete(dedupeId), 25000);
+        if (payload.spinId) {
+          recentSpinIdSet.add(payload.spinId);
+          setTimeout(() => recentSpinIdSet.delete(payload.spinId), 35000);
+        }
+
+        // 2. Ventana de tiempo por usuario (15 segundos): Si este mismo usuario canjeó en los últimos 15s,
+        // descartar eventos duplicados generados por Twitch EventSub + IRC + Bot + Dashboard
+        const lastUserSpinTime = userLastSpinTimeMap.get(normUser) || 0;
+        if (now - lastUserSpinTime < 15000) {
+          console.warn(`[Roulette] ⚠️ Descartando canje duplicado para @${rawUser} (${now - lastUserSpinTime}ms de diferencia).`);
+          return;
+        }
+        userLastSpinTimeMap.set(normUser, now);
+        setTimeout(() => {
+          if (userLastSpinTimeMap.get(normUser) === now) {
+            userLastSpinTimeMap.delete(normUser);
+          }
+        }, 30000);
 
         const prizes = rouletteConfig.prizes || [];
         let winIdx = Number.isInteger(payload.winningIndex) ? payload.winningIndex : 0;
         if (winIdx < 0 || winIdx >= prizes.length) winIdx = 0;
-        spinWheelTo(winIdx, payload.user || 'Espectador', payload.winningPrize || prizes[winIdx], dedupeId);
+        spinWheelTo(winIdx, rawUser, payload.winningPrize || prizes[winIdx], payload.spinId || '', normUser);
       } else if (event === 'roulette_updated' || data.event === 'roulette_updated') {
         const updated = data.roulette || data;
         if (updated && typeof updated === 'object') {

@@ -3230,12 +3230,29 @@ async function handleBrowserChannelPointRedemption(customRewardId, username, mes
     return;
   }
 
+  // Si el backend local está conectado, twitchBot.js ya procesa todos los canjes en el servidor
+  const isBackendConnected = Boolean(socket && socket.readyState === 1);
+  if (isBackendConnected) {
+    console.log(`[Dashboard] ℹ️ Canje de @${username} recibido en navegador, pero el backend local ya lo procesa en el servidor.`);
+    return;
+  }
+
   const cleanUser = (username || 'espectador').toLowerCase().trim();
   const cleanRewardKey = (customRewardId || rewardTitle || 'reward').toLowerCase().trim();
-  const dedupeKey = `${cleanRewardKey}_${cleanUser}_${(cleanMsg || '').toLowerCase()}_${Math.floor(Date.now() / 6000)}`;
-  if (browserRecentRedemptions.has(dedupeKey)) return;
-  browserRecentRedemptions.add(dedupeKey);
-  setTimeout(() => browserRecentRedemptions.delete(dedupeKey), 12000);
+  const dedupeKey = `${cleanRewardKey}_${cleanUser}`;
+  const nowTime = Date.now();
+  if (!window._browserRecentRedemptionsMap) window._browserRecentRedemptionsMap = new Map();
+  const lastTime = window._browserRecentRedemptionsMap.get(dedupeKey) || 0;
+  if (nowTime - lastTime < 10000) {
+    console.log(`[Dashboard] ⏳ Canje duplicado omitido para ${dedupeKey}`);
+    return;
+  }
+  window._browserRecentRedemptionsMap.set(dedupeKey, nowTime);
+  setTimeout(() => {
+    if (window._browserRecentRedemptionsMap && window._browserRecentRedemptionsMap.get(dedupeKey) === nowTime) {
+      window._browserRecentRedemptionsMap.delete(dedupeKey);
+    }
+  }, 20000);
 
   // 0. Comprobar si corresponde a la Ruleta Interactiva
   const rCfg = (typeof rouletteConfig !== 'undefined' && rouletteConfig)

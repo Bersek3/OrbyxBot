@@ -853,11 +853,20 @@ class TwitchBot {
 
     const cleanUser = (username || 'espectador').toLowerCase().trim();
     const cleanRewardKey = (customRewardId || rewardTitle || 'reward').toLowerCase().trim();
-    const dedupeKey = `${cleanRewardKey}_${cleanUser}_${(cleanMsg || '').toLowerCase()}_${Math.floor(Date.now() / 6000)}`;
-    if (!this.recentRedemptions) this.recentRedemptions = new Set();
-    if (this.recentRedemptions.has(dedupeKey)) return;
-    this.recentRedemptions.add(dedupeKey);
-    setTimeout(() => this.recentRedemptions.delete(dedupeKey), 12000);
+    const dedupeKey = `${cleanRewardKey}_${cleanUser}`;
+    const nowTime = Date.now();
+    if (!this.recentRedemptionsMap) this.recentRedemptionsMap = new Map();
+    const lastRedemptionTime = this.recentRedemptionsMap.get(dedupeKey) || 0;
+    if (nowTime - lastRedemptionTime < 10000) {
+      console.log(`[TwitchBot] ⏳ Canje duplicado omitido para ${dedupeKey} (${nowTime - lastRedemptionTime}ms de diferencia).`);
+      return;
+    }
+    this.recentRedemptionsMap.set(dedupeKey, nowTime);
+    setTimeout(() => {
+      if (this.recentRedemptionsMap && this.recentRedemptionsMap.get(dedupeKey) === nowTime) {
+        this.recentRedemptionsMap.delete(dedupeKey);
+      }
+    }, 20000);
 
     const activeChannel = channel || this.channel || (storage.getConfig().twitch?.channel || '');
 
