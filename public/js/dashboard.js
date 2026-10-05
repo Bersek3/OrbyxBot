@@ -4232,7 +4232,7 @@ function saveLocalSrState(state, syncCloud = true) {
 function extractYouTubeVideoId(input) {
   if (!input || typeof input !== 'string') return null;
   const str = input.trim();
-  const watchMatch = str.match(/(?:(?:music|www|m)\.)?youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)([^"&?\/\s]{11})|youtu\.be\/([^"&?\/\s]{11})/i);
+  const watchMatch = str.match(/(?:(?:music|www|m)\.)?youtube\.com\/(?:(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)([^"&?\/\s]{11})|youtu\.be\/([^"&?\/\s]{11})/i);
   if (watchMatch) {
     const vid = watchMatch[1] || watchMatch[2];
     if (vid && vid.length === 11) return vid;

@@ -203,8 +203,8 @@
     function extractCleanVideoId(idOrUrl) {
       if (!idOrUrl) return null;
       const str = idOrUrl.toString().trim();
-      const match = str.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
-      if (match && match[1]) return match[1];
+      const match = str.match(/(?:(?:music|www|m)\.)?youtube\.com\/(?:(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)([^"&?\/\s]{11})|youtu\.be\/([^"&?\/\s]{11})/i);
+      if (match && (match[1] || match[2])) return match[1] || match[2];
       if (/^[a-zA-Z0-9_-]{11}$/.test(str)) return str;
       return null;
     }
@@ -287,6 +287,10 @@
             }
           },
           onError: (event) => {
+            // Error 2 sin canción activa en cola es el aviso interno de YouTube al inicializar el player vacío
+            if (!currentSongData && event.data === 2) {
+              return;
+            }
             console.warn('⚠️ [Music Player Overlay] YouTube Audio Player error:', event.data);
             if (currentSongData && (event.data === 2 || event.data === 100 || event.data === 101 || event.data === 150)) {
               statusText.innerText = 'Video no reproducible en stream - Saltando...';
@@ -392,6 +396,11 @@
         stopYouTubeVideo();
         return;
       }
+
+      // Desempaquetar si viene envuelto en { data: song } o { current: song }
+      const actualSong = (song.videoId || song.title) ? song : (song.data || song.current || song);
+      song = actualSong;
+
       // If a new song is playing, clear the stopped flag
       try { localStorage.removeItem(songStoppedKey); } catch(e) {}
 
@@ -453,11 +462,15 @@
     const myStreamerKey = channel || '';
     const myToken = token || '';
     const linkedChannels = new Set([myStreamerKey]);
+    let serverTwitchChannel = '';
 
     fetch('/api/config')
       .then(r => r.json())
       .then(cfg => {
-        if (cfg?.twitch?.channel) linkedChannels.add(cfg.twitch.channel.toLowerCase().replace(/^#/, ''));
+        if (cfg?.twitch?.channel) {
+          serverTwitchChannel = cfg.twitch.channel.toLowerCase().replace(/^#/, '');
+          linkedChannels.add(serverTwitchChannel);
+        }
         if (cfg?.kick?.channel || cfg?.kick?.username) linkedChannels.add((cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, ''));
       })
       .catch(() => {});
@@ -498,7 +511,8 @@
           updateSongDisplay(null);
         }
       } else if (msg.event === 'sr_play') {
-        updateSongDisplay(msg.data);
+        const songData = (msg.data && (msg.data.videoId || msg.data.title)) ? msg.data : (msg.data?.data || msg.data);
+        updateSongDisplay(songData);
       } else if (msg.event === 'sr_stop' || msg.event === 'sr_clear') {
         updateSongDisplay(null);
       } else if (msg.event === 'sr_pause') {
@@ -533,8 +547,11 @@
           });
 
           tmiClient.on('message', async (ch, tags, message, self) => {
-            // Si el WebSocket del servidor está conectado, el bot de OrbiBot ya gestiona y emite los eventos del chat
-            if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+            // Si el WebSocket del servidor está conectado Y el bot del servidor está activo en este mismo canal principal,
+            // dejamos que el backend responda en el chat para no duplicar mensajes.
+            // Si es un canal secundario/streamer independiente o el bot no está en este canal, el overlay procesa !sr vía REST.
+            const isServerBotInThisChannel = serverTwitchChannel && serverTwitchChannel === (targetChan || '').toLowerCase();
+            if (wsInstance && wsInstance.readyState === WebSocket.OPEN && isServerBotInThisChannel) {
               return;
             }
 

@@ -72,8 +72,8 @@ class SongRequestService {
     if (!input || typeof input !== 'string') return null;
     const str = input.trim();
 
-    // Standard YouTube and YouTube Music URLs (music.youtube.com, youtube.com, youtu.be)
-    const watchMatch = str.match(/(?:(?:music|www|m)\.)?youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)([^"&?\/\s]{11})|youtu\.be\/([^"&?\/\s]{11})/i);
+    // Standard YouTube and YouTube Music URLs (music.youtube.com, youtube.com, youtu.be, shorts, live)
+    const watchMatch = str.match(/(?:(?:music|www|m)\.)?youtube\.com\/(?:(?:v|e(?:mbed)?|shorts|live)\/|.*[?&]v=)([^"&?\/\s]{11})|youtu\.be\/([^"&?\/\s]{11})/i);
     if (watchMatch) {
       const vid = watchMatch[1] || watchMatch[2];
       if (vid && vid.length === 11) return vid;

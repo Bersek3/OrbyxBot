@@ -236,6 +236,21 @@ class TwitchBot {
     }
   }
 
+  async joinChannel(channel) {
+    if (!channel || !this.client) return;
+    const clean = channel.toLowerCase().replace(/^#/, '').trim();
+    if (!clean || clean === 'default' || clean === 'streamer') return;
+    try {
+      const current = (typeof this.client.getChannels === 'function' ? this.client.getChannels() : []) || [];
+      if (!current.map(c => c.toLowerCase().replace(/^#/, '')).includes(clean)) {
+        await this.client.join(clean);
+        console.log(`[TwitchBot] ✅ Unido dinámicamente al canal #${clean}`);
+      }
+    } catch (e) {
+      console.warn(`[TwitchBot] No se pudo unir a #${clean}:`, e.message);
+    }
+  }
+
   async disconnect() {
     this.isExplicitDisconnect = true;
     if (this.client) {

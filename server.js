@@ -173,6 +173,9 @@ wss.on('connection', (ws, req) => {
           ws.token = data.token.trim();
         }
         if (ws.room && ws.room !== 'default') {
+          if (twitchBot && typeof twitchBot.joinChannel === 'function') {
+            twitchBot.joinChannel(ws.room);
+          }
           ws.send(JSON.stringify({
             event: 'init_state',
             room: ws.room,
@@ -1353,6 +1356,9 @@ app.get('/api/sr/state', (req, res) => {
 app.post('/api/sr/add', async (req, res) => {
   const { query, requester, isPriority, channel, streamer } = req.body;
   const target = channel || streamer || req.query.channel || req.headers['x-streamer-id'] || 'default';
+  if (target && target !== 'default' && twitchBot && typeof twitchBot.joinChannel === 'function') {
+    twitchBot.joinChannel(target);
+  }
   const result = await songRequest.addSong({
     channel: target,
     query,
