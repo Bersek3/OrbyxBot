@@ -640,139 +640,89 @@
     </div>
   </div>
 
+  <!-- Backdrop oscuro para cerrar el sidebar en móviles / tablets -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop" onclick="toggleSidebarCollapse(false)"></div>
+
   <!-- ================= DASHBOARD APP VIEW ================= -->
   <div id="dashboardAppView" style="display: none; width: 100%; min-height: 100vh;">
     <!-- ================= SIDEBAR ================= -->
-    <aside class="sidebar">
-      <!-- 1. Perfil Superior Izquierdo del Usuario -->
-      <div class="sidebar-user-card" id="sidebarUserProfileDropdown" onclick="toggleSidebarUserMenu(event)">
-        <div class="sidebar-user-avatar-wrap">
-          <img id="sidebarUserAvatar" class="sidebar-user-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=Bersek" alt="Avatar">
-          <span class="sidebar-status-dot online"></span>
-        </div>
-        <div class="sidebar-user-meta">
-          <div class="sidebar-user-title-row">
-            <span id="sidebarUserName" class="sidebar-username">Bersek</span>
-            <svg class="sidebar-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+    <aside class="sidebar" id="mainSidebar">
+      <!-- 1. Perfil Superior Izquierdo del Usuario con botón para colapsar/esconder -->
+      <div class="sidebar-user-header">
+        <div class="sidebar-user-card" id="sidebarUserProfileDropdown" onclick="toggleSidebarUserMenu(event)" title="Perfil de Usuario">
+          <div class="sidebar-user-avatar-wrap">
+            <img id="sidebarUserAvatar" class="sidebar-user-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=Bersek" alt="Avatar">
+            <span class="sidebar-status-dot online"></span>
           </div>
-          <span id="sidebarChannelStatus" class="sidebar-user-status">Canal activo</span>
+          <div class="sidebar-user-meta">
+            <div class="sidebar-user-title-row">
+              <span id="sidebarUserName" class="sidebar-username">Bersek</span>
+              <svg class="sidebar-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+            </div>
+            <span id="sidebarChannelStatus" class="sidebar-user-status">Canal activo</span>
+          </div>
+
+          <!-- Menú Desplegable de Usuario -->
+          <div id="sidebarUserDropdownMenu" class="sidebar-user-dropdown-menu" style="display: none;">
+            <div class="user-dropdown-header">
+              <strong id="dropdownUserFull">Bersek</strong>
+              <span id="dropdownUserEmail">bersek@streamer.io</span>
+            </div>
+            <div class="user-dropdown-divider"></div>
+            <button type="button" class="user-dropdown-item" onclick="showLandingView()"><i class="fas fa-home"></i> Ir a Inicio</button>
+            <button type="button" class="user-dropdown-item" id="dropdownAdminLink" style="display: none;" onclick="switchTab('tab-admin')"><i class="fas fa-crown" style="color: #facc15;"></i> Panel SuperAdmin</button>
+            <div class="user-dropdown-divider"></div>
+            <button type="button" class="user-dropdown-item user-dropdown-logout" onclick="handleAuthLogout()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
+          </div>
         </div>
 
-        <!-- Menú Desplegable de Usuario -->
-        <div id="sidebarUserDropdownMenu" class="sidebar-user-dropdown-menu" style="display: none;">
-          <div class="user-dropdown-header">
-            <strong id="dropdownUserFull">Bersek</strong>
-            <span id="dropdownUserEmail">bersek@streamer.io</span>
-          </div>
-          <div class="user-dropdown-divider"></div>
-          <button type="button" class="user-dropdown-item" onclick="openChannelSettingsModal()"><i class="fas fa-sliders-h"></i> Ajustes de Canal</button>
-          <button type="button" class="user-dropdown-item" onclick="openTeamManagementModal()"><i class="fas fa-users-cog"></i> Gestionar Equipo</button>
-          <button type="button" class="user-dropdown-item" id="dropdownAdminLink" style="display: none;" onclick="switchTab('tab-admin')"><i class="fas fa-crown" style="color: #facc15;"></i> Panel SuperAdmin</button>
-          <div class="user-dropdown-divider"></div>
-          <button type="button" class="user-dropdown-item user-dropdown-logout" onclick="handleAuthLogout()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
-        </div>
-      </div>
-
-      <!-- 2. Caja de Vinculación Rápida de Kick (Sidebar Banner) -->
-      <div class="sidebar-kick-box" id="sidebarKickBanner">
-        <div class="kick-box-header">
-          <span class="kick-box-title">Conecta tu canal de Kick</span>
-          <p class="kick-box-subtitle">Asegura el funcionamiento futuro. Tarda unos 15 segundos.</p>
-        </div>
-        <button type="button" class="btn-connect-kick-sidebar" onclick="triggerKickOAuthLogin()">
-          Conectar KICK
+        <!-- Botón para esconder/colapsar sidebar -->
+        <button type="button" id="sidebarCollapseBtn" class="sidebar-collapse-btn" onclick="toggleSidebarCollapse()" title="Ocultar barra lateral">
+          <i class="fas fa-chevron-left"></i>
         </button>
       </div>
 
-      <!-- 3. Navegación Categorizada Completa -->
-      <nav class="sidebar-nav-scroll">
-        <ul class="nav-list">
-          <li class="nav-item active" data-tab="tab-dashboard">
-            <span class="nav-dot-active">●</span>
-            <span class="nav-label">Inicio</span>
-          </li>
+      <!-- 2. Lista de Funciones Originales de la Página -->
+      <ul class="nav-list">
+        <li class="nav-item active" data-tab="tab-dashboard">
+          <span class="nav-icon">📊</span>
+          <span>Panel General</span>
+        </li>
+        <li class="nav-item" data-tab="tab-sr">
+          <span class="nav-icon">🎵</span>
+          <span>Song Request</span>
+        </li>
+        <li class="nav-item" data-tab="tab-tts">
+          <span class="nav-icon">🗣️</span>
+          <span>Text-To-Speech (TTS)</span>
+        </li>
+        <li class="nav-item" data-tab="tab-overlays">
+          <span class="nav-icon">📺</span>
+          <span>Widgets y Escenas OBS</span>
+        </li>
+        <li class="nav-item" data-tab="tab-customize">
+          <span class="nav-icon">🎨</span>
+          <span>Personalizar Widgets</span>
+        </li>
+        <li class="nav-item" data-tab="tab-points">
+          <span class="nav-icon">⭐</span>
+          <span>Puntos de Canal</span>
+        </li>
+        <li class="nav-item" data-tab="tab-commands">
+          <span class="nav-icon">⚡</span>
+          <span>Comandos de Chat</span>
+        </li>
+        <li class="nav-item" data-tab="tab-clips">
+          <span class="nav-icon">🎬</span>
+          <span>Clips del Chat</span>
+        </li>
+        <li id="navItemAdmin" class="nav-item" data-tab="tab-admin" style="display: none; border-left: 3px solid #facc15; background: rgba(234, 179, 8, 0.08);">
+          <span class="nav-icon">👑</span>
+          <span style="color: #facc15; font-weight: 700;">Administración & Soporte</span>
+        </li>
+      </ul>
 
-          <!-- CUENTA -->
-          <li class="nav-category-header">CUENTA</li>
-          <li class="nav-item" onclick="openChannelSettingsModal()">
-            <span class="nav-icon"><i class="fas fa-cog"></i></span>
-            <span class="nav-label">Ajustes</span>
-          </li>
-          <li class="nav-item" onclick="openTeamManagementModal()">
-            <span class="nav-icon"><i class="fas fa-users"></i></span>
-            <span class="nav-label">Gestionar equipo</span>
-          </li>
-          <li class="nav-item nav-item-premium-gold" onclick="openPremiumModal()">
-            <span class="nav-icon" style="color: #f59e0b;"><i class="fas fa-crown"></i></span>
-            <span class="nav-label" style="color: #fbbf24; font-weight: 700;">Premium</span>
-          </li>
-
-          <!-- CHAT BOT -->
-          <li class="nav-category-header">CHAT BOT</li>
-          <li class="nav-item" data-tab="tab-clips">
-            <span class="nav-icon"><i class="fas fa-film"></i></span>
-            <span class="nav-label">Comando de clip</span>
-          </li>
-          <li class="nav-item" onclick="openScheduleMessagesModal()">
-            <span class="nav-icon"><i class="fas fa-clock"></i></span>
-            <span class="nav-label">Mensajes programados</span>
-          </li>
-          <li class="nav-item" data-tab="tab-commands">
-            <span class="nav-icon"><i class="fas fa-bolt"></i></span>
-            <span class="nav-label">Comandos personalizados</span>
-          </li>
-          <li class="nav-item" onclick="openModerationModal()">
-            <span class="nav-icon"><i class="fas fa-shield-alt"></i></span>
-            <span class="nav-label">Moderación</span>
-          </li>
-          <li class="nav-item" onclick="openAIAvatarModal()">
-            <span class="nav-icon"><i class="fas fa-robot"></i></span>
-            <span class="nav-label">Personaje IA</span>
-          </li>
-          <li class="nav-item" onclick="openAIImagesModal()">
-            <span class="nav-icon"><i class="fas fa-image"></i></span>
-            <span class="nav-label">Imágenes IA</span>
-          </li>
-          <li class="nav-item" onclick="openChatAlertsModal()">
-            <span class="nav-icon"><i class="fas fa-bell"></i></span>
-            <span class="nav-label">Alertas de chat</span>
-          </li>
-
-          <!-- TTS & AUDIO -->
-          <li class="nav-category-header">TTS &amp; AUDIO</li>
-          <li class="nav-item" data-tab="tab-sr">
-            <span class="nav-icon"><i class="fas fa-music"></i></span>
-            <span class="nav-label">Song Request</span>
-          </li>
-          <li class="nav-item" data-tab="tab-tts">
-            <span class="nav-icon"><i class="fas fa-volume-up"></i></span>
-            <span class="nav-label">Comandos TTS</span>
-          </li>
-          <li class="nav-item" data-tab="tab-points">
-            <span class="nav-icon"><i class="fas fa-coins"></i></span>
-            <span class="nav-label">Propinas &amp; Puntos</span>
-          </li>
-
-          <!-- WIDGETS -->
-          <li class="nav-category-header">WIDGETS</li>
-          <li class="nav-item" data-tab="tab-customize">
-            <span class="nav-icon"><i class="fas fa-code"></i></span>
-            <span class="nav-label">Editor de widgets</span>
-          </li>
-          <li class="nav-item" data-tab="tab-overlays">
-            <span class="nav-icon"><i class="fas fa-layer-group"></i></span>
-            <span class="nav-label">Biblioteca de widgets</span>
-          </li>
-
-          <!-- ADMIN -->
-          <li id="navItemAdmin" class="nav-item" data-tab="tab-admin" style="display: none; border-left: 3px solid #facc15; background: rgba(234, 179, 8, 0.08); margin-top: 8px;">
-            <span class="nav-icon"><i class="fas fa-crown" style="color: #facc15;"></i></span>
-            <span class="nav-label" style="color: #facc15; font-weight: 700;">Administración &amp; Soporte</span>
-          </li>
-        </ul>
-      </nav>
-
-      <!-- Sidebar Footer -->
+      <!-- 3. Pie del Sidebar -->
       <div class="sidebar-footer">
         <div class="status-badge">
           <div id="botStatusDot" class="status-dot"></div>
@@ -786,14 +736,14 @@
     <div class="main-wrapper">
       <header class="top-bar">
         <div class="top-bar-left">
-          <!-- Selector de Idioma (como en la captura) -->
-          <div class="lang-selector-pill" title="Idioma de interfaz">
-            <span class="lang-flag-icon">🇪🇸</span>
-            <span class="lang-code-text">Español</span>
-            <svg class="lang-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          <!-- Botón Hamburguesa / Alternar Sidebar (Permite esconder/mostrar el navbar) -->
+          <button type="button" id="topbarSidebarToggleBtn" class="topbar-toggle-btn" onclick="toggleSidebarCollapse()" title="Mostrar/Ocultar barra lateral">
+            <i class="fas fa-bars"></i>
+          </button>
+
+          <div class="page-title">
+            <h2 id="currentTabTitle">Panel General</h2>
           </div>
-          <!-- Título invisible para compatibilidad con scripts existentes -->
-          <h2 id="currentTabTitle" style="display: none;">Panel General</h2>
         </div>
 
         <div class="top-actions">
@@ -833,7 +783,7 @@
               Sesión</button>
           </div>
 
-          <!-- Logo OrbiBot en la parte superior derecha (como en la captura, omitiendo "kickbot") -->
+          <!-- Logo OrbiBot en la parte superior derecha -->
           <div class="topbar-brand" onclick="showLandingView()" title="OrbiBot - Volver al Inicio">
             <span class="topbar-brand-cross">❖</span>
             <span class="topbar-brand-title">OrbiBot</span>

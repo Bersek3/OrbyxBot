@@ -14104,3 +14104,50 @@ window.openModerationModal = openModerationModal;
 window.openAIAvatarModal = openAIAvatarModal;
 window.openAIImagesModal = openAIImagesModal;
 window.openChatAlertsModal = openChatAlertsModal;
+
+
+// =========================================================
+// CONTROLADOR DE ESCONDER / COLAPSAR SIDEBAR
+// =========================================================
+function toggleSidebarCollapse(forceState = null) {
+  const appView = document.getElementById('dashboardAppView');
+  const sidebar = document.getElementById('mainSidebar') || document.querySelector('.sidebar');
+  const backdrop = document.getElementById('sidebarBackdrop');
+  if (!sidebar) return;
+
+  const isMobile = window.innerWidth <= 900;
+
+  if (isMobile) {
+    const shouldOpen = typeof forceState === 'boolean' ? forceState : !sidebar.classList.contains('mobile-open');
+    if (shouldOpen) {
+      sidebar.classList.add('mobile-open');
+      if (backdrop) backdrop.classList.add('active');
+    } else {
+      sidebar.classList.remove('mobile-open');
+      if (backdrop) backdrop.classList.remove('active');
+    }
+  } else {
+    const shouldCollapse = typeof forceState === 'boolean' ? forceState : !(appView && appView.classList.contains('sidebar-collapsed'));
+    if (appView) {
+      if (shouldCollapse) {
+        appView.classList.add('sidebar-collapsed');
+        sidebar.classList.add('collapsed');
+        localStorage.setItem('orbibot_sidebar_collapsed', 'true');
+      } else {
+        appView.classList.remove('sidebar-collapsed');
+        sidebar.classList.remove('collapsed');
+        localStorage.setItem('orbibot_sidebar_collapsed', 'false');
+      }
+    }
+  }
+}
+window.toggleSidebarCollapse = toggleSidebarCollapse;
+
+// Restaurar estado de colapso en carga
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    if (window.innerWidth > 900 && localStorage.getItem('orbibot_sidebar_collapsed') === 'true') {
+      toggleSidebarCollapse(true);
+    }
+  } catch (e) {}
+});
