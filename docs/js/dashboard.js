@@ -6374,6 +6374,33 @@ async function loadTTSCommands() {
   renderTTSCommands(cachedTTSCommands);
 }
 
+
+function getVoiceAvatar(cmd) {
+  if (cmd.avatar) return cmd.avatar;
+  const name = (cmd.name || '').toLowerCase();
+  const c = (cmd.command || '').toLowerCase();
+
+  if (name.includes('anub') || c.includes('anub')) return 'https://images.unsplash.com/photo-1578632767115-351597cf2477?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('anuel') || c.includes('anuel')) return 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('ari') || c.includes('ari')) return 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('arturito') || c.includes('arturito')) return 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('babidi') || c.includes('babidi')) return 'https://images.unsplash.com/photo-1563089145-599997674d42?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('balanar') || c.includes('bala')) return 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('bart') || c.includes('bart')) return 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('messi') || c.includes('messi')) return 'https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('homero') || c.includes('homero')) return 'https://images.unsplash.com/photo-1579783902614-a3fb3927b675?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('auron') || c.includes('auron')) return 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('cr7') || name.includes('ronaldo') || c.includes('cr7')) return 'https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('goku') || c.includes('goku')) return 'https://images.unsplash.com/photo-1563089145-599997674d42?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('dross') || c.includes('dross')) return 'https://images.unsplash.com/photo-1509281373149-e957c6296406?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('bad bunny') || c.includes('badbunny')) return 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('rubius') || c.includes('rubius')) return 'https://images.unsplash.com/photo-1568602471122-7832951cc4c5?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('maduro') || c.includes('maduro')) return 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=100&auto=format&fit=crop&q=80';
+  if (name.includes('tiktok') || c.includes('tiktok')) return 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=100&auto=format&fit=crop&q=80';
+
+  return 'https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(cmd.name || cmd.command || 'voice');
+}
+
 function renderTTSCommands(commands) {
   const container = document.getElementById('ttsCommandsList');
   const countBadge = document.getElementById('ttsCmdCountBadge');
@@ -6425,11 +6452,13 @@ function renderTTSCommands(commands) {
     const isVip = permissions.includes('vip');
     const isSub = permissions.includes('sub');
     const isMod = permissions.includes('mod');
+    const avatarUrl = getVoiceAvatar(cmd);
 
     return `
       <div class="tts-cmd-row ${isEnabled ? '' : 'disabled'}" id="row_${cmd.id}" data-id="${cmd.id}">
-        <!-- Izquierda: Nombre, Previa y Trigger -->
+        <!-- Izquierda: Avatar, Nombre, Previa y Trigger -->
         <div class="tts-cmd-left">
+          <img src="${avatarUrl}" class="tts-cmd-avatar" alt="${escapeHtml(cmd.name)}" onerror="this.src='https://api.dicebear.com/7.x/bottts/svg?seed=voice'">
           <div class="tts-cmd-info">
             <div class="tts-cmd-name-row">
               <span class="tts-cmd-name">${escapeHtml(cmd.name)}</span>
@@ -6471,6 +6500,7 @@ function renderTTSCommands(commands) {
     `;
   }).join('');
 }
+
 
 function getFilteredVoicesLocal(query = '', category = 'all') {
   let list = mergeVoiceCatalogs(DEFAULT_VOICE_CATALOG, cachedVoiceLibrary || []);

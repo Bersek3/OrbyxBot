@@ -4744,3 +4744,466 @@ input[type=range]::-webkit-slider-thumb {
   filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.7));
   opacity: 0.9;
 }
+
+
+/* =========================================================
+   REDISEÑO TAB TTS: INTEGRACIÓN TTS POR COMANDOS (ESTILO MUESTRA)
+   ========================================================= */
+
+/* Hero Header */
+.tts-hero-header {
+  margin-bottom: 22px;
+}
+
+.tts-hero-title {
+  font-family: var(--font-heading, inherit);
+  font-size: 26px;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: -0.5px;
+  margin: 0 0 8px 0;
+}
+
+.tts-hero-desc {
+  font-size: 14px;
+  line-height: 1.55;
+  color: #94a3b8;
+  margin: 0;
+  max-width: 900px;
+}
+
+.tts-guide-highlight {
+  color: #a3e635;
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 4px;
+  transition: color 0.15s ease, text-decoration 0.15s ease;
+}
+
+.tts-guide-highlight:hover {
+  color: #bef264;
+  text-decoration: underline;
+}
+
+/* Sub-pestañas Nav */
+.tts-subtabs-nav {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 24px;
+  padding-bottom: 0;
+  overflow-x: auto;
+}
+
+.tts-subtab-btn {
+  background: none;
+  border: none;
+  padding: 10px 4px 14px 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+  color: #94a3b8;
+  cursor: pointer;
+  position: relative;
+  transition: color 0.2s ease;
+  white-space: nowrap;
+}
+
+.tts-subtab-btn:hover {
+  color: #ffffff;
+}
+
+.tts-subtab-btn.active {
+  color: #ffffff;
+}
+
+.tts-subtab-btn.active::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  right: 0;
+  height: 2.5px;
+  background: #a3e635;
+  border-radius: 999px;
+  box-shadow: 0 0 10px rgba(163, 230, 53, 0.5);
+}
+
+/* Paneles de Subtab */
+.tts-subtab-content {
+  display: none;
+}
+
+.tts-subtab-content.active {
+  display: block;
+}
+
+/* Contenedor principal de Comandos (Card idéntica a la imagen) */
+#tts-subtab-commands {
+  background: #0f1420;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 16px;
+  padding: 22px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Header del panel de comandos */
+.tts-commands-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.tts-header-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tts-section-title {
+  font-family: var(--font-heading, inherit);
+  font-size: 17.5px;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.tts-count-badge {
+  background: #182030;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.tts-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tts-sort-select {
+  background: #161c2b;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #cbd5e1;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.tts-sort-select:hover,
+.tts-sort-select:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+}
+
+.btn-tts-bulk-edit {
+  background: #1a2234;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-tts-bulk-edit:hover {
+  background: #232c42;
+  border-color: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+/* Lista de filas de comando */
+.tts-commands-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Fila individual estilo KickBot */
+.tts-cmd-row {
+  background: #141a28;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 12px 18px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tts-cmd-row:hover {
+  background: #182032;
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.tts-cmd-row.disabled {
+  opacity: 0.55;
+}
+
+/* Sección Izquierda: Avatar + Info */
+.tts-cmd-left {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 250px;
+  flex: 1;
+}
+
+.tts-cmd-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: #1e2638;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.tts-cmd-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tts-cmd-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tts-cmd-name {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #ffffff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.btn-audio-preview {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  transition: color 0.15s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-audio-preview:hover {
+  color: #a3e635;
+  transform: scale(1.15);
+}
+
+.tts-cmd-trigger-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tts-cmd-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.tts-cmd-input {
+  background: #0d121c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: #ffffff;
+  font-family: var(--font-mono, monospace);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 3px 10px;
+  width: 120px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.tts-cmd-input:focus {
+  border-color: #a3e635;
+  box-shadow: 0 0 0 2px rgba(163, 230, 53, 0.2);
+}
+
+/* Sección Central: QUIÉN PUEDE USARLA */
+.tts-cmd-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tts-roles-label {
+  font-size: 9.5px;
+  font-weight: 800;
+  color: #64748b;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.role-badges {
+  background: #0d121c;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  padding: 3px;
+  display: inline-flex;
+  gap: 3px;
+}
+
+.role-pill {
+  background: transparent;
+  border: none;
+  font-size: 11.5px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 6px;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.role-pill:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Estilos de pills activos con los colores exactos de la muestra */
+.role-pill[data-role="todos"].active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+.role-pill[data-role="vip"].active {
+  background: rgba(234, 179, 8, 0.15);
+  color: #fbbf24;
+}
+
+.role-pill[data-role="sub"].active {
+  background: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.role-pill[data-role="mod"].active {
+  background: rgba(168, 85, 247, 0.15);
+  color: #c084fc;
+}
+
+/* Sección Derecha: Switch y Eliminar */
+.tts-cmd-right {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-shrink: 0;
+}
+
+/* Switch Verde Lima (Estilo KickBot) */
+.lime-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  margin: 0;
+  cursor: pointer;
+}
+
+.lime-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.lime-slider {
+  position: absolute;
+  cursor: pointer;
+  inset: 0;
+  background-color: #1e2638;
+  border-radius: 999px;
+  transition: background-color 0.22s ease;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.lime-slider:before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 2px;
+  bottom: 2px;
+  background-color: #64748b;
+  border-radius: 50%;
+  transition: transform 0.22s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.22s ease;
+}
+
+.lime-switch input:checked + .lime-slider {
+  background-color: #a3e635;
+  box-shadow: 0 0 12px rgba(163, 230, 53, 0.45);
+}
+
+.lime-switch input:checked + .lime-slider:before {
+  transform: translateX(20px);
+  background-color: #0f172a;
+}
+
+/* Botón Eliminar Papelera */
+.btn-delete-cmd {
+  background: none;
+  border: none;
+  color: #64748b;
+  font-size: 14.5px;
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  transition: color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-delete-cmd:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.1);
+  transform: scale(1.1);
+}
+
+/* Responsive para pantallas pequeñas */
+@media (max-width: 860px) {
+  .tts-cmd-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .tts-cmd-center {
+    align-items: flex-start;
+    width: 100%;
+  }
+  .tts-cmd-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

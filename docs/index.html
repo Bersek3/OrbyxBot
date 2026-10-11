@@ -1267,37 +1267,25 @@
         <!-- ================= TAB 4: TEXT-TO-SPEECH (TTS MULTI-VOCES) ================= -->
         <section id="tab-tts" class="tab-pane">
 
-          <!-- Master Banner: Estado de TTS para el Chat -->
-          <div class="tts-master-toggle-banner" style="background: linear-gradient(135deg, rgba(20, 26, 44, 0.95), rgba(15, 20, 35, 0.98)); border: 1px solid rgba(0, 242, 254, 0.35); border-radius: 14px; padding: 16px 20px; margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 14px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);">
-            <div style="display: flex; align-items: center; gap: 14px;">
-              <div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(0, 242, 254, 0.12); border: 1px solid rgba(0, 242, 254, 0.3); display: flex; align-items: center; justify-content: center; font-size: 22px; color: #00f2fe;">
-                🗣️
-              </div>
-              <div>
-                <h3 style="font-size: 16px; font-weight: 800; color: #fff; margin: 0 0 3px 0; display: flex; align-items: center; gap: 8px;">
-                  <span>TTS en Vivo para el Chat</span>
-                  <span id="ttsMasterStatusBadge" class="badge" style="background: rgba(16, 185, 129, 0.2); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.4); font-size: 11px; padding: 2px 10px; border-radius: 999px; font-weight: 700;">● ACTIVO</span>
-                </h3>
-                <p style="font-size: 12.5px; color: var(--text-secondary); margin: 0;">
-                  Activa o desactiva la lectura de voz para comandos de espectadores en Twitch y Kick (<code style="color: #a3e635;">!tts</code>, <code style="color: #00f2fe;">!messi</code>, <code style="color: #facc15;">!homero</code>, etc.).
-                </p>
-              </div>
-            </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
-              <span id="ttsMasterToggleLabel" style="font-size: 13px; font-weight: 700; color: #10b981;">TTS ACTIVADO</span>
-              <label class="switch-label" style="margin: 0;">
-                <input type="checkbox" id="toggleTtsMasterChat" class="switch-input" checked onchange="handleTtsGlobalChatToggle(this.checked)">
-                <span class="switch-slider" style="width: 44px; height: 24px;"></span>
-              </label>
-            </div>
+          <!-- Encabezado estilo imagen de muestra: Integración TTS por Comandos -->
+          <div class="tts-hero-header">
+            <h1 class="tts-hero-title">Integración TTS por Comandos</h1>
+            <p class="tts-hero-desc">
+              Tu público toma el control del audio enviando comandos al chat. Asocia diferentes tonos y estilos para que la comunidad interactúe contigo como nunca antes.
+              <a href="javascript:void(0)" onclick="switchTtsSubTab('tts-subtab-queue')" class="tts-guide-highlight">Guía de configuración</a>
+            </p>
+            <!-- Checkbox oculto para mantener compatibilidad total con scripts -->
+            <input type="checkbox" id="toggleTtsMasterChat" class="switch-input" checked style="display: none;" onchange="handleTtsGlobalChatToggle(this.checked)">
+            <span id="ttsMasterStatusBadge" style="display: none;"></span>
+            <span id="ttsMasterToggleLabel" style="display: none;"></span>
           </div>
 
-          <!-- Sub-pestañas de Navegación TTS (Estilo TTS Monster / SoundAlerts) -->
+          <!-- Sub-pestañas de Navegación TTS (Estilo idéntico a la muestra) -->
           <div class="tts-subtabs-nav">
             <button class="tts-subtab-btn active" data-subtab="tts-subtab-commands" onclick="switchTtsSubTab('tts-subtab-commands')">Comandos</button>
             <button class="tts-subtab-btn" data-subtab="tts-subtab-library" onclick="switchTtsSubTab('tts-subtab-library')">Biblioteca de voces</button>
-            <button class="tts-subtab-btn" data-subtab="tts-subtab-queue" onclick="switchTtsSubTab('tts-subtab-queue')">Cola de solicitudes</button>
             <button class="tts-subtab-btn" data-subtab="tts-subtab-moderation" onclick="switchTtsSubTab('tts-subtab-moderation')">Moderación</button>
+            <button class="tts-subtab-btn" data-subtab="tts-subtab-queue" onclick="switchTtsSubTab('tts-subtab-queue')">Configuración</button>
           </div>
 
           <!-- 1. SUB-PESTAÑA: COMANDOS (TUS COMANDOS DE TTS) -->
@@ -1314,9 +1302,7 @@
                   <option value="recent">Más recientes</option>
                   <option value="enabled">Solo activos</option>
                 </select>
-                <button id="btnSwitchToVoiceLib" class="btn-tts-action btn-accent" onclick="switchTtsSubTab('tts-subtab-library')">
-                  <i class="fas fa-plus"></i> Añadir voz
-                </button>
+                <button id="btnSwitchToVoiceLib" class="btn-tts-bulk-edit" onclick="switchTtsSubTab('tts-subtab-library')">Edición masiva</button>
               </div>
             </div>
 
