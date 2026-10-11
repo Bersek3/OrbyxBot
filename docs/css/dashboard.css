@@ -4706,3 +4706,41 @@ input[type=range]::-webkit-slider-thumb {
     margin-left: 0 !important;
   }
 }
+
+
+/* =========================================================
+   ICONOS SVG DEL NAVBAR (PUBLIC/ASSETS/ICON)
+   ========================================================= */
+
+.nav-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-svg-icon {
+  width: 19px;
+  height: 19px;
+  object-fit: contain;
+  opacity: 0.72;
+  transition: transform 0.2s ease, opacity 0.2s ease, filter 0.2s ease;
+  pointer-events: none;
+}
+
+.nav-item:hover .nav-svg-icon {
+  transform: scale(1.1);
+  opacity: 1;
+}
+
+.nav-item.active .nav-svg-icon {
+  opacity: 1;
+  filter: drop-shadow(0 0 6px rgba(0, 242, 254, 0.7));
+}
+
+#navItemAdmin .nav-svg-icon {
+  filter: drop-shadow(0 0 6px rgba(250, 204, 21, 0.7));
+  opacity: 0.9;
+}
