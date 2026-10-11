@@ -917,82 +917,7 @@
               </div>
             </div>
 
-            <!-- 3. Conecta con nosotros -->
-            <div class="dash-card dash-card-social">
-              <h3 class="dash-card-title" style="margin-bottom: 16px;">Conecta con nosotros</h3>
-
-              <div class="dash-social-list">
-                <a href="https://discord.gg/orbibot" target="_blank" class="dash-social-item">
-                  <div class="social-icon-box discord"><i class="fab fa-discord"></i></div>
-                  <div class="social-info">
-                    <span class="social-name">Discord</span>
-                    <span class="social-sub"><span class="online-dot"></span> 3089 en línea</span>
-                  </div>
-                  <span class="social-arrow">→</span>
-                </a>
-
-                <a href="https://x.com/orbibotapp" target="_blank" class="dash-social-item">
-                  <div class="social-icon-box x-twitter"><i class="fab fa-x-twitter"></i></div>
-                  <div class="social-info">
-                    <span class="social-name">X (Twitter)</span>
-                    <span class="social-sub">@orbibotapp</span>
-                  </div>
-                  <span class="social-arrow">→</span>
-                </a>
-
-                <a href="https://youtube.com/@orbibot" target="_blank" class="dash-social-item">
-                  <div class="social-icon-box youtube"><i class="fab fa-youtube"></i></div>
-                  <div class="social-info">
-                    <span class="social-name">YouTube</span>
-                    <span class="social-sub">Tutoriales y novedades</span>
-                  </div>
-                  <span class="social-arrow">→</span>
-                </a>
-
-                <a href="mailto:soporte@orbibot.com" class="dash-social-item">
-                  <div class="social-icon-box email"><i class="fas fa-envelope"></i></div>
-                  <div class="social-info">
-                    <span class="social-name">Soporte por email</span>
-                    <span class="social-sub">¡Estamos para ayudarte! soporte@orbibot.com</span>
-                  </div>
-                  <span class="social-arrow">→</span>
-                </a>
-              </div>
             </div>
-
-            <!-- 4. OrbiBot Premium -->
-            <div class="dash-card dash-card-premium">
-              <div class="premium-badge-tag">
-                <i class="fas fa-sparkles"></i> PRUEBA GRATIS
-              </div>
-              <h3 class="premium-title">OrbiBot Premium</h3>
-
-              <div class="premium-pricing-box">
-                <div class="premium-price-left">
-                  <span class="price-period">PRIMEROS 30 DÍAS</span>
-                  <div class="price-val-row">
-                    <span class="price-free">Gratis</span>
-                    <span class="price-strike">$9.99</span>
-                  </div>
-                </div>
-                <div class="premium-price-badge">30 DÍAS GRATIS</div>
-              </div>
-
-              <div class="premium-features-grid">
-                <div class="premium-feature-item"><i class="fas fa-check"></i> Todas las funciones premium</div>
-                <div class="premium-feature-item"><i class="fas fa-check"></i> Reembolsable durante 7 días</div>
-                <div class="premium-feature-item"><i class="fas fa-check"></i> TTS con IA y clonado de voz</div>
-                <div class="premium-feature-item"><i class="fas fa-check"></i> Cancela cuando quieras</div>
-                <div class="premium-feature-item"><i class="fas fa-check"></i> Límites más altos</div>
-                <div class="premium-feature-item"><i class="fas fa-check"></i> Soporte prioritario</div>
-              </div>
-
-              <button type="button" class="btn-premium-trial" onclick="openPremiumModal()">
-                Empieza tu prueba gratis de 30 días
-              </button>
-            </div>
-          </div>
-
 
           <!-- ================= VINCULACIÓN DE CUENTAS (KICK & TWITCH) ================= -->
           <div class="card platform-linking-container"
@@ -3648,41 +3573,6 @@ console.log('Widget personalizado cargado');"></textarea>
 
   <!-- Toast Container -->
   
-  <!-- ================= MODAL PREMIUM TRIAL ================= -->
-  <div id="premiumTrialModal" class="modal-backdrop" style="display: none;">
-    <div class="modal-card" style="max-width: 520px; border: 1px solid rgba(245, 158, 11, 0.4); background: linear-gradient(180deg, #181d28 0%, #0e121a 100%);">
-      <div class="modal-header" style="border-bottom: 1px solid rgba(245, 158, 11, 0.2);">
-        <div style="display: flex; align-items: center; gap: 10px;">
-          <span style="font-size: 24px;">👑</span>
-          <div>
-            <h3 style="font-size: 18px; font-weight: 800; color: #fbbf24;">OrbiBot Premium - 30 Días Gratis</h3>
-            <p style="font-size: 12px; color: #94a3b8;">Desbloquea todo el potencial de tu transmisión en vivo</p>
-          </div>
-        </div>
-        <button type="button" class="modal-close" onclick="closePremiumModal()">✕</button>
-      </div>
-      <div class="modal-body" style="padding: 20px 24px;">
-        <div style="background: rgba(245, 158, 11, 0.08); border: 1px dashed rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 16px; margin-bottom: 18px; text-align: center;">
-          <span style="font-size: 12px; font-weight: 800; color: #f59e0b; letter-spacing: 1px; display: block;">PRUEBA SIN RIESGO</span>
-          <div style="font-size: 32px; font-weight: 900; color: #fff; margin: 4px 0;">$0 <span style="font-size: 14px; text-decoration: line-through; color: #94a3b8;">$9.99/mes</span></div>
-          <p style="font-size: 12.5px; color: #cbd5e1; margin: 0;">Disfruta de 30 días de acceso total sin compromiso. Cancela en 1 clic.</p>
-        </div>
-        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; color: #e2e8f0;">
-          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Más de 2,500 voces ultrarrealistas con clonado de voz IA</li>
-          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Sin límite en comandos personalizados ni clips generados</li>
-          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Alertas y ruleta OBS en resolución 4K y 60 FPS</li>
-          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Soporte técnico prioritario 24/7 vía Discord</li>
-        </ul>
-      </div>
-      <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
-        <button type="button" class="btn btn-secondary btn-sm" onclick="closePremiumModal()">Cerrar</button>
-        <button type="button" class="btn" onclick="activatePremiumTrial()" style="background: linear-gradient(90deg, #f59e0b, #d97706); color: #000; font-weight: 800; border-radius: 8px; padding: 10px 20px;">
-          ✨ Activar 30 Días Gratis
-        </button>
-      </div>
-    </div>
-  </div>
-
   <!-- ================= MODAL MENSAJES PROGRAMADOS ================= -->
   <div id="scheduleMessagesModal" class="modal-backdrop" style="display: none;">
     <div class="modal-card" style="max-width: 500px; background: #131722; border: 1px solid rgba(255,255,255,0.1);">
