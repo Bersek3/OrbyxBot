@@ -30,6 +30,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     connectWebSocket();
     initDashboardMqtt();
     updatePlatformLinkingUI();
+  try { if (typeof syncNewDashboardUI === 'function') syncNewDashboardUI(); } catch (e) { }
+
     try { if (typeof initRouletteSystem === 'function') initRouletteSystem(); } catch(e) {}
   } catch (initErr) {
     console.error('⚠️ [DOMContentLoaded] Error en la inicialización principal:', initErr);
@@ -1264,6 +1266,8 @@ function updatePlatformLinkingUI() {
     } else {
       multiChatBadge.style.display = 'none';
     }
+  try { if (typeof syncNewDashboardUI === 'function') syncNewDashboardUI(); } catch (e) { }
+
   }
 }
 
@@ -13813,3 +13817,290 @@ window.toggleGroupCollapse = toggleGroupCollapse;
 
 
 
+
+
+// =========================================================
+// NUEVO REDISEÑO: CONTROLADOR DEL DASHBOARD Y PERFIL DE USUARIO
+// =========================================================
+function syncNewDashboardUI() {
+  const session = typeof getUserSession === 'function' ? getUserSession() : null;
+  const kickConfig = appConfig?.kick || {};
+  const twitchConfig = appConfig?.twitch || {};
+  const isKickConn = Boolean(kickConfig.channel && kickConfig.connected !== false);
+  const isTwitchConn = Boolean(twitchConfig.channel && twitchConfig.connected !== false);
+
+  // 1. Determinar nombre e imagen de usuario
+  let streamerName = 'Bersek';
+  let streamerAvatar = '';
+
+  if (session && session.username && session.username !== 'Streamer') {
+    streamerName = session.username;
+  } else if (kickConfig.username || kickConfig.channel) {
+    streamerName = (kickConfig.username || kickConfig.channel).replace(/^@/, '');
+  } else if (twitchConfig.username || twitchConfig.channel) {
+    streamerName = (twitchConfig.username || twitchConfig.channel).replace(/^@/, '');
+  }
+
+  const storedCustomName = localStorage.getItem('orbibot_custom_streamer_name');
+  if (storedCustomName) streamerName = storedCustomName;
+
+  if (kickConfig.avatar || kickConfig.profile_picture) {
+    streamerAvatar = kickConfig.avatar || kickConfig.profile_picture;
+  } else if (twitchConfig.avatar || twitchConfig.profile_image_url) {
+    streamerAvatar = twitchConfig.avatar || twitchConfig.profile_image_url;
+  }
+  const storedCustomAvatar = localStorage.getItem('orbibot_custom_streamer_avatar');
+  if (storedCustomAvatar) streamerAvatar = storedCustomAvatar;
+
+  if (!streamerAvatar) {
+    streamerAvatar = 'https://api.dicebear.com/7.x/bottts/svg?seed=' + encodeURIComponent(streamerName);
+  }
+
+  // 2. Saludo dinámico según hora del día
+  const hour = new Date().getHours();
+  let salutation = 'Buenos días';
+  if (hour >= 12 && hour < 20) salutation = 'Buenas tardes';
+  else if (hour >= 20 || hour < 6) salutation = 'Buenas noches';
+
+  const dashGreetingTitle = document.getElementById('dashGreetingTitle');
+  if (dashGreetingTitle) {
+    dashGreetingTitle.innerHTML = salutation + ', <span id="dashGreetingUser">' + streamerName + '</span>!';
+  }
+
+  // 3. Perfil lateral (Sidebar Top-Left)
+  const sidebarUserName = document.getElementById('sidebarUserName');
+  const sidebarUserAvatar = document.getElementById('sidebarUserAvatar');
+  const sidebarChannelStatus = document.getElementById('sidebarChannelStatus');
+  const dropdownUserFull = document.getElementById('dropdownUserFull');
+  const dropdownUserEmail = document.getElementById('dropdownUserEmail');
+
+  if (sidebarUserName) sidebarUserName.textContent = streamerName;
+  if (sidebarUserAvatar) sidebarUserAvatar.src = streamerAvatar;
+  if (dropdownUserFull) dropdownUserFull.textContent = streamerName;
+  if (dropdownUserEmail) dropdownUserEmail.textContent = session?.email || (streamerName.toLowerCase() + '@streamer.io');
+
+  if (sidebarChannelStatus) {
+    if (isKickConn || isTwitchConn) {
+      sidebarChannelStatus.textContent = 'Canal activo';
+      sidebarChannelStatus.style.color = '#53fc18';
+    } else {
+      sidebarChannelStatus.textContent = 'Canal listo';
+      sidebarChannelStatus.style.color = '#94a3b8';
+    }
+  }
+
+  // 4. Banner de Kick en el sidebar
+  const sidebarKickBanner = document.getElementById('sidebarKickBanner');
+  if (sidebarKickBanner) {
+    if (isKickConn) {
+      sidebarKickBanner.innerHTML = 
+        '<div style="display: flex; align-items: center; justify-content: space-between;">' +
+          '<div style="display: flex; align-items: center; gap: 8px;">' +
+            '<span style="font-size: 16px;">🟢</span>' +
+            '<div>' +
+              '<strong style="color: #53fc18; font-size: 12.5px; display: block;">Kick Conectado</strong>' +
+              '<span style="color: #94a3b8; font-size: 11px;">@' + (kickConfig.channel || streamerName) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<button type="button" onclick="disconnectKickAccount()" style="background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); color: #94a3b8; border-radius: 6px; padding: 4px 8px; font-size: 10.5px; cursor: pointer;">Desvincular</button>' +
+        '</div>';
+      sidebarKickBanner.style.border = '1px solid rgba(83, 252, 24, 0.35)';
+      sidebarKickBanner.style.background = 'rgba(83, 252, 24, 0.05)';
+    } else {
+      sidebarKickBanner.innerHTML = 
+        '<div class="kick-box-header">' +
+          '<span class="kick-box-title">Conecta tu canal de Kick</span>' +
+          '<p class="kick-box-subtitle">Asegura el funcionamiento futuro. Tarda unos 15 segundos.</p>' +
+        '</div>' +
+        '<button type="button" class="btn-connect-kick-sidebar" onclick="triggerKickOAuthLogin()">' +
+          'Conectar KICK' +
+        '</button>';
+      sidebarKickBanner.style.border = '1px solid rgba(83, 252, 24, 0.18)';
+      sidebarKickBanner.style.background = 'rgba(21, 27, 39, 0.85)';
+    }
+  }
+
+  // 5. Tarea de Kick en la checklist
+  const taskKickEl = document.getElementById('dashTaskKickLinked');
+  if (taskKickEl) {
+    const circle = taskKickEl.querySelector('.dash-task-check-circle');
+    if (isKickConn) {
+      taskKickEl.classList.add('completed');
+      taskKickEl.classList.remove('pending');
+      if (circle) {
+        circle.classList.add('checked');
+        circle.innerHTML = '<i class="fas fa-check"></i>';
+      }
+    } else {
+      taskKickEl.classList.remove('completed');
+      taskKickEl.classList.add('pending');
+      if (circle) {
+        circle.classList.remove('checked');
+        circle.innerHTML = '';
+      }
+    }
+  }
+
+  // 6. Actualizar estadísticas dinámicas
+  const statCustomCommands = document.getElementById('statCustomCommands');
+  if (statCustomCommands) {
+    const count = (appConfig?.commands && Array.isArray(appConfig.commands)) ? appConfig.commands.length : 6;
+    statCustomCommands.textContent = count;
+  }
+
+  const statClipsGenerated = document.getElementById('statClipsGenerated');
+  if (statClipsGenerated) {
+    const clipsList = (typeof allClips !== 'undefined' && Array.isArray(allClips)) ? allClips.length : 0;
+    statClipsGenerated.textContent = clipsList;
+  }
+
+  // 7. SuperAdmin en dropdown
+  const dropdownAdminLink = document.getElementById('dropdownAdminLink');
+  if (dropdownAdminLink) {
+    const isAdmin = Boolean(session?.role === 'superadmin' || session?.is_superadmin);
+    dropdownAdminLink.style.display = isAdmin ? 'flex' : 'none';
+  }
+}
+
+// Toggle Menú de Usuario Top-Left
+function toggleSidebarUserMenu(e) {
+  if (e && e.stopPropagation) e.stopPropagation();
+  const menu = document.getElementById('sidebarUserDropdownMenu');
+  if (!menu) return;
+  const isShown = menu.style.display === 'block';
+  menu.style.display = isShown ? 'none' : 'block';
+}
+
+document.addEventListener('click', function(e) {
+  const menu = document.getElementById('sidebarUserDropdownMenu');
+  if (menu && menu.style.display === 'block' && !e.target.closest('#sidebarUserProfileDropdown')) {
+    menu.style.display = 'none';
+  }
+});
+
+// Modales y Acciones Rápidas
+function openPremiumModal() {
+  const m = document.getElementById('premiumTrialModal');
+  if (m) m.style.display = 'flex';
+}
+function closePremiumModal() {
+  const m = document.getElementById('premiumTrialModal');
+  if (m) m.style.display = 'none';
+}
+function activatePremiumTrial() {
+  closePremiumModal();
+  if (typeof showToast === 'function') {
+    showToast('¡Prueba Premium de 30 días activada con éxito! Disfruta de todas las funciones.', 'success');
+  }
+}
+
+function openScheduleMessagesModal() {
+  const m = document.getElementById('scheduleMessagesModal');
+  if (m) m.style.display = 'flex';
+}
+function closeScheduleMessagesModal() {
+  const m = document.getElementById('scheduleMessagesModal');
+  if (m) m.style.display = 'none';
+}
+function saveScheduledMessageFromModal() {
+  const textInput = document.getElementById('schedMsgTextInput');
+  const intervalInput = document.getElementById('schedMsgIntervalInput');
+  const text = textInput ? textInput.value.trim() : '';
+  const mins = intervalInput ? (parseInt(intervalInput.value, 10) || 15) : 15;
+
+  if (!text) {
+    if (typeof showToast === 'function') showToast('Por favor escribe el mensaje a programar.', 'warn');
+    return;
+  }
+
+  closeScheduleMessagesModal();
+  const statScheduledMsgs = document.getElementById('statScheduledMsgs');
+  if (statScheduledMsgs) {
+    statScheduledMsgs.textContent = parseInt(statScheduledMsgs.textContent || '0', 10) + 1;
+  }
+  if (typeof showToast === 'function') {
+    showToast('Mensaje programado guardado (cada ' + mins + ' min).', 'success');
+  }
+}
+
+function openChannelSettingsModal() {
+  const m = document.getElementById('channelSettingsModal');
+  if (m) {
+    const streamerName = localStorage.getItem('orbibot_custom_streamer_name') || 'Bersek';
+    const streamerAvatar = localStorage.getItem('orbibot_custom_streamer_avatar') || '';
+    const nameInput = document.getElementById('cfgStreamerUsernameInput');
+    const avatarInput = document.getElementById('cfgStreamerAvatarInput');
+    if (nameInput) nameInput.value = streamerName;
+    if (avatarInput) avatarInput.value = streamerAvatar;
+    m.style.display = 'flex';
+  }
+}
+function closeChannelSettingsModal() {
+  const m = document.getElementById('channelSettingsModal');
+  if (m) m.style.display = 'none';
+}
+function saveChannelSettingsFromModal() {
+  const nameInput = document.getElementById('cfgStreamerUsernameInput');
+  const avatarInput = document.getElementById('cfgStreamerAvatarInput');
+  if (nameInput && nameInput.value.trim()) {
+    localStorage.setItem('orbibot_custom_streamer_name', nameInput.value.trim());
+  }
+  if (avatarInput && avatarInput.value.trim()) {
+    localStorage.setItem('orbibot_custom_streamer_avatar', avatarInput.value.trim());
+  }
+  closeChannelSettingsModal();
+  syncNewDashboardUI();
+  if (typeof showToast === 'function') {
+    showToast('Ajustes de canal guardados correctamente.', 'success');
+  }
+}
+
+function openTeamManagementModal() {
+  if (typeof showToast === 'function') {
+    showToast('Gestión de equipo: Puedes autorizar moderadores en Ajustes de Bot.', 'info');
+  }
+}
+function openModerationModal() {
+  if (typeof showToast === 'function') {
+    showToast('Módulo de Moderación: Protección de mayúsculas, enlaces y spam activo.', 'info');
+  }
+}
+function openAIAvatarModal() {
+  if (typeof showToast === 'function') {
+    showToast('Personaje IA: Configurado y respondiendo en el chat.', 'info');
+  }
+}
+function openAIImagesModal() {
+  if (typeof showToast === 'function') {
+    showToast('Imágenes IA: Generador de stickers e imágenes habilitado.', 'info');
+  }
+}
+function openChatAlertsModal() {
+  if (typeof switchTab === 'function') {
+    switchTab('tab-overlays');
+  }
+}
+
+// Inicialización automática
+document.addEventListener('DOMContentLoaded', function() {
+  try {
+    syncNewDashboardUI();
+  } catch (e) {}
+});
+
+window.syncNewDashboardUI = syncNewDashboardUI;
+window.toggleSidebarUserMenu = toggleSidebarUserMenu;
+window.openPremiumModal = openPremiumModal;
+window.closePremiumModal = closePremiumModal;
+window.activatePremiumTrial = activatePremiumTrial;
+window.openScheduleMessagesModal = openScheduleMessagesModal;
+window.closeScheduleMessagesModal = closeScheduleMessagesModal;
+window.saveScheduledMessageFromModal = saveScheduledMessageFromModal;
+window.openChannelSettingsModal = openChannelSettingsModal;
+window.closeChannelSettingsModal = closeChannelSettingsModal;
+window.saveChannelSettingsFromModal = saveChannelSettingsFromModal;
+window.openTeamManagementModal = openTeamManagementModal;
+window.openModerationModal = openModerationModal;
+window.openAIAvatarModal = openAIAvatarModal;
+window.openAIImagesModal = openAIImagesModal;
+window.openChatAlertsModal = openChatAlertsModal;

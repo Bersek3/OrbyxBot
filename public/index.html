@@ -644,53 +644,135 @@
   <div id="dashboardAppView" style="display: none; width: 100%; min-height: 100vh;">
     <!-- ================= SIDEBAR ================= -->
     <aside class="sidebar">
-      <div class="brand" onclick="showLandingView()" style="cursor: pointer; display: flex; align-items: center; gap: 12px;">
-        <img src="./assets/logo.png" alt="OrbyxBot Logo" class="brand-logo-img" style="width: 36px; height: 36px; object-fit: contain; filter: drop-shadow(0 0 10px rgba(0, 242, 254, 0.4));">
-        <div class="brand-text">
-          <h1>OrbyxBot</h1>
-          <span>Kick & Twitch</span>
+      <!-- 1. Perfil Superior Izquierdo del Usuario -->
+      <div class="sidebar-user-card" id="sidebarUserProfileDropdown" onclick="toggleSidebarUserMenu(event)">
+        <div class="sidebar-user-avatar-wrap">
+          <img id="sidebarUserAvatar" class="sidebar-user-avatar" src="https://api.dicebear.com/7.x/bottts/svg?seed=Bersek" alt="Avatar">
+          <span class="sidebar-status-dot online"></span>
+        </div>
+        <div class="sidebar-user-meta">
+          <div class="sidebar-user-title-row">
+            <span id="sidebarUserName" class="sidebar-username">Bersek</span>
+            <svg class="sidebar-chevron" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <span id="sidebarChannelStatus" class="sidebar-user-status">Canal activo</span>
+        </div>
+
+        <!-- Menú Desplegable de Usuario -->
+        <div id="sidebarUserDropdownMenu" class="sidebar-user-dropdown-menu" style="display: none;">
+          <div class="user-dropdown-header">
+            <strong id="dropdownUserFull">Bersek</strong>
+            <span id="dropdownUserEmail">bersek@streamer.io</span>
+          </div>
+          <div class="user-dropdown-divider"></div>
+          <button type="button" class="user-dropdown-item" onclick="openChannelSettingsModal()"><i class="fas fa-sliders-h"></i> Ajustes de Canal</button>
+          <button type="button" class="user-dropdown-item" onclick="openTeamManagementModal()"><i class="fas fa-users-cog"></i> Gestionar Equipo</button>
+          <button type="button" class="user-dropdown-item" id="dropdownAdminLink" style="display: none;" onclick="switchTab('tab-admin')"><i class="fas fa-crown" style="color: #facc15;"></i> Panel SuperAdmin</button>
+          <div class="user-dropdown-divider"></div>
+          <button type="button" class="user-dropdown-item user-dropdown-logout" onclick="handleAuthLogout()"><i class="fas fa-sign-out-alt"></i> Cerrar Sesión</button>
         </div>
       </div>
 
-      <ul class="nav-list">
-        <li class="nav-item active" data-tab="tab-dashboard">
-          <span class="nav-icon">📊</span>
-          <span>Panel General</span>
-        </li>
-        <li class="nav-item" data-tab="tab-sr">
-          <span class="nav-icon">🎵</span>
-          <span>Song Request</span>
-        </li>
-        <li class="nav-item" data-tab="tab-tts">
-          <span class="nav-icon">🗣️</span>
-          <span>Text-To-Speech (TTS)</span>
-        </li>
-        <li class="nav-item" data-tab="tab-overlays">
-          <span class="nav-icon">📺</span>
-          <span>Widgets y Escenas OBS</span>
-        </li>
-        <li class="nav-item" data-tab="tab-customize">
-          <span class="nav-icon">🎨</span>
-          <span>Personalizar Widgets</span>
-        </li>
-        <li class="nav-item" data-tab="tab-points">
-          <span class="nav-icon">⭐</span>
-          <span>Puntos de Canal</span>
-        </li>
-        <li class="nav-item" data-tab="tab-commands">
-          <span class="nav-icon">⚡</span>
-          <span>Comandos de Chat</span>
-        </li>
-        <li class="nav-item" data-tab="tab-clips">
-          <span class="nav-icon">🎬</span>
-          <span>Clips del Chat</span>
-        </li>
-        <li id="navItemAdmin" class="nav-item" data-tab="tab-admin" style="display: none; border-left: 3px solid #facc15; background: rgba(234, 179, 8, 0.08);">
-          <span class="nav-icon">👑</span>
-          <span style="color: #facc15; font-weight: 700;">Administración & Soporte</span>
-        </li>
-      </ul>
+      <!-- 2. Caja de Vinculación Rápida de Kick (Sidebar Banner) -->
+      <div class="sidebar-kick-box" id="sidebarKickBanner">
+        <div class="kick-box-header">
+          <span class="kick-box-title">Conecta tu canal de Kick</span>
+          <p class="kick-box-subtitle">Asegura el funcionamiento futuro. Tarda unos 15 segundos.</p>
+        </div>
+        <button type="button" class="btn-connect-kick-sidebar" onclick="triggerKickOAuthLogin()">
+          Conectar KICK
+        </button>
+      </div>
 
+      <!-- 3. Navegación Categorizada Completa -->
+      <nav class="sidebar-nav-scroll">
+        <ul class="nav-list">
+          <li class="nav-item active" data-tab="tab-dashboard">
+            <span class="nav-dot-active">●</span>
+            <span class="nav-label">Inicio</span>
+          </li>
+
+          <!-- CUENTA -->
+          <li class="nav-category-header">CUENTA</li>
+          <li class="nav-item" onclick="openChannelSettingsModal()">
+            <span class="nav-icon"><i class="fas fa-cog"></i></span>
+            <span class="nav-label">Ajustes</span>
+          </li>
+          <li class="nav-item" onclick="openTeamManagementModal()">
+            <span class="nav-icon"><i class="fas fa-users"></i></span>
+            <span class="nav-label">Gestionar equipo</span>
+          </li>
+          <li class="nav-item nav-item-premium-gold" onclick="openPremiumModal()">
+            <span class="nav-icon" style="color: #f59e0b;"><i class="fas fa-crown"></i></span>
+            <span class="nav-label" style="color: #fbbf24; font-weight: 700;">Premium</span>
+          </li>
+
+          <!-- CHAT BOT -->
+          <li class="nav-category-header">CHAT BOT</li>
+          <li class="nav-item" data-tab="tab-clips">
+            <span class="nav-icon"><i class="fas fa-film"></i></span>
+            <span class="nav-label">Comando de clip</span>
+          </li>
+          <li class="nav-item" onclick="openScheduleMessagesModal()">
+            <span class="nav-icon"><i class="fas fa-clock"></i></span>
+            <span class="nav-label">Mensajes programados</span>
+          </li>
+          <li class="nav-item" data-tab="tab-commands">
+            <span class="nav-icon"><i class="fas fa-bolt"></i></span>
+            <span class="nav-label">Comandos personalizados</span>
+          </li>
+          <li class="nav-item" onclick="openModerationModal()">
+            <span class="nav-icon"><i class="fas fa-shield-alt"></i></span>
+            <span class="nav-label">Moderación</span>
+          </li>
+          <li class="nav-item" onclick="openAIAvatarModal()">
+            <span class="nav-icon"><i class="fas fa-robot"></i></span>
+            <span class="nav-label">Personaje IA</span>
+          </li>
+          <li class="nav-item" onclick="openAIImagesModal()">
+            <span class="nav-icon"><i class="fas fa-image"></i></span>
+            <span class="nav-label">Imágenes IA</span>
+          </li>
+          <li class="nav-item" onclick="openChatAlertsModal()">
+            <span class="nav-icon"><i class="fas fa-bell"></i></span>
+            <span class="nav-label">Alertas de chat</span>
+          </li>
+
+          <!-- TTS & AUDIO -->
+          <li class="nav-category-header">TTS &amp; AUDIO</li>
+          <li class="nav-item" data-tab="tab-sr">
+            <span class="nav-icon"><i class="fas fa-music"></i></span>
+            <span class="nav-label">Song Request</span>
+          </li>
+          <li class="nav-item" data-tab="tab-tts">
+            <span class="nav-icon"><i class="fas fa-volume-up"></i></span>
+            <span class="nav-label">Comandos TTS</span>
+          </li>
+          <li class="nav-item" data-tab="tab-points">
+            <span class="nav-icon"><i class="fas fa-coins"></i></span>
+            <span class="nav-label">Propinas &amp; Puntos</span>
+          </li>
+
+          <!-- WIDGETS -->
+          <li class="nav-category-header">WIDGETS</li>
+          <li class="nav-item" data-tab="tab-customize">
+            <span class="nav-icon"><i class="fas fa-code"></i></span>
+            <span class="nav-label">Editor de widgets</span>
+          </li>
+          <li class="nav-item" data-tab="tab-overlays">
+            <span class="nav-icon"><i class="fas fa-layer-group"></i></span>
+            <span class="nav-label">Biblioteca de widgets</span>
+          </li>
+
+          <!-- ADMIN -->
+          <li id="navItemAdmin" class="nav-item" data-tab="tab-admin" style="display: none; border-left: 3px solid #facc15; background: rgba(234, 179, 8, 0.08); margin-top: 8px;">
+            <span class="nav-icon"><i class="fas fa-crown" style="color: #facc15;"></i></span>
+            <span class="nav-label" style="color: #facc15; font-weight: 700;">Administración &amp; Soporte</span>
+          </li>
+        </ul>
+      </nav>
+
+      <!-- Sidebar Footer -->
       <div class="sidebar-footer">
         <div class="status-badge">
           <div id="botStatusDot" class="status-dot"></div>
@@ -703,14 +785,30 @@
     <!-- ================= MAIN WRAPPER ================= -->
     <div class="main-wrapper">
       <header class="top-bar">
-        <div class="page-title">
-          <h2 id="currentTabTitle">Panel General</h2>
+        <div class="top-bar-left">
+          <!-- Selector de Idioma (como en la captura) -->
+          <div class="lang-selector-pill" title="Idioma de interfaz">
+            <span class="lang-flag-icon">🇪🇸</span>
+            <span class="lang-code-text">Español</span>
+            <svg class="lang-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 9l6 6 6-6"/></svg>
+          </div>
+          <!-- Título invisible para compatibilidad con scripts existentes -->
+          <h2 id="currentTabTitle" style="display: none;">Panel General</h2>
         </div>
+
         <div class="top-actions">
           <!-- Píldora de Superadmin -->
           <div id="adminSuperBadge"
             style="display:none; align-items:center; gap:6px; padding:4px 12px; background:linear-gradient(90deg, rgba(234,179,8,0.2), rgba(249,115,22,0.2)); border:1px solid rgba(234,179,8,0.5); border-radius:999px; font-size:12px; font-weight:800; color:#facc15; box-shadow:0 0 12px rgba(234,179,8,0.3);">
             <span>👑 SUPERADMIN</span>
+          </div>
+
+          <!-- Indicador de Autoguardado Automático -->
+          <div id="autoSaveIndicator"
+            style="display:inline-flex; align-items:center; gap:8px; padding:6px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:999px; font-size:12px; color:var(--text-muted); font-weight:600; transition:all 0.3s ease;">
+            <span id="autoSaveDot"
+              style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 8px rgba(16,185,129,0.6); transition:background 0.3s ease, box-shadow 0.3s ease;"></span>
+            <span id="autoSaveText">Autoguardado activo</span>
           </div>
 
           <!-- Botón Iniciar Sesión con Twitch (visible cuando no está conectado) -->
@@ -735,12 +833,10 @@
               Sesión</button>
           </div>
 
-          <!-- Indicador de Autoguardado Automático -->
-          <div id="autoSaveIndicator"
-            style="display:inline-flex; align-items:center; gap:8px; padding:6px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:999px; font-size:12px; color:var(--text-muted); font-weight:600; transition:all 0.3s ease;">
-            <span id="autoSaveDot"
-              style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 8px rgba(16,185,129,0.6); transition:background 0.3s ease, box-shadow 0.3s ease;"></span>
-            <span id="autoSaveText">Autoguardado activo</span>
+          <!-- Logo OrbiBot en la parte superior derecha (como en la captura, omitiendo "kickbot") -->
+          <div class="topbar-brand" onclick="showLandingView()" title="OrbiBot - Volver al Inicio">
+            <span class="topbar-brand-cross">❖</span>
+            <span class="topbar-brand-title">OrbiBot</span>
           </div>
         </div>
       </header>
@@ -771,6 +867,182 @@
 
         <!-- ================= TAB 1: DASHBOARD ================= -->
         <section id="tab-dashboard" class="tab-pane active">
+
+          <!-- ================= HERO SALUDO PERSONALIZADO ================= -->
+          <div class="dash-welcome-hero">
+            <h1 class="dash-welcome-title" id="dashGreetingTitle">Buenos días, <span id="dashGreetingUser">Bersek</span>!</h1>
+            <p class="dash-welcome-subtitle">Bienvenido a tu panel de OrbiBot.</p>
+          </div>
+
+          <!-- ================= BENTO GRID DASHBOARD (ESTILO CAPTURA) ================= -->
+          <div class="dash-bento-grid">
+            <!-- 1. Tareas de configuración -->
+            <div class="dash-card dash-card-tasks">
+              <div class="dash-card-header">
+                <h3 class="dash-card-title">Tareas de configuración</h3>
+                <span class="dash-tasks-counter" id="dashTasksCounter">6/8</span>
+              </div>
+              <div class="dash-progress-track">
+                <div class="dash-progress-fill" id="dashTasksProgressBar" style="width: 75%;"></div>
+              </div>
+              <p class="dash-tasks-pending-label" id="dashTasksPendingText">2 tareas pendientes</p>
+
+              <div class="dash-tasks-list">
+                <div class="dash-task-item pending" onclick="openScheduleMessagesModal()">
+                  <div class="dash-task-check-circle"></div>
+                  <span class="dash-task-label">Crea un mensaje programado</span>
+                  <span class="dash-task-arrow">→</span>
+                </div>
+                <div class="dash-task-item pending" onclick="switchTab('tab-clips')">
+                  <div class="dash-task-check-circle"></div>
+                  <span class="dash-task-label">Crea tu primer clip</span>
+                  <span class="dash-task-arrow">→</span>
+                </div>
+                <div class="dash-task-item completed" onclick="openChannelSettingsModal()">
+                  <div class="dash-task-check-circle checked"><i class="fas fa-check"></i></div>
+                  <span class="dash-task-label">Introduce tu nombre de usuario</span>
+                </div>
+                <div class="dash-task-item completed" id="dashTaskKickLinked" onclick="triggerKickOAuthLogin()">
+                  <div class="dash-task-check-circle checked"><i class="fas fa-check"></i></div>
+                  <span class="dash-task-label">Vincula tu cuenta de Kick</span>
+                </div>
+                <div class="dash-task-item completed" onclick="switchTab('tab-commands')">
+                  <div class="dash-task-check-circle checked"><i class="fas fa-check"></i></div>
+                  <span class="dash-task-label">Crea un comando personalizado</span>
+                </div>
+                <div class="dash-task-item completed" onclick="switchTab('tab-tts')">
+                  <div class="dash-task-check-circle checked"><i class="fas fa-check"></i></div>
+                  <span class="dash-task-label">Configura el TTS</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2. Tus estadísticas -->
+            <div class="dash-card dash-card-stats">
+              <div class="dash-card-header">
+                <h3 class="dash-card-title">Tus estadísticas</h3>
+                <span class="dash-member-since" id="dashMemberSinceText">Miembro desde 19 Aug 2024</span>
+              </div>
+
+              <div class="dash-stats-list">
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Clips generados</span>
+                  <span class="dash-stat-value" id="statClipsGenerated">0</span>
+                </div>
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Visualizaciones totales de clips</span>
+                  <span class="dash-stat-value" id="statClipViews">0</span>
+                </div>
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Comandos personalizados</span>
+                  <span class="dash-stat-value" id="statCustomCommands">6</span>
+                </div>
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Mensajes programados</span>
+                  <span class="dash-stat-value" id="statScheduledMsgs">0</span>
+                </div>
+
+                <div class="dash-stats-section-divider">ÚLTIMOS 30 DÍAS</div>
+
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Mensajes moderados</span>
+                  <span class="dash-stat-value" id="statModMessages">0</span>
+                </div>
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Mensajes TTS</span>
+                  <span class="dash-stat-value" id="statTtsMessages">0</span>
+                </div>
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Imágenes IA generadas</span>
+                  <span class="dash-stat-value" id="statAiImages">0</span>
+                </div>
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Mensajes del personaje IA</span>
+                  <span class="dash-stat-value" id="statAiBotMessages">0</span>
+                </div>
+                <div class="dash-stat-row">
+                  <span class="dash-stat-name">Propinas recibidas</span>
+                  <span class="dash-stat-value" id="statTipsReceived">0</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. Conecta con nosotros -->
+            <div class="dash-card dash-card-social">
+              <h3 class="dash-card-title" style="margin-bottom: 16px;">Conecta con nosotros</h3>
+
+              <div class="dash-social-list">
+                <a href="https://discord.gg/orbibot" target="_blank" class="dash-social-item">
+                  <div class="social-icon-box discord"><i class="fab fa-discord"></i></div>
+                  <div class="social-info">
+                    <span class="social-name">Discord</span>
+                    <span class="social-sub"><span class="online-dot"></span> 3089 en línea</span>
+                  </div>
+                  <span class="social-arrow">→</span>
+                </a>
+
+                <a href="https://x.com/orbibotapp" target="_blank" class="dash-social-item">
+                  <div class="social-icon-box x-twitter"><i class="fab fa-x-twitter"></i></div>
+                  <div class="social-info">
+                    <span class="social-name">X (Twitter)</span>
+                    <span class="social-sub">@orbibotapp</span>
+                  </div>
+                  <span class="social-arrow">→</span>
+                </a>
+
+                <a href="https://youtube.com/@orbibot" target="_blank" class="dash-social-item">
+                  <div class="social-icon-box youtube"><i class="fab fa-youtube"></i></div>
+                  <div class="social-info">
+                    <span class="social-name">YouTube</span>
+                    <span class="social-sub">Tutoriales y novedades</span>
+                  </div>
+                  <span class="social-arrow">→</span>
+                </a>
+
+                <a href="mailto:soporte@orbibot.com" class="dash-social-item">
+                  <div class="social-icon-box email"><i class="fas fa-envelope"></i></div>
+                  <div class="social-info">
+                    <span class="social-name">Soporte por email</span>
+                    <span class="social-sub">¡Estamos para ayudarte! soporte@orbibot.com</span>
+                  </div>
+                  <span class="social-arrow">→</span>
+                </a>
+              </div>
+            </div>
+
+            <!-- 4. OrbiBot Premium -->
+            <div class="dash-card dash-card-premium">
+              <div class="premium-badge-tag">
+                <i class="fas fa-sparkles"></i> PRUEBA GRATIS
+              </div>
+              <h3 class="premium-title">OrbiBot Premium</h3>
+
+              <div class="premium-pricing-box">
+                <div class="premium-price-left">
+                  <span class="price-period">PRIMEROS 30 DÍAS</span>
+                  <div class="price-val-row">
+                    <span class="price-free">Gratis</span>
+                    <span class="price-strike">$9.99</span>
+                  </div>
+                </div>
+                <div class="premium-price-badge">30 DÍAS GRATIS</div>
+              </div>
+
+              <div class="premium-features-grid">
+                <div class="premium-feature-item"><i class="fas fa-check"></i> Todas las funciones premium</div>
+                <div class="premium-feature-item"><i class="fas fa-check"></i> Reembolsable durante 7 días</div>
+                <div class="premium-feature-item"><i class="fas fa-check"></i> TTS con IA y clonado de voz</div>
+                <div class="premium-feature-item"><i class="fas fa-check"></i> Cancela cuando quieras</div>
+                <div class="premium-feature-item"><i class="fas fa-check"></i> Límites más altos</div>
+                <div class="premium-feature-item"><i class="fas fa-check"></i> Soporte prioritario</div>
+              </div>
+
+              <button type="button" class="btn-premium-trial" onclick="openPremiumModal()">
+                Empieza tu prueba gratis de 30 días
+              </button>
+            </div>
+          </div>
+
 
           <!-- ================= VINCULACIÓN DE CUENTAS (KICK & TWITCH) ================= -->
           <div class="card platform-linking-container"
@@ -3425,7 +3697,93 @@ console.log('Widget personalizado cargado');"></textarea>
   </div>
 
   <!-- Toast Container -->
-  <div id="toastContainer" class="toast-container"></div>
+  
+  <!-- ================= MODAL PREMIUM TRIAL ================= -->
+  <div id="premiumTrialModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-card" style="max-width: 520px; border: 1px solid rgba(245, 158, 11, 0.4); background: linear-gradient(180deg, #181d28 0%, #0e121a 100%);">
+      <div class="modal-header" style="border-bottom: 1px solid rgba(245, 158, 11, 0.2);">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 24px;">👑</span>
+          <div>
+            <h3 style="font-size: 18px; font-weight: 800; color: #fbbf24;">OrbiBot Premium - 30 Días Gratis</h3>
+            <p style="font-size: 12px; color: #94a3b8;">Desbloquea todo el potencial de tu transmisión en vivo</p>
+          </div>
+        </div>
+        <button type="button" class="modal-close" onclick="closePremiumModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 20px 24px;">
+        <div style="background: rgba(245, 158, 11, 0.08); border: 1px dashed rgba(245, 158, 11, 0.3); border-radius: 12px; padding: 16px; margin-bottom: 18px; text-align: center;">
+          <span style="font-size: 12px; font-weight: 800; color: #f59e0b; letter-spacing: 1px; display: block;">PRUEBA SIN RIESGO</span>
+          <div style="font-size: 32px; font-weight: 900; color: #fff; margin: 4px 0;">$0 <span style="font-size: 14px; text-decoration: line-through; color: #94a3b8;">$9.99/mes</span></div>
+          <p style="font-size: 12.5px; color: #cbd5e1; margin: 0;">Disfruta de 30 días de acceso total sin compromiso. Cancela en 1 clic.</p>
+        </div>
+        <ul style="list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; color: #e2e8f0;">
+          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Más de 2,500 voces ultrarrealistas con clonado de voz IA</li>
+          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Sin límite en comandos personalizados ni clips generados</li>
+          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Alertas y ruleta OBS en resolución 4K y 60 FPS</li>
+          <li style="display: flex; align-items: center; gap: 10px;"><i class="fas fa-check" style="color: #10b981;"></i> Soporte técnico prioritario 24/7 vía Discord</li>
+        </ul>
+      </div>
+      <div class="modal-footer" style="padding: 16px 24px; border-top: 1px solid rgba(255,255,255,0.08); display: flex; justify-content: space-between; align-items: center;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closePremiumModal()">Cerrar</button>
+        <button type="button" class="btn" onclick="activatePremiumTrial()" style="background: linear-gradient(90deg, #f59e0b, #d97706); color: #000; font-weight: 800; border-radius: 8px; padding: 10px 20px;">
+          ✨ Activar 30 Días Gratis
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL MENSAJES PROGRAMADOS ================= -->
+  <div id="scheduleMessagesModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-card" style="max-width: 500px; background: #131722; border: 1px solid rgba(255,255,255,0.1);">
+      <div class="modal-header">
+        <h3 style="font-size: 17px; font-weight: 700; color: #fff;"><i class="fas fa-clock" style="color: #00f2fe;"></i> Mensaje Programado</h3>
+        <button type="button" class="modal-close" onclick="closeScheduleMessagesModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;">
+        <div>
+          <label style="display: block; font-size: 12.5px; color: #cbd5e1; margin-bottom: 6px; font-weight: 600;">Texto del Mensaje:</label>
+          <input type="text" id="schedMsgTextInput" class="form-control" placeholder="Ej: ¡Únete a nuestro Discord oficial! https://discord.gg/streamer">
+        </div>
+        <div>
+          <label style="display: block; font-size: 12.5px; color: #cbd5e1; margin-bottom: 6px; font-weight: 600;">Intervalo (cada cuántos minutos):</label>
+          <input type="number" id="schedMsgIntervalInput" class="form-control" value="15" min="5" max="180">
+        </div>
+        <div style="font-size: 12px; color: #94a3b8; background: rgba(0, 242, 254, 0.05); padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(0, 242, 254, 0.15);">
+          ℹ️ El bot enviará este mensaje automáticamente a tu chat de Twitch y Kick en el intervalo configurado.
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 14px 24px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeScheduleMessagesModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveScheduledMessageFromModal()" style="background: #00f2fe; color: #000; font-weight: 700;">Guardar Mensaje</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= MODAL AJUSTES DE CANAL ================= -->
+  <div id="channelSettingsModal" class="modal-backdrop" style="display: none;">
+    <div class="modal-card" style="max-width: 480px; background: #131722; border: 1px solid rgba(255,255,255,0.1);">
+      <div class="modal-header">
+        <h3 style="font-size: 17px; font-weight: 700; color: #fff;"><i class="fas fa-sliders-h" style="color: #53fc18;"></i> Ajustes de Canal</h3>
+        <button type="button" class="modal-close" onclick="closeChannelSettingsModal()">✕</button>
+      </div>
+      <div class="modal-body" style="padding: 20px 24px; display: flex; flex-direction: column; gap: 14px;">
+        <div>
+          <label style="display: block; font-size: 12.5px; color: #cbd5e1; margin-bottom: 6px; font-weight: 600;">Nombre de Usuario Streamer:</label>
+          <input type="text" id="cfgStreamerUsernameInput" class="form-control" placeholder="Ej: Bersek">
+        </div>
+        <div>
+          <label style="display: block; font-size: 12.5px; color: #cbd5e1; margin-bottom: 6px; font-weight: 600;">URL Avatar / Foto de Perfil:</label>
+          <input type="text" id="cfgStreamerAvatarInput" class="form-control" placeholder="https://ejemplo.com/avatar.png">
+        </div>
+      </div>
+      <div class="modal-footer" style="padding: 14px 24px; display: flex; justify-content: flex-end; gap: 10px;">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="closeChannelSettingsModal()">Cancelar</button>
+        <button type="button" class="btn btn-primary btn-sm" onclick="saveChannelSettingsFromModal()" style="background: #53fc18; color: #000; font-weight: 800;">Guardar Ajustes</button>
+      </div>
+    </div>
+  </div>
+<div id="toastContainer" class="toast-container"></div>
 
   <!-- TMI.js for browser-based Twitch connection (GitHub Pages fallback) -->
   <script src="./js/tmi.min.js"></script>
