@@ -753,14 +753,6 @@
             <span>👑 SUPERADMIN</span>
           </div>
 
-          <!-- Indicador de Autoguardado Automático -->
-          <div id="autoSaveIndicator"
-            style="display:inline-flex; align-items:center; gap:8px; padding:6px 14px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08); border-radius:999px; font-size:12px; color:var(--text-muted); font-weight:600; transition:all 0.3s ease;">
-            <span id="autoSaveDot"
-              style="display:inline-block; width:8px; height:8px; border-radius:50%; background:#10b981; box-shadow:0 0 8px rgba(16,185,129,0.6); transition:background 0.3s ease, box-shadow 0.3s ease;"></span>
-            <span id="autoSaveText">Autoguardado activo</span>
-          </div>
-
           <!-- Botón Iniciar Sesión con Twitch (visible cuando no está conectado) -->
           <button id="topTwitchLoginBtn" class="btn"
             style="background: #9146FF; color: #fff; font-weight: 700; gap: 8px; box-shadow: 0 4px 15px rgba(145, 70, 255, 0.4);">
@@ -770,18 +762,6 @@
             </svg>
             <span>Iniciar Sesión con Twitch</span>
           </button>
-
-          <!-- Píldora de Cuenta OrbiBot (Usuario Logueado) -->
-          <div id="authAccountPill"
-            style="display:none; align-items:center; gap:8px; padding:4px 12px; background:rgba(0,242,254,0.12); border:1px solid rgba(0,242,254,0.3); border-radius:999px; font-size:12px; font-weight:700;">
-            <span style="color:#00f2fe;">👤</span>
-            <span id="authAccountEmail"
-              style="color:#fff; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Mi Cuenta</span>
-            <button id="authLogoutBtn" type="button" onclick="handleAuthLogout()"
-              title="Cerrar sesión y volver al inicio" class="btn btn-sm btn-secondary"
-              style="padding:2px 8px; font-size:11px; margin-left:4px; border-radius:999px; background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid rgba(239,68,68,0.3);">Cerrar
-              Sesión</button>
-          </div>
 
           <!-- Logo OrbiBot en la parte superior derecha -->
           <div class="topbar-brand" onclick="showLandingView()" title="OrbiBot - Volver al Inicio">
