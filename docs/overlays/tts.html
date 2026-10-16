@@ -669,21 +669,25 @@
       }
     } catch(e) {}
 
-    fetch('/api/config')
+    const configEndpoint = myStreamerKey ? ('/api/config?streamer=' + encodeURIComponent(myStreamerKey)) : '/api/config';
+    fetch(configEndpoint)
       .then(r => r.json())
       .then(cfg => {
         if (cfg?.tts && cfg.tts.enabled !== undefined) {
           ttsEnabled = cfg.tts.enabled !== false;
         }
-        if (cfg?.twitch?.channel) {
-          const tw = cfg.twitch.channel.toLowerCase().replace(/^#/, '');
-          linkedChannels.add(tw);
-          if (!channel && !myStreamerKey) initTwitchChatIRC(tw);
-        }
-        if (cfg?.kick?.channel || cfg?.kick?.username) {
-          const kickName = (cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, '');
-          linkedChannels.add(kickName);
-          if (!kickParam) initKickChatPusher(kickName);
+        // Solo suscribir si el overlay NO tiene parámetros de canal en la URL
+        if (!channel && !kickParam) {
+          if (cfg?.twitch?.channel) {
+            const tw = cfg.twitch.channel.toLowerCase().replace(/^#/, '');
+            linkedChannels.add(tw);
+            initTwitchChatIRC(tw);
+          }
+          if (cfg?.kick?.channel || cfg?.kick?.username) {
+            const kickName = (cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, '');
+            linkedChannels.add(kickName);
+            initKickChatPusher(kickName);
+          }
         }
       })
       .catch(() => {});
@@ -1037,13 +1041,16 @@
     let wsReconnectTimeout = null;
 
     function connectChannels() {
-      if (channel || myStreamerKey) {
-        initTwitchChatIRC(channel || myStreamerKey);
-      }
-
       const kickToConnect = kickParam || (urlParams.get('kick') || '').toLowerCase().replace(/^@/, '').trim();
       if (kickToConnect) {
         initKickChatPusher(kickToConnect);
+      } else if (channel) {
+        // Fallback: si no vino ?kick= pero vino ?channel= (ej: channel=caoz), conectar también a Kick
+        initKickChatPusher(channel);
+      }
+
+      if (channel) {
+        initTwitchChatIRC(channel);
       }
 
       // 1. Local WebSocket con reconexión automática en segundo plano

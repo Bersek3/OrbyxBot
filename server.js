@@ -342,7 +342,16 @@ app.post('/api/backup/sync', async (req, res) => {
 });
 
 // Config
-app.get('/api/config', (req, res) => {
+app.get('/api/config', async (req, res) => {
+  const { streamer } = req.query;
+  if (streamer) {
+    try {
+      const full = await storage.getStreamerFullConfig(streamer);
+      if (full && full.config) {
+        return res.json(full.config);
+      }
+    } catch(e) {}
+  }
   res.json(storage.getConfig());
 });
 
