@@ -1093,7 +1093,7 @@ function updatePlatformLinkingUI() {
   let twitchAvatar = '';
 
   if (adminTargetStreamerId) {
-    twitchChannel = (appConfig?.twitch?.channel || appConfig?.twitch?.login || adminTargetStreamerId || '').toLowerCase().replace(/^#/, '');
+    twitchChannel = (appConfig?.twitch?.channel || appConfig?.twitch?.login || '').toLowerCase().replace(/^#/, '');
     isTwitchConn = Boolean(twitchChannel && appConfig?.twitch?.connected !== false);
     twitchDisplayName = appConfig?.twitch?.displayName || twitchChannel;
     twitchAvatar = appConfig?.twitch?.profileImage || 'https://static-cdn.jtvnw.net/user-default-pictures-uv/75305d54-c7cc-40d1-bb60-aee8f1560db5-profile_image-300x300.png';
@@ -12125,11 +12125,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     targetCfg.twitch.oauthToken = targetTwitchAuth.oauthToken || targetCfg.twitch.oauthToken || '';
     targetCfg.twitch.clientId = targetTwitchAuth.clientId || targetCfg.twitch.clientId || '';
     targetCfg.twitch.connected = true;
-  } else if (!targetCfg.twitch.channel && !streamerId.includes('@')) {
-    targetCfg.twitch.channel = streamerId;
-    targetCfg.twitch.displayName = displayName || streamerId;
-    targetCfg.twitch.connected = true;
-  }
+  } else if (!targetTwitchAuth) {\r\n    targetCfg.twitch.connected = false;\r\n    targetCfg.twitch.channel = '';\r\n  }
 
   if (targetKickAuth && (targetKickAuth.channel || targetKickAuth.username)) {
     if (!targetCfg.kick) targetCfg.kick = {};
