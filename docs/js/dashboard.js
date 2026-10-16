@@ -11471,7 +11471,7 @@ async function loadStreamersSupportList() {
               id: sId,
               tokens: new Set(),
               emails: new Set(sId.includes('@') ? [sId.toLowerCase()] : []),
-              twitches: new Set(!sId.includes('@') && !sId.includes('-') ? [sId.toLowerCase()] : []),
+              twitches: new Set(),
               kicks: new Set(),
               displayNames: new Set(),
               updatedAt: new Date(0).toISOString()
@@ -11913,7 +11913,7 @@ function handleAdminUnlinkMenu(streamerId, displayName, twitch, kick, relatedIds
   }
 
   if (options.length === 1) {
-    handleAdminUnlinkPlatform(streamerId, options[0], options[0] === 'kick' ? kick : twitch, relatedIdsSafe);
+    handleAdminUnlinkPlatform(streamerId, options[0], options[0] === 'kick' ? kick : twitch, relatedIdsSafe, displayName);
     return;
   }
 
@@ -11921,18 +11921,18 @@ function handleAdminUnlinkMenu(streamerId, displayName, twitch, kick, relatedIds
   if (!choice) return;
 
   if (choice.trim() === '1') {
-    handleAdminUnlinkPlatform(streamerId, 'kick', kick, relatedIdsSafe);
+    handleAdminUnlinkPlatform(streamerId, 'kick', kick, relatedIdsSafe, displayName);
   } else if (choice.trim() === '2') {
-    handleAdminUnlinkPlatform(streamerId, 'twitch', twitch, relatedIdsSafe);
+    handleAdminUnlinkPlatform(streamerId, 'twitch', twitch, relatedIdsSafe, displayName);
   } else if (choice.trim() === '3') {
-    handleAdminUnlinkPlatform(streamerId, 'kick', kick, relatedIdsSafe).then(() => {
+    handleAdminUnlinkPlatform(streamerId, 'kick', kick, relatedIdsSafe, displayName).then(() => {
       handleAdminUnlinkPlatform(streamerId, 'twitch', twitch, relatedIdsSafe);
     });
   }
 }
 
 // 4.5 Desvincular plataforma (Kick o Twitch) de un streamer
-async function handleAdminUnlinkPlatform(streamerId, platform, channelName, relatedIdsSafe) {
+async function handleAdminUnlinkPlatform(streamerId, platform, channelName, relatedIdsSafe, displayName) {
   if (!streamerId) return;
   if (!isUserSuperAdmin) {
     showToast('Acceso denegado: solo Superadministradores.', 'error');
@@ -11940,7 +11940,8 @@ async function handleAdminUnlinkPlatform(streamerId, platform, channelName, rela
   }
 
   const pName = platform.toUpperCase();
-  const confirmMsg = '¿Desvincular ' + pName + ' (@' + (channelName || streamerId) + ') de la cuenta de ' + (displayName || streamerId) + '?\n\nEl usuario podrá volver a vincular su canal nuevamente.';
+  const userLabel = (typeof displayName !== 'undefined' && displayName) ? displayName : (channelName || streamerId);
+  const confirmMsg = '¿Desvincular ' + pName + ' (@' + (channelName || streamerId) + ') de la cuenta de ' + userLabel + '?\n\nEl usuario podrá volver a vincular su canal nuevamente.';
   if (!confirm(confirmMsg)) return;
 
   let relatedIds = [streamerId];

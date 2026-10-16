@@ -943,17 +943,12 @@
           kws.onopen = () => {
             kickPusherConnected = true;
             console.log(`✅ [TTS Overlay] Conectado exitosamente a Kick Pusher @${clean} (Room: ${targetRoom})`);
+            // Suscripción al chatroom v2 numérico exclusivo
             kws.send(JSON.stringify({
               event: 'pusher:subscribe',
               data: { auth: '', channel: `chatrooms.${targetRoom}.v2` }
             }));
-            if (chatroomId && String(chatroomId) !== String(clean)) {
-              kws.send(JSON.stringify({
-                event: 'pusher:subscribe',
-                data: { auth: '', channel: `chatrooms.${clean}.v2` }
-              }));
-            }
-            if (channelId) {
+            if (channelId && String(channelId) !== String(targetRoom)) {
               kws.send(JSON.stringify({
                 event: 'pusher:subscribe',
                 data: { auth: '', channel: `channel.${channelId}` }
@@ -969,6 +964,12 @@
           kws.onmessage = (ev) => {
             try {
               const pkt = JSON.parse(ev.data);
+              if (pkt.event === 'pusher:ping') {
+                if (kws.readyState === WebSocket.OPEN) {
+                  kws.send(JSON.stringify({ event: 'pusher:pong', data: {} }));
+                }
+                return;
+              }
               if (pkt.event === 'App\\Events\\ChatMessageEvent' || pkt.event === 'ChatMessageEvent') {
                 const msgData = typeof pkt.data === 'string' ? JSON.parse(pkt.data) : pkt.data;
                 const sender = msgData.sender || {};
@@ -976,6 +977,7 @@
                 const message = msgData.content || '';
                 const trimmed = (message || '').trim();
                 if (!trimmed) return;
+                console.log(`💬 [TTS Overlay] Mensaje de chat en Kick (@${username}): "${trimmed}"`);
 
                 const firstWord = trimmed.split(' ')[0].toLowerCase();
                 // Ignorar comandos de Song Request u otros
@@ -1049,7 +1051,11 @@
         initKickChatPusher(channel);
       }
 
-      if (channel) {
+      // Solo conectar a Twitch si hay canal explícito de Twitch o si no es un widget puramente de Kick
+      const twitchParam = (urlParams.get('twitch') || '').toLowerCase().replace(/^#/, '').trim();
+      if (twitchParam) {
+        initTwitchChatIRC(twitchParam);
+      } else if (channel && !kickParam) {
         initTwitchChatIRC(channel);
       }
 
@@ -1202,6 +1208,12 @@
     }
 
     connectChannels();
+  </script>
+
+  <script>
+    // Auto-desbloqueo de audio ante cualquier clic o toque en el overlay
+    document.addEventListener('click', () => { if (typeof unlockAudio === 'function') unlockAudio(); }, { passive: true });
+    document.addEventListener('touchstart', () => { if (typeof unlockAudio === 'function') unlockAudio(); }, { passive: true });
   </script>
 </body>
 </html>
