@@ -2305,6 +2305,115 @@ class StorageService {
 
     return { success: true, deletedIds: idList };
   }
+
+  /**
+   * Desvincula una plataforma específica (kick o twitch) de un usuario/streamer
+   * Limpia tanto de MongoDB como de Supabase sus tokens, auth y channel config.
+   */
+  async unlinkStreamerPlatform(streamerId, platform = 'kick', relatedIds = []) {
+    const ids = new Set();
+    if (streamerId) ids.add(streamerId.toString().trim());
+    if (Array.isArray(relatedIds)) {
+      relatedIds.forEach(id => { if (id) ids.add(id.toString().trim()); });
+    }
+    const idList = Array.from(ids);
+    if (idList.length === 0) throw new Error('streamerId es requerido.');
+
+    const cleanPlatform = platform.toLowerCase().trim();
+    if (!['kick', 'twitch'].includes(cleanPlatform)) {
+      throw new Error('Plataforma no válida. Solo "kick" o "twitch".');
+    }
+
+    const authKey = cleanPlatform === 'kick' ? 'kick_auth' : 'twitch_auth';
+    const now = new Date().toISOString();
+
+    console.log(`🔌 [Storage] Desvinculando plataforma ${cleanPlatform} para IDs:`, idList);
+
+    // 1. Eliminar auth key en MongoDB
+    if (this.isMongoReady && this.mongoDb) {
+      try {
+        await this.mongoDb.collection('settings').deleteMany({
+          streamer_id: { $in: idList },
+          key: authKey
+        });
+
+        // Limpiar dentro del config
+        for (const id of idList) {
+          const configDoc = await this.mongoDb.collection('settings').findOne({ streamer_id: id, key: 'config' });
+          if (configDoc && configDoc.value) {
+            const cfg = configDoc.value;
+            if (cleanPlatform === 'kick') {
+              cfg.kick = {
+                channel: '', username: '', profile_picture: '', userId: '',
+                accessToken: '', refreshToken: '', clientId: process.env.KICK_CLIENT_ID || '01M0VT0JC58YQEVGRHM8JFXQX3',
+                connected: false
+              };
+            } else {
+              cfg.twitch = {
+                channel: '', botUsername: '', oauthToken: '',
+                clientId: process.env.TWITCH_CLIENT_ID || 'yw1vr664ichms8an2x5lhji58v7ozk',
+                connected: false
+              };
+            }
+            await this.mongoDb.collection('settings').updateOne(
+              { streamer_id: id, key: 'config' },
+              { $set: { value: cfg, updated_at: now } }
+            );
+          }
+        }
+      } catch (e) {
+        console.warn(`⚠️ [Storage] Error al desvincular ${cleanPlatform} en MongoDB:`, e.message);
+      }
+    }
+
+    // 2. Eliminar auth key y actualizar config en Supabase
+    if (this.supabase) {
+      try {
+        await this.supabase
+          .from('orbibot_settings')
+          .delete()
+          .in('streamer_id', idList)
+          .eq('key', authKey);
+
+        const { data: configs } = await this.supabase
+          .from('orbibot_settings')
+          .select('streamer_id, value')
+          .in('streamer_id', idList)
+          .eq('key', 'config');
+
+        if (Array.isArray(configs)) {
+          for (const row of configs) {
+            const cfg = row.value || {};
+            if (cleanPlatform === 'kick') {
+              cfg.kick = {
+                channel: '', username: '', profile_picture: '', userId: '',
+                accessToken: '', refreshToken: '', clientId: process.env.KICK_CLIENT_ID || '01M0VT0JC58YQEVGRHM8JFXQX3',
+                connected: false
+              };
+            } else {
+              cfg.twitch = {
+                channel: '', botUsername: '', oauthToken: '',
+                clientId: process.env.TWITCH_CLIENT_ID || 'yw1vr664ichms8an2x5lhji58v7ozk',
+                connected: false
+              };
+            }
+            await this.supabase
+              .from('orbibot_settings')
+              .upsert({
+                streamer_id: row.streamer_id,
+                key: 'config',
+                value: cfg,
+                updated_at: now
+              }, { onConflict: 'streamer_id,key' });
+          }
+        }
+      } catch (e) {
+        console.warn(`⚠️ [Storage] Error al desvincular ${cleanPlatform} en Supabase:`, e.message);
+      }
+    }
+
+    return { success: true, platform: cleanPlatform, streamerIds: idList };
+  }
 }
 
 module.exports = new StorageService();

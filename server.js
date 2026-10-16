@@ -508,6 +508,22 @@ app.post(['/api/admin/streamer/:streamerId/delete', '/api/admin/streamer/delete'
   }
 });
 
+// Desvincular plataforma (Kick o Twitch) de un streamer específico
+app.post(['/api/admin/streamer/:streamerId/unlink', '/api/admin/streamer/unlink'], async (req, res) => {
+  try {
+    const streamerId = req.params.streamerId || req.body.streamerId;
+    const { platform = 'kick', relatedIds } = req.body;
+    if (!streamerId) {
+      return res.status(400).json({ success: false, message: 'streamerId es requerido.' });
+    }
+
+    const result = await storage.unlinkStreamerPlatform(streamerId, platform, relatedIds);
+    res.json({ success: true, message: `Plataforma ${platform.toUpperCase()} desvinculada para @${streamerId}.`, result });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // Listar administradores registrados
 app.all('/api/admin/list', async (req, res) => {
   try {

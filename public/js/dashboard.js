@@ -11784,6 +11784,9 @@ function renderAdminStreamersList(streamers) {
                     <button class="btn btn-sm" onclick="enterSupportModeAndReload('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}')" style="background: linear-gradient(135deg, #7c3aed, #db2777); color: #fff; border: none; font-weight: 700; padding: 6px 12px; border-radius: 8px; font-size: 11.5px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; box-shadow: 0 2px 8px rgba(124,58,237,0.35);" title="Asistir y configurar entorno">
                       <i class="fas fa-tools"></i> Asistir
                     </button>
+                    <button class="btn btn-sm" onclick="handleAdminUnlinkMenu('${escapeHtml(s.streamerId)}', '${escapeHtml(displayName)}', '${escapeHtml(twitch)}', '${escapeHtml(kick)}', '${relatedIdsSafe}')" style="background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.35); font-weight: 600; padding: 6px 10px; border-radius: 8px; font-size: 11.5px; cursor: pointer;" title="Desvincular canal (Kick o Twitch)">
+                      <i class="fas fa-unlink"></i> Desvincular
+                    </button>
                     <button class="btn btn-sm" onclick="handleToggleHideStreamer('${escapeHtml(s.streamerId)}')" style="background: rgba(255,255,255,0.08); color: #cbd5e1; border: 1px solid rgba(255,255,255,0.15); font-weight: 600; padding: 6px 10px; border-radius: 8px; font-size: 11.5px; cursor: pointer;" title="${isHidden ? 'Volver a mostrar en la lista principal' : 'Ocultar de la lista'}">
                       <i class="fas ${isHidden ? 'fa-eye' : 'fa-eye-slash'}"></i> ${isHidden ? 'Mostrar' : 'Ocultar'}
                     </button>
@@ -11896,6 +11899,117 @@ async function handleAdminDeleteStreamer(streamerId, displayName, relatedIdsSafe
     await loadStreamersSupportList();
   } else {
     showToast(`❌ Error al eliminar la cuenta de la base de datos.`, 'error');
+  }
+}
+
+// 4.4 Menú para desvincular canal (Kick o Twitch)
+function handleAdminUnlinkMenu(streamerId, displayName, twitch, kick, relatedIdsSafe) {
+  const options = [];
+  if (kick) options.push('kick');
+  if (twitch) options.push('twitch');
+  if (options.length === 0) {
+    showToast('Este usuario no tiene canales de Twitch o Kick registrados.', 'info');
+    return;
+  }
+
+  if (options.length === 1) {
+    handleAdminUnlinkPlatform(streamerId, options[0], options[0] === 'kick' ? kick : twitch, relatedIdsSafe);
+    return;
+  }
+
+  const choice = prompt('Selecciona la plataforma a desvincular de "' + (displayName || streamerId) + '":\n\n1 = Kick (@' + kick + ')\n2 = Twitch (@' + twitch + ')\n3 = Ambas plataformas', '1');
+  if (!choice) return;
+
+  if (choice.trim() === '1') {
+    handleAdminUnlinkPlatform(streamerId, 'kick', kick, relatedIdsSafe);
+  } else if (choice.trim() === '2') {
+    handleAdminUnlinkPlatform(streamerId, 'twitch', twitch, relatedIdsSafe);
+  } else if (choice.trim() === '3') {
+    handleAdminUnlinkPlatform(streamerId, 'kick', kick, relatedIdsSafe).then(() => {
+      handleAdminUnlinkPlatform(streamerId, 'twitch', twitch, relatedIdsSafe);
+    });
+  }
+}
+
+// 4.5 Desvincular plataforma (Kick o Twitch) de un streamer
+async function handleAdminUnlinkPlatform(streamerId, platform, channelName, relatedIdsSafe) {
+  if (!streamerId) return;
+  if (!isUserSuperAdmin) {
+    showToast('Acceso denegado: solo Superadministradores.', 'error');
+    return;
+  }
+
+  const pName = platform.toUpperCase();
+  const confirmMsg = '¿Desvincular ' + pName + ' (@' + (channelName || streamerId) + ') de la cuenta de ' + (displayName || streamerId) + '?\n\nEl usuario podrá volver a vincular su canal nuevamente.';
+  if (!confirm(confirmMsg)) return;
+
+  let relatedIds = [streamerId];
+  try {
+    if (relatedIdsSafe) relatedIds = JSON.parse(decodeURIComponent(relatedIdsSafe));
+  } catch (e) {}
+
+  showToast('🔌 Desvinculando ' + pName + ' para @' + (channelName || streamerId) + '...', 'info');
+
+  let success = false;
+
+  // 1. Intentar backend API (MongoDB + Supabase unificados)
+  try {
+    const res = await fetch('/api/admin/streamer/' + encodeURIComponent(streamerId) + '/unlink', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamerId, platform, relatedIds })
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.success) success = true;
+    }
+  } catch (e) {}
+
+  // 2. Respaldo directo en Supabase (GitHub Pages o fallback)
+  if (supabaseClient) {
+    try {
+      const authKey = platform === 'kick' ? 'kick_auth' : 'twitch_auth';
+      await supabaseClient
+        .from('orbibot_settings')
+        .delete()
+        .in('streamer_id', relatedIds)
+        .eq('key', authKey);
+
+      const { data: configs } = await supabaseClient
+        .from('orbibot_settings')
+        .select('streamer_id, value')
+        .in('streamer_id', relatedIds)
+        .eq('key', 'config');
+
+      if (Array.isArray(configs)) {
+        for (const row of configs) {
+          const cfg = row.value || {};
+          if (platform === 'kick') {
+            cfg.kick = { channel: '', username: '', profile_picture: '', userId: '', accessToken: '', refreshToken: '', connected: false };
+          } else {
+            cfg.twitch = { channel: '', botUsername: '', oauthToken: '', connected: false };
+          }
+          await supabaseClient
+            .from('orbibot_settings')
+            .upsert({
+              streamer_id: row.streamer_id,
+              key: 'config',
+              value: cfg,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'streamer_id,key' });
+        }
+      }
+      success = true;
+    } catch (e) {
+      console.warn('Error al desvincular en Supabase client:', e);
+    }
+  }
+
+  if (success) {
+    showToast('✅ ' + pName + ' desvinculado con éxito. Ahora el usuario puede volver a vincular.', 'success');
+    await loadStreamersSupportList();
+  } else {
+    showToast('❌ Error al desvincular ' + pName + '.', 'error');
   }
 }
 
