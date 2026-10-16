@@ -1853,7 +1853,11 @@ class StorageService {
                 id: sId,
                 tokens: new Set(),
                 emails: new Set(sId.includes('@') ? [sId.toLowerCase()] : []),
-                twitches: new Set(!sId.includes('@') && !sId.includes('-') ? [sId.toLowerCase()] : []),
+                // NO pre-clasificar el streamer_id como canal de Twitch.
+                // El ID es solo un identificador; la plataforma real se determina
+                // desde config.twitch o twitch_auth para evitar falsos positivos
+                // (ej: usuario solo de Kick cuyo slug coincide con un slug de Twitch).
+                twitches: new Set(),
                 kicks: new Set(),
                 displayNames: new Set(),
                 updatedAt: new Date(0).toISOString(),
@@ -1927,7 +1931,8 @@ class StorageService {
                 id: sId,
                 tokens: new Set(),
                 emails: new Set(sId.includes('@') ? [sId.toLowerCase()] : []),
-                twitches: new Set(!sId.includes('@') && !sId.includes('-') ? [sId.toLowerCase()] : []),
+                // NO pre-clasificar como Twitch — se determina desde config.twitch/twitch_auth
+                twitches: new Set(),
                 kicks: new Set(),
                 displayNames: new Set(),
                 updatedAt: new Date(0).toISOString(),
@@ -1960,7 +1965,8 @@ class StorageService {
         id: localId,
         tokens: new Set(cfg.security?.widgetToken ? [cfg.security.widgetToken] : []),
         emails: new Set(localId.includes('@') ? [localId.toLowerCase()] : []),
-        twitches: new Set(cfg.twitch?.channel ? [cfg.twitch.channel.toLowerCase()] : (!localId.includes('@') && !localId.includes('-') ? [localId.toLowerCase()] : [])),
+        // Solo añadir Twitch si está explícitamente en config — nunca asumir por el ID
+        twitches: new Set(cfg.twitch?.channel ? [cfg.twitch.channel.toLowerCase()] : []),
         kicks: new Set(cfg.kick?.channel ? [cfg.kick.channel.toLowerCase()] : []),
         displayNames: new Set(cfg.twitch?.displayName ? [cfg.twitch.displayName] : []),
         updatedAt: new Date().toISOString(),
