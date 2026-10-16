@@ -416,6 +416,7 @@ class StorageService {
     this.isMongoReady = false;
 
     this._streamerId = null; // Cache del streamer_id activo
+    this._configSyncCallbacks = []; // Callbacks a disparar cuando config se sincroniza desde la nube
     this.restoreAllMediaFiles();
     
     // Inicializar ambas bases de datos para Doble Respaldo
@@ -852,6 +853,16 @@ class StorageService {
     }
   }
 
+  /**
+   * Registra un callback a invocar después de sincronizar config desde MongoDB.
+   * Útil para que server.js reconecte bots automáticamente al restaurar datos de la nube.
+   */
+  onConfigSync(callback) {
+    if (typeof callback === 'function') {
+      this._configSyncCallbacks.push(callback);
+    }
+  }
+
   async syncFromMongoDB() {
     if (!this.isMongoReady || !this.mongoDb) return;
     const streamerId = this.getStreamerId();
@@ -862,8 +873,12 @@ class StorageService {
 
       if (records && records.length > 0) {
         console.log(`✅ [MongoDB Cloud] ${records.length} configuraciones sincronizadas para streamer "${streamerId}".`);
+        let syncedConfig = null;
         records.forEach(item => {
-          if (item.key === 'config') writeJSON('config.json', item.value);
+          if (item.key === 'config') {
+            writeJSON('config.json', item.value);
+            syncedConfig = item.value;
+          }
           if (item.key === 'commands') writeJSON('commands.json', item.value);
           if (item.key === 'alerts') writeJSON('alerts.json', item.value);
           if (item.key === 'channel_points') writeJSON('channel_points.json', item.value);
@@ -901,6 +916,17 @@ class StorageService {
           }
         });
         this.restoreAllMediaFiles();
+
+        // Notificar a los listeners (ej. server.js) que la config fue restaurada desde la nube
+        // para que puedan reconectar bots con los datos reales del streamer.
+        if (syncedConfig && this._configSyncCallbacks.length > 0) {
+          const finalConfig = syncedConfig;
+          setTimeout(() => {
+            for (const cb of this._configSyncCallbacks) {
+              try { cb(finalConfig); } catch(e) {}
+            }
+          }, 500);
+        }
       } else {
         // Si MongoDB está vacío, respaldar lo actual local en MongoDB
         const currentCustomSounds = this.getCustomSounds();

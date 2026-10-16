@@ -277,6 +277,25 @@ ttsService.onTTSControl((payload) => {
   broadcast('tts_queue_update', { queue: ttsService.getQueueState(room) }, room);
 });
 
+// Reconexión automática de bots después de que MongoDB restaure config del streamer
+// Soluciona el race condition: al arrancar, config.json local puede no tener kick.channel
+// porque MongoDB aún no terminó de sincronizar de forma async.
+storage.onConfigSync((cfg) => {
+  console.log('🔄 [Server] Config sincronizada desde MongoDB — reconectando bots...');
+
+  if (cfg?.twitch?.channel && cfg?.twitch?.connected !== false) {
+    twitchBot.connect().catch(e => console.warn('TwitchBot post-sync connect warning:', e.message));
+  }
+
+  if (cfg?.kick?.channel && cfg?.kick?.connected !== false) {
+    console.log(`🟢 [Server] Reconectando KickBot al canal @${cfg.kick.channel} (post-sync MongoDB)`);
+    kickBot.connect().catch(e => console.warn('KickBot post-sync connect warning:', e.message));
+  }
+
+  // Notificar a todos los clientes conectados que la config fue actualizada
+  broadcast('config_updated', cfg);
+});
+
 function handleClientMessage(ws, message) {
   if (message.action === 'ping') {
     ws.send(JSON.stringify({ event: 'pong' }));
