@@ -198,8 +198,16 @@ class KickBot {
       });
 
       this.ws.on('open', () => {
+        // Helper to safely send data only when WebSocket is open
+        this.safeSend = (data) => {
+          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+            this.ws.send(data);
+          } else {
+            console.warn('[KickBot] Attempted to send on closed WebSocket');
+          }
+        };
         // Enviar frame connect con JWT token
-        this.ws.send(JSON.stringify({
+        this.safeSend(JSON.stringify({
           connect: { token, name: 'js' },
           id: 1
         }));
@@ -207,9 +215,7 @@ class KickBot {
         // Keep-alive ping Centrifugo cada 25s (frame vacío {})
         if (this.pingInterval) clearInterval(this.pingInterval);
         this.pingInterval = setInterval(() => {
-          if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({}));
-          }
+          this.safeSend(JSON.stringify({}));
         }, 25000);
       });
 
@@ -220,7 +226,25 @@ class KickBot {
             // Pong keep-alive
             return;
           }
-          const packet = JSON.parse(text);
+          // Attempt robust JSON parsing
+          let packet;
+          try {
+            packet = JSON.parse(text);
+          } catch (parseErr) {
+            // Try to extract a JSON substring if extra characters are present
+            const jsonMatch = text.match(/\{.*\}/s);
+            if (jsonMatch) {
+              try {
+                packet = JSON.parse(jsonMatch[0]);
+              } catch (_) {
+                console.error('[KickBot] Unable to parse packet after fallback:', parseErr);
+                return;
+              }
+            } else {
+              console.error('[KickBot] Error parsing packet:', parseErr);
+              return;
+            }
+          }
 
           // Si el connect fue exitoso
           if (packet.id === 1 && packet.connect) {
@@ -232,16 +256,16 @@ class KickBot {
 
             // Suscribirse a canales de Kick en Centrifugo
             let subId = 2;
-            this.ws.send(JSON.stringify({
+            this.safeSend(JSON.stringify({
               subscribe: { channel: `chatrooms.${targetRoom}.v2`, flag: 1 },
               id: subId++
             }));
-            this.ws.send(JSON.stringify({
+            this.safeSend(JSON.stringify({
               subscribe: { channel: `channel.${targetRoom}`, flag: 1 },
               id: subId++
             }));
             if (this.chatroomId && String(this.chatroomId) !== String(targetRoom)) {
-              this.ws.send(JSON.stringify({
+              this.safeSend(JSON.stringify({
                 subscribe: { channel: `chatrooms.${this.chatroomId}.v2`, flag: 1 },
                 id: subId++
               }));

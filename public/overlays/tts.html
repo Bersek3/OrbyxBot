@@ -906,7 +906,7 @@
       const clean = kickChannel.toLowerCase().replace(/^@/, '').trim();
       if (!clean) return;
 
-      const pusherUrl = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false';
+      let pusherUrl = '';// placeholder, will be set dynamically if needed
 
       async function startKickWs() {
         let chatroomId = null;
@@ -944,7 +944,17 @@
         console.log(`🟢 [TTS Overlay] Conectando a Kick Pusher @${clean} (Room: ${targetRoom})...`);
 
         try {
-          const kws = new WebSocket(pusherUrl);
+          let wsUrl = '';
+      try {
+        const connRes = await fetch(`/api/kick/connection/${clean}`);
+        const connData = await connRes.json();
+        if (connData.success && connData.endpoint) {
+          wsUrl = connData.endpoint;
+        }
+      } catch (e) {
+        console.warn('Failed to get Kick connection endpoint', e);
+      }
+      const kws = new WebSocket(wsUrl || pusherUrl);
           let pingInt = null;
 
           kws.onopen = () => {

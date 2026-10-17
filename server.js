@@ -1463,6 +1463,44 @@ app.post('/api/sr/playback-state', (req, res) => {
 });
 
 // TTS API
+app.get('/api/kick/connection/:channel', async (req, res) => {
+  const channel = req.params.channel?.toLowerCase().replace(/^@/, '').trim();
+  if (!channel) return res.status(400).json({ success: false, message: 'Channel required' });
+  try {
+    const clientId = crypto.randomUUID();
+    const kickHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'x-app-platform': 'web',
+      'Referer': `https://kick.com/${channel}`,
+      'Origin': 'https://kick.com'
+    };
+    let wsUrl = 'wss://realtime.us-west-2.platform.kick.com/connection/websocket';
+    try {
+      const connRes = await fetch('https://web.kick.com/api/v1/realtime/connection', {
+        method: 'POST',
+        headers: kickHeaders,
+        body: JSON.stringify({
+          client: { id: clientId, type: 'web' },
+          capabilities: { accepted_providers: [{ provider: 'centrifugo' }] }
+        })
+      });
+      if (connRes.ok) {
+        const connData = await connRes.json();
+        const endpoint = connData.data?.connections?.[0]?.credentials?.url || connData.data?.endpoint;
+        if (endpoint) wsUrl = endpoint;
+      }
+    } catch (e) {
+      console.warn('[Kick Connection] failed to get endpoint', e);
+    }
+    return res.json({ success: true, endpoint: wsUrl });
+  } catch (err) {
+    console.error('[Kick Connection] error', err);
+    return res.status(500).json({ success: false, message: err.message });
+  }
+});
+// TTS API
 app.get('/api/tts/voices', (req, res) => {
   res.json(ttsService.getVoices());
 });
