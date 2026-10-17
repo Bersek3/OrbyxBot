@@ -11175,12 +11175,10 @@ loadInitialData = async function () {
 };
 
 // ================= ADMINISTRACIÓN GENERAL & MODO ASISTENCIA =================
-const KNOWN_SUPERADMINS = [
-  'francisco.jm.aguilar@gmail.com',
-  'bersek',
-  'bersek___',
-  'bersek3'
+const KNOWN_SUPERADMIN_EMAILS = [
+  'francisco.jm.aguilar@gmail.com'
 ];
+const KNOWN_SUPERADMINS = KNOWN_SUPERADMIN_EMAILS;
 let isUserSuperAdmin = false;
 let adminStreamersCache = [];
 let adminOriginalConfig = null;
@@ -11190,37 +11188,36 @@ let adminOriginalTTS = null;
 let adminOriginalGoals = null;
 let adminOriginalSongRequest = null;
 
-// 1. checkAdminStatus()
+// 1. checkAdminStatus() - Validación estricta y segura de Superadministrador
 async function checkAdminStatus() {
-  const isLocalHost = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   const session = getUserSession();
   const cleanEmail = (session?.email || '').trim().toLowerCase();
-  const cleanUsername = (session?.username || '').trim().toLowerCase();
-  const twitchChan = (appConfig?.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
-  const kickChan = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
+  const sessionUserId = (session?.id || '').trim();
 
-  // 1. Verificación inmediata de Superadministradores conocidos por correo, usuario o canal
-  if (
-    (cleanEmail && (KNOWN_SUPERADMINS.includes(cleanEmail) || cleanEmail.includes('francisco.jm.aguilar'))) ||
-    (cleanUsername && KNOWN_SUPERADMINS.includes(cleanUsername)) ||
-    (twitchChan && KNOWN_SUPERADMINS.includes(twitchChan)) ||
-    (kickChan && KNOWN_SUPERADMINS.includes(kickChan))
-  ) {
+  // Si no hay sesión iniciada o el usuario no tiene correo verificado, NUNCA es admin
+  if (!session || !cleanEmail) {
+    isUserSuperAdmin = false;
+    updateAdminUIElements(false);
+    return;
+  }
+
+  // 1. Verificación inmediata de Superadministrador principal por correo autenticado
+  if (KNOWN_SUPERADMIN_EMAILS.includes(cleanEmail) || cleanEmail.includes('francisco.jm.aguilar')) {
     isUserSuperAdmin = true;
     updateAdminUIElements(true);
     return;
   }
 
-  // 2. Consulta al backend vía API
+  // 2. Consulta al backend vía API (/api/admin/check)
   try {
     const res = await fetch('/api/admin/check', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: cleanEmail || twitchChan || kickChan || 'admin', userId: session?.id || 'admin' })
+      body: JSON.stringify({ email: cleanEmail, userId: sessionUserId })
     });
     if (res.ok) {
       const data = await res.json();
-      if (data.isAdmin) {
+      if (data && data.isAdmin === true) {
         isUserSuperAdmin = true;
         updateAdminUIElements(true);
         return;
@@ -11229,30 +11226,26 @@ async function checkAdminStatus() {
   } catch (e) { }
 
   // 3. Consulta directa a Supabase (Fallback para GitHub Pages y Supabase Auth)
-  if (supabaseClient) {
+  if (supabaseClient && cleanEmail) {
     try {
-      if (cleanEmail) {
-        const { data, error } = await supabaseClient
-          .from('orbibot_admins')
-          .select('*')
-          .eq('email', cleanEmail)
-          .maybeSingle();
-        if (!error && data && data.role === 'superadmin') {
-          isUserSuperAdmin = true;
-          updateAdminUIElements(true);
-          return;
-        }
+      const { data, error } = await supabaseClient
+        .from('orbibot_admins')
+        .select('*')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+      if (!error && data && (data.role === 'superadmin' || data.role === 'admin')) {
+        isUserSuperAdmin = true;
+        updateAdminUIElements(true);
+        return;
       }
 
-      // Consulta por ID o canal
-      const searchId = session?.id || twitchChan || kickChan;
-      if (searchId) {
-        const { data } = await supabaseClient
+      if (sessionUserId) {
+        const { data: dataId, error: errId } = await supabaseClient
           .from('orbibot_admins')
           .select('*')
-          .eq('email', searchId)
+          .eq('user_id', sessionUserId)
           .maybeSingle();
-        if (data && data.role === 'superadmin') {
+        if (!errId && dataId && (dataId.role === 'superadmin' || dataId.role === 'admin')) {
           isUserSuperAdmin = true;
           updateAdminUIElements(true);
           return;
@@ -11261,13 +11254,7 @@ async function checkAdminStatus() {
     } catch (e) { }
   }
 
-  // 4. Si se está ejecutando localmente en la máquina del creador (localhost)
-  if (isLocalHost) {
-    isUserSuperAdmin = true;
-    updateAdminUIElements(true);
-    return;
-  }
-
+  // Si no cumple ninguna de las anteriores, NO es admin
   isUserSuperAdmin = false;
   updateAdminUIElements(false);
 }
@@ -11277,12 +11264,16 @@ function updateAdminUIElements(isAdmin) {
   const adminNavItem = document.getElementById('navItemAdmin') || document.getElementById('adminNavItem');
   const adminSection = document.getElementById('tab-admin');
   const superAdminBadge = document.getElementById('adminSuperBadge') || document.getElementById('superAdminBadge');
+  const dropdownAdminLink = document.getElementById('dropdownAdminLink');
 
   if (adminNavItem) {
     adminNavItem.style.display = isAdmin ? 'flex' : 'none';
   }
   if (superAdminBadge) {
     superAdminBadge.style.display = isAdmin ? 'inline-flex' : 'none';
+  }
+  if (dropdownAdminLink) {
+    dropdownAdminLink.style.display = isAdmin ? 'flex' : 'none';
   }
   if (!isAdmin && adminSection && adminSection.classList.contains('active')) {
     switchTab('tab-dashboard');
@@ -14172,8 +14163,7 @@ function syncNewDashboardUI() {
   // 7. SuperAdmin en dropdown
   const dropdownAdminLink = document.getElementById('dropdownAdminLink');
   if (dropdownAdminLink) {
-    const isAdmin = Boolean(session?.role === 'superadmin' || session?.is_superadmin);
-    dropdownAdminLink.style.display = isAdmin ? 'flex' : 'none';
+    dropdownAdminLink.style.display = isUserSuperAdmin ? 'flex' : 'none';
   }
 }
 
