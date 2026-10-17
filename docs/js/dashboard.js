@@ -255,7 +255,7 @@ async function saveToAllSupabaseScopes(key, value) {
     if (session.email) scopes.add(session.email.toLowerCase().trim());
     if (session.id) scopes.add(session.id);
 
-    // Solo asociar al canal de Twitch si fue explícitamente vinculado por este usuario
+        // Solo asociar al canal de Twitch si fue explícitamente vinculado por este usuario
     const localTwitch = localStorage.getItem('orbibot_twitch_auth');
     if (localTwitch) {
       try {
@@ -267,6 +267,21 @@ async function saveToAllSupabaseScopes(key, value) {
       const chan = appConfig.twitch.channel.toLowerCase().replace(/^#/, '').trim();
       if (chan) scopes.add(chan);
     }
+
+    // Asociar al canal de Kick si está vinculado
+    const localKick = localStorage.getItem('orbibot_kick_auth');
+    if (localKick) {
+      try {
+        const parsedK = JSON.parse(localKick);
+        const kchan = (parsedK.channel || parsedK.username || '').toLowerCase().replace(/^@/, '').trim();
+        if (kchan) scopes.add(kchan);
+      } catch (e) { }
+    } else if (appConfig?.kick?.channel && appConfig?.kick?.connected !== false) {
+      const kchan = appConfig.kick.channel.toLowerCase().replace(/^@/, '').trim();
+      if (kchan) scopes.add(kchan);
+    }
+    const localKickChan = localStorage.getItem('orbibot_kick_channel');
+    if (localKickChan) scopes.add(localKickChan.toLowerCase().replace(/^@/, '').trim());
   }
 
   if (key === 'voice_catalog') {
@@ -274,7 +289,13 @@ async function saveToAllSupabaseScopes(key, value) {
     scopes.add('default');
   }
 
-  const promises = Array.from(scopes).filter(Boolean).map(streamerId => {
+    const promises = Array.from(scopes).filter(Boolean).map(streamerId => {
+    if (value === null || value === undefined) {
+      return supabaseClient.from('orbibot_settings').delete().match({
+        streamer_id: streamerId,
+        key: key
+      });
+    }
     return supabaseClient.from('orbibot_settings').upsert({
       streamer_id: streamerId,
       key: key,
@@ -424,7 +445,7 @@ async function loadUserDataFromSupabase(userIdentifier) {
           if (item.value.twitch && (item.value.twitch.channel || item.value.twitch.displayName)) {
             localStorage.setItem('orbibot_twitch_auth', JSON.stringify(item.value.twitch));
           }
-          if (item.value.kick && (item.value.kick.channel || item.value.kick.username)) {
+                    if (item.value.kick && item.value.kick.connected !== false && (item.value.kick.channel || item.value.kick.username)) {
             localStorage.setItem('orbibot_kick_auth', JSON.stringify(item.value.kick));
             if (item.value.kick.channel) localStorage.setItem('orbibot_kick_channel', item.value.kick.channel);
             fetch('/api/config', {
@@ -432,6 +453,9 @@ async function loadUserDataFromSupabase(userIdentifier) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ kick: item.value.kick })
             }).catch(() => {});
+          } else if (item.value.kick && item.value.kick.connected === false) {
+            localStorage.removeItem('orbibot_kick_auth');
+            localStorage.removeItem('orbibot_kick_channel');
           }
           localStorage.setItem('orbibot_config', JSON.stringify(appConfig));
           bindConfigToUI(appConfig);
@@ -1450,8 +1474,29 @@ async function disconnectKickAccount() {
   if (adminTargetStreamerId) {
     appConfig = tempConfig;
     const session = getUserSession();
+    const cs = (typeof adminStreamersCache !== 'undefined' && Array.isArray(adminStreamersCache))
+      ? adminStreamersCache.find(s => s.streamerId === adminTargetStreamerId || (s.relatedIds && s.relatedIds.includes(adminTargetStreamerId)))
+      : null;
+    const relatedIds = Array.from(new Set([
+      adminTargetStreamerId,
+      ...(cs?.relatedIds || []),
+      cs?.kickChannel,
+      cs?.email,
+      session?.email,
+      session?.id
+    ].filter(Boolean)));
+
     try {
-      await fetch(`/api/admin/streamer/${encodeURIComponent(adminTargetStreamerId)}`, {
+      await fetch('/api/admin/streamer/' + encodeURIComponent(adminTargetStreamerId) + '/unlink', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          streamerId: adminTargetStreamerId,
+          platform: 'kick',
+          relatedIds
+        })
+      });
+      await fetch('/api/admin/streamer/' + encodeURIComponent(adminTargetStreamerId), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1464,27 +1509,55 @@ async function disconnectKickAccount() {
 
     if (supabaseClient) {
       try {
-        await supabaseClient.from('orbibot_settings').delete().match({ streamer_id: adminTargetStreamerId, key: 'kick_auth' });
-        await supabaseClient.from('orbibot_settings').upsert({ streamer_id: adminTargetStreamerId, key: 'config', value: tempConfig, updated_at: new Date().toISOString() });
+        await supabaseClient.from('orbibot_settings').delete().in('streamer_id', relatedIds).eq('key', 'kick_auth');
+        for (const rid of relatedIds) {
+          await supabaseClient.from('orbibot_settings').upsert({
+            streamer_id: rid,
+            key: 'config',
+            value: tempConfig,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'streamer_id,key' });
+        }
       } catch (e) { }
     }
 
-    if (typeof adminStreamersCache !== 'undefined' && Array.isArray(adminStreamersCache)) {
-      const cs = adminStreamersCache.find(s => s.streamerId === adminTargetStreamerId || (s.relatedIds && s.relatedIds.includes(adminTargetStreamerId)));
-      if (cs) {
-        cs.kickChannel = '';
-        cs.channels = (cs.channels || []).filter(c => !c.startsWith('kick:'));
-      }
+    if (cs) {
+      cs.kickChannel = '';
+      cs.channels = (cs.channels || []).filter(c => !c.startsWith('kick:'));
     }
   } else {
+    const session = getUserSession();
+    const kickChan = (appConfig?.kick?.channel || appConfig?.kick?.username || localStorage.getItem('orbibot_kick_channel') || '').toLowerCase().replace(/^@/, '').trim();
+    const userScopes = Array.from(new Set([
+      session?.email,
+      session?.id,
+      kickChan,
+      appConfig?.twitch?.channel
+    ].filter(Boolean)));
+
     try {
-      await fetch('/api/auth/kick/disconnect', { method: 'POST' });
+      await fetch('/api/auth/kick/disconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          streamerId: session?.email || session?.id || kickChan,
+          userId: session?.id,
+          email: session?.email,
+          relatedIds: userScopes
+        })
+      });
       await fetch('/api/config', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ kick: tempConfig.kick })
       });
     } catch (e) { }
+
+    if (supabaseClient) {
+      try {
+        await supabaseClient.from('orbibot_settings').delete().in('streamer_id', userScopes).eq('key', 'kick_auth');
+      } catch (e) { }
+    }
 
     if (typeof saveToAllSupabaseScopes === 'function') {
       saveToAllSupabaseScopes('kick_auth', null).catch(() => {});
@@ -1495,6 +1568,7 @@ async function disconnectKickAccount() {
     localStorage.removeItem('orbibot_kick_channel');
     localStorage.removeItem('orbibot_kick_auth_event');
     localStorage.removeItem('orbibot_kick_auth_error');
+    localStorage.setItem('orbibot_config', JSON.stringify(tempConfig));
 
     appConfig = tempConfig;
   }
@@ -12138,10 +12212,7 @@ async function enterStreamerSupportMode(streamerId, displayName) {
     targetCfg.kick.profile_picture = targetKickAuth.profile_picture || targetKickAuth.avatar || '';
     targetCfg.kick.connected = true;
   } else {
-    const existingKick = (targetCfg?.kick?.channel || targetCfg?.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
-    if (!existingKick || existingKick !== streamerId.toLowerCase().trim()) {
-      targetCfg.kick = { channel: '', username: '', connected: false, profile_picture: '', userId: '', accessToken: '', refreshToken: '' };
-    }
+    targetCfg.kick = { channel: '', username: '', connected: false, profile_picture: '', userId: '', accessToken: '', refreshToken: '' };
   }
 
   // Búsqueda de respaldo en adminStreamersCache si el canal sigue siendo un email o está vacío

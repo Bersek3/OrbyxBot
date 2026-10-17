@@ -207,8 +207,8 @@ wss.on('connection', (ws, req) => {
 
 function broadcast(event, data, targetRoom) {
   const cleanTarget = targetRoom ? targetRoom.toLowerCase().replace(/^#/, '').replace(/^@/, '').trim() : null;
-  const token = data?.token || null;
   const config = storage.getConfig();
+  const token = data?.token || config.security?.widgetToken || null;
   const twitchChan = (config.twitch?.channel || '').toLowerCase().replace(/^#/, '').trim();
   const kickChan = (kickBot.currentChannel || config.kick?.channel || config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
   const streamerId = (storage.getStreamerId() || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
@@ -267,14 +267,22 @@ songRequest.onUpdate((payload) => {
 
 ttsService.onTTS((payload) => {
   const room = payload?.channel || payload?.room;
+  const cfg = storage.getConfig() || {};
+  if (payload && !payload.token && cfg.security?.widgetToken) {
+    payload.token = cfg.security.widgetToken;
+  }
   broadcast('tts', payload, room);
-  broadcast('tts_queue_update', { queue: ttsService.getQueueState(room) }, room);
+  broadcast('tts_queue_update', { queue: ttsService.getQueueState(room), token: payload?.token }, room);
 });
 
 ttsService.onTTSControl((payload) => {
   const room = payload?.channel || payload?.room;
+  const cfg = storage.getConfig() || {};
+  if (payload && !payload.token && cfg.security?.widgetToken) {
+    payload.token = cfg.security.widgetToken;
+  }
   broadcast('tts_control', payload, room);
-  broadcast('tts_queue_update', { queue: ttsService.getQueueState(room) }, room);
+  broadcast('tts_queue_update', { queue: ttsService.getQueueState(room), token: payload?.token }, room);
 });
 
 // Reconexión automática de bots después de que MongoDB restaure config del streamer
@@ -878,10 +886,10 @@ app.get('/api/auth/kick/callback', async (req, res) => {
 });
 
 // 3. Disconnect Kick
-app.post('/api/auth/kick/disconnect', (req, res) => {
-  kickBot.disconnect();
-  const updated = storage.saveConfig({
-    kick: {
+app.post('/api/auth/kick/disconnect', async (req, res) => {
+  try {
+    kickBot.disconnect();
+    const resetKick = {
       channel: '',
       username: '',
       profile_picture: '',
@@ -890,10 +898,26 @@ app.post('/api/auth/kick/disconnect', (req, res) => {
       refreshToken: '',
       clientId: process.env.KICK_CLIENT_ID || '01M0VT0JC58YQEVGRHM8JFXQX3',
       connected: false
+    };
+
+    const streamerId = req.body?.streamerId || req.body?.email || req.body?.userId || storage.getStreamerId();
+    const relatedIds = Array.isArray(req.body?.relatedIds) ? req.body.relatedIds : [streamerId, req.body?.email, req.body?.userId].filter(Boolean);
+
+    if (streamerId) {
+      try {
+        await storage.unlinkStreamerPlatform(streamerId, 'kick', relatedIds);
+      } catch (errStorage) {
+        console.warn('⚠️ [Server] Error en storage.unlinkStreamerPlatform al desconectar Kick:', errStorage.message);
+      }
     }
-  });
-  broadcast('config_updated', updated);
-  res.json({ success: true, message: 'Canal de Kick desvinculado.', config: updated });
+
+    const updated = storage.saveConfig({ kick: resetKick });
+    broadcast('config_updated', updated);
+    res.json({ success: true, message: 'Canal de Kick desvinculado con éxito.', config: updated });
+  } catch (err) {
+    console.error('❌ [Server] Error en /api/auth/kick/disconnect:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
 });
 
 // Kick Chatroom Resolver Endpoint

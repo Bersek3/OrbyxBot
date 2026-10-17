@@ -594,6 +594,7 @@ class KickBot {
             broadcaster: isBroadcaster
           };
 
+          const widgetToken = config?.security?.widgetToken || storage.getConfig()?.security?.widgetToken || null;
           if (matchedVoiceCmd && ttsService.hasPermission(matchedVoiceCmd, userBadges)) {
             const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
             if (voiceText) {
@@ -606,6 +607,7 @@ class KickBot {
                 platform: 'kick',
                 voiceOverride: matchedVoiceCmd.voiceId,
                 channel: targetChan,
+                token: widgetToken,
                 userBadges
               });
               return;
@@ -621,6 +623,7 @@ class KickBot {
                 source: 'chat',
                 platform: 'kick',
                 channel: targetChan,
+                token: widgetToken,
                 userBadges
               });
               return;

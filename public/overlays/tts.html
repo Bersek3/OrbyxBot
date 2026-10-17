@@ -95,8 +95,16 @@
     const myStreamerKey = channel || kickParam || '';
     const myToken = token || '';
     const linkedChannels = new Set([myStreamerKey].filter(Boolean));
-    if (channel) linkedChannels.add(channel);
-    if (kickParam) linkedChannels.add(kickParam);
+    if (channel) linkedChannels.add(channel.toLowerCase().replace(/^#/, '').trim());
+    if (kickParam) linkedChannels.add(kickParam.toLowerCase().replace(/^@/, '').trim());
+    try {
+      const storedCfg = JSON.parse(localStorage.getItem('orbibot_config') || '{}');
+      if (storedCfg.twitch?.channel) linkedChannels.add(storedCfg.twitch.channel.toLowerCase().replace(/^#/, '').trim());
+      if (storedCfg.kick?.channel || storedCfg.kick?.username) linkedChannels.add((storedCfg.kick.channel || storedCfg.kick.username).toLowerCase().replace(/^@/, '').trim());
+      if (storedCfg.security?.widgetToken) linkedChannels.add(storedCfg.security.widgetToken.trim());
+      const storedKickChan = localStorage.getItem('orbibot_kick_channel');
+      if (storedKickChan) linkedChannels.add(storedKickChan.toLowerCase().replace(/^@/, '').trim());
+    } catch (e) {}
 
     // Cola estricta y control de reproducción único (FIFO)
     const queue = [];
@@ -676,17 +684,24 @@
         if (cfg?.tts && cfg.tts.enabled !== undefined) {
           ttsEnabled = cfg.tts.enabled !== false;
         }
-        // Solo suscribir si el overlay NO tiene parámetros de canal en la URL
+        if (cfg?.twitch?.channel) {
+          const tw = cfg.twitch.channel.toLowerCase().replace(/^#/, '').trim();
+          if (tw) linkedChannels.add(tw);
+        }
+        if (cfg?.kick?.channel || cfg?.kick?.username) {
+          const kickName = (cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, '').trim();
+          if (kickName) linkedChannels.add(kickName);
+        }
+        if (cfg?.security?.widgetToken) {
+          linkedChannels.add(cfg.security.widgetToken.trim());
+        }
+        // Solo inicializar listeners en browser si no vinieron especificados en la URL
         if (!channel && !kickParam) {
           if (cfg?.twitch?.channel) {
-            const tw = cfg.twitch.channel.toLowerCase().replace(/^#/, '');
-            linkedChannels.add(tw);
-            initTwitchChatIRC(tw);
+            initTwitchChatIRC(cfg.twitch.channel.toLowerCase().replace(/^#/, ''));
           }
           if (cfg?.kick?.channel || cfg?.kick?.username) {
-            const kickName = (cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, '');
-            linkedChannels.add(kickName);
-            initKickChatPusher(kickName);
+            initKickChatPusher((cfg.kick.channel || cfg.kick.username).toLowerCase().replace(/^@/, ''));
           }
         }
       })
@@ -721,21 +736,19 @@
       if (myStreamerKey || myToken) {
         const targetRoom = (msg.room || msg.channel || msg.data?.channel || msg.data?.room || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
         const targetToken = (msg.token || msg.data?.token || '').trim();
+        const isKickEvent = msg.platform === 'kick' || msg.data?.platform === 'kick';
+        const eventStreamer = (msg.streamer || msg.data?.streamer || '').toLowerCase().replace(/^#/, '').replace(/^@/, '').trim();
 
         if (myToken && targetToken && myToken === targetToken) {
           // Coincidencia exacta de token (máxima prioridad)
         } else if (myStreamerKey && (targetRoom === myStreamerKey || targetRoom === myToken || linkedChannels.has(targetRoom) || targetRoom === 'streamer' || targetRoom === 'default')) {
           // Coincidencia de sala o streamer
+        } else if (isKickEvent && (linkedChannels.has(targetRoom) || linkedChannels.has(eventStreamer) || targetRoom === myStreamerKey || eventStreamer === myStreamerKey || (!myStreamerKey && !targetRoom))) {
+          // Evento de Kick perteneciente a este streamer
         } else if (myToken && !targetToken && (targetRoom === myStreamerKey || linkedChannels.has(targetRoom))) {
           // Transmisión local sin token pero mismo canal
         } else if (targetRoom && targetRoom !== 'default' && targetRoom !== 'streamer' && myStreamerKey && targetRoom !== myStreamerKey && !linkedChannels.has(targetRoom)) {
-          const isKickEvent = msg.platform === 'kick' || msg.data?.platform === 'kick';
-          const eventStreamer = (msg.streamer || msg.data?.streamer || '').toLowerCase().replace(/^#/, '').trim();
-          if (isKickEvent && (linkedChannels.has(eventStreamer) || eventStreamer === myStreamerKey)) {
-            // Evento válido de Kick perteneciente a este streamer
-          } else {
-            return;
-          }
+          return;
         }
       }
 

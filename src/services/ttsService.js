@@ -310,8 +310,9 @@ class TTSService {
     return segments;
   }
 
-  processRequest({ user, text, source = 'chat', bits = 0, voiceOverride = null, channel = null, userBadges = {}, platform = null }) {
-    const config = storage.getConfig().tts;
+  processRequest({ user, text, source = 'chat', bits = 0, voiceOverride = null, channel = null, userBadges = {}, platform = null, token = null }) {
+    const fullConfig = storage.getConfig() || {};
+    const config = fullConfig.tts || {};
     if (!config.enabled) {
       return { success: false, reason: 'TTS está deshabilitado en la configuración' };
     }
@@ -395,11 +396,13 @@ class TTSService {
 
     const cleanChannel = this.normalizeChannelKey(channel);
     const effectivePlatform = platform || (source === 'kick' ? 'kick' : 'twitch');
+    const effectiveToken = token || fullConfig.security?.widgetToken || null;
     const ttsItem = {
       id: 'tts-' + Date.now() + '-' + Math.random().toString(36).substr(2, 5),
       channel: cleanChannel,
       room: cleanChannel,
       streamer: cleanChannel,
+      token: effectiveToken,
       user: user || 'Anónimo',
       text: cleanText,
       source,

@@ -2171,11 +2171,10 @@ class StorageService {
       if (!result.custom_images) result.custom_images = this.getCustomImages();
     }
 
-    // Aislamiento estricto: Si el streamer no tiene kick_auth explícito ni coincide con su ID, no inyectar Kick ajeno
+    // Aislamiento estricto: Si el streamer no tiene kick_auth explícito, no inyectar Kick ni mantenerlo conectado
     if (result.config) {
       const hasDirectKickAuth = Boolean(result.kick_auth && (result.kick_auth.channel || result.kick_auth.username));
-      const kickChan = (result.config.kick?.channel || result.config.kick?.username || '').toLowerCase().replace(/^@/, '').trim();
-      if (!hasDirectKickAuth && kickChan && kickChan !== cleanId) {
+      if (!hasDirectKickAuth) {
         result.config.kick = {
           channel: '',
           username: '',
@@ -2410,6 +2409,51 @@ class StorageService {
       } catch (e) {
         console.warn(`⚠️ [Storage] Error al desvincular ${cleanPlatform} en Supabase:`, e.message);
       }
+    }
+
+    // 3. Sincronizar archivo local si coincide con el streamer local
+    try {
+      const localStreamer = (this.getStreamerId() || '').toLowerCase().trim();
+      const localCfg = this.getConfig() || {};
+      const currentLocalKick = (localCfg.kick?.channel || localCfg.kick?.username || '').toLowerCase().trim();
+      const currentLocalTwitch = (localCfg.twitch?.channel || '').toLowerCase().trim();
+
+      if (cleanPlatform === 'kick') {
+        if (idList.some(id => {
+          const c = id.toLowerCase().trim();
+          return c === localStreamer || (currentLocalKick && c === currentLocalKick);
+        })) {
+          this.saveConfig({
+            kick: {
+              channel: '',
+              username: '',
+              profile_picture: '',
+              userId: '',
+              accessToken: '',
+              refreshToken: '',
+              clientId: process.env.KICK_CLIENT_ID || '01M0VT0JC58YQEVGRHM8JFXQX3',
+              connected: false
+            }
+          });
+        }
+      } else if (cleanPlatform === 'twitch') {
+        if (idList.some(id => {
+          const c = id.toLowerCase().trim();
+          return c === localStreamer || (currentLocalTwitch && c === currentLocalTwitch);
+        })) {
+          this.saveConfig({
+            twitch: {
+              channel: '',
+              botUsername: '',
+              oauthToken: '',
+              clientId: process.env.TWITCH_CLIENT_ID || 'yw1vr664ichms8an2x5lhji58v7ozk',
+              connected: false
+            }
+          });
+        }
+      }
+    } catch (e) {
+      console.warn(`⚠️ [Storage] Error al limpiar config local para ${cleanPlatform}:`, e.message);
     }
 
     return { success: true, platform: cleanPlatform, streamerIds: idList };
