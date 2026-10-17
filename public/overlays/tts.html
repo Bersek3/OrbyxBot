@@ -693,6 +693,8 @@
       .catch(() => {});
 
     // Cargar comandos personalizados configurados por el streamer
+    // TTS_COMMANDS_MAP: mapa completo con permisos para validación de badges
+    const TTS_COMMANDS_MAP = {};
     fetch('/api/tts/commands')
       .then(r => r.json())
       .then(cmds => {
@@ -700,7 +702,12 @@
           cmds.forEach(c => {
             if (c.command && c.voiceId) {
               const cmdClean = c.command.toLowerCase().replace(/^!/, '').trim();
+              // Guardar alias simple (retrocompatibilidad)
               TTS_ALIAS_MAP[cmdClean] = c.voiceId;
+              // Guardar objeto completo con permisos
+              TTS_COMMANDS_MAP[cmdClean] = c;
+              // También con el prefijo !
+              TTS_COMMANDS_MAP['!' + cmdClean] = c;
             }
           });
         }
@@ -971,6 +978,12 @@
                 return;
               }
               if (pkt.event === 'App\\Events\\ChatMessageEvent' || pkt.event === 'ChatMessageEvent') {
+                // Si el WebSocket al backend está activo, el servidor KickBot ya procesa
+                // el TTS con permisos correctos. Evitar doble procesamiento.
+                if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+                  return;
+                }
+
                 const msgData = typeof pkt.data === 'string' ? JSON.parse(pkt.data) : pkt.data;
                 const sender = msgData.sender || {};
                 const username = sender.username || sender.slug || 'KickUser';
@@ -979,16 +992,50 @@
                 if (!trimmed) return;
                 console.log(`💬 [TTS Overlay] Mensaje de chat en Kick (@${username}): "${trimmed}"`);
 
+                // Extraer badges del sender para validar permisos
+                const badges = sender.identity?.badges || [];
+                const isBroadcaster = badges.some(b => b.type === 'broadcaster') || (username.toLowerCase() === clean.toLowerCase());
+                const isMod = badges.some(b => b.type === 'moderator') || isBroadcaster;
+                const isSub = badges.some(b => b.type === 'subscriber' || b.type === 'sub_gifter');
+                const isVip = badges.some(b => b.type === 'vip');
+                const userBadges = { isMod, isSub, isVip, vip: isVip, broadcaster: isBroadcaster, mod: isMod, subscriber: isSub, sub: isSub };
+
                 const firstWord = trimmed.split(' ')[0].toLowerCase();
                 // Ignorar comandos de Song Request u otros
                 if (firstWord === '!sr' || firstWord === '!song' || firstWord === '!cancion' || firstWord === '!queue' || firstWord === '!cola' || firstWord === '!skip' || firstWord === '!saltar' || firstWord === '!parar' || firstWord === '!stop' || firstWord === '!srpausa' || firstWord === '!srplay') {
                   return;
                 }
 
+                // Función local para verificar permisos de un comando TTS
+                function hasKickTtsPermission(cmdObj) {
+                  if (!cmdObj || cmdObj.enabled === false) return false;
+                  const perms = Array.isArray(cmdObj.permissions) && cmdObj.permissions.length ? cmdObj.permissions : ['todos'];
+                  if (perms.includes('todos') || perms.includes('all')) return true;
+                  if (perms.includes('mod') && (isMod || isBroadcaster)) return true;
+                  if (perms.includes('broadcaster') && isBroadcaster) return true;
+                  if (perms.includes('vip') && (isVip || isMod)) return true;
+                  if (perms.includes('sub') && (isSub || isMod)) return true;
+                  return false;
+                }
+
                 let matchedVoice = null;
+                let allowedByPermission = true;
+
                 if (firstWord.startsWith('!')) {
                   const cmdToken = firstWord.slice(1);
-                  if (cmdToken === 'tts') {
+
+                  // 1. Buscar en comandos configurados por el streamer (con permisos)
+                  const fullCmd = TTS_COMMANDS_MAP[firstWord] || TTS_COMMANDS_MAP[cmdToken];
+                  if (fullCmd) {
+                    allowedByPermission = hasKickTtsPermission(fullCmd);
+                    if (allowedByPermission) {
+                      matchedVoice = fullCmd.voiceId || TTS_ALIAS_MAP[cmdToken];
+                    } else {
+                      console.log(`[TTS Overlay] @${username} no tiene permiso para el comando '${firstWord}' (permisos: ${JSON.stringify(fullCmd.permissions)})`);
+                      return;
+                    }
+                  } else if (cmdToken === 'tts') {
+                    // Comando genérico !tts — permitido a todos por defecto
                     matchedVoice = 'es_mx_mia';
                   } else if (TTS_ALIAS_MAP[cmdToken]) {
                     matchedVoice = TTS_ALIAS_MAP[cmdToken];
@@ -999,16 +1046,17 @@
                   }
                 }
 
-                if (matchedVoice) {
+                if (matchedVoice && allowedByPermission) {
                   const voiceText = trimmed.slice(firstWord.length).trim();
                   if (voiceText) {
-                    console.log(`🎙️ [TTS Overlay] Comando Kick recibido de @${username} (@${clean}): '${firstWord} ${voiceText}'`);
+                    console.log(`🎙️ [TTS Overlay] Comando Kick recibido de @${username} (@${clean}): '${firstWord} ${voiceText}' [mod:${isMod} sub:${isSub} vip:${isVip}]`);
                     const audioUrl = `/api/tts/audio?text=${encodeURIComponent(voiceText)}&voice=${encodeURIComponent(matchedVoice)}`;
                     const ttsData = {
                       id: 'tts_kick_' + (msgData.id || (Date.now() + '_' + Math.random().toString(36).substring(2, 7))),
                       user: username,
                       text: voiceText,
                       voice: matchedVoice,
+                      engine: fishAudioKeys.includes(matchedVoice) ? 'fish_audio' : 'audio_stream',
                       audioUrl: audioUrl,
                       channel: myStreamerKey || clean,
                       room: myStreamerKey || clean,

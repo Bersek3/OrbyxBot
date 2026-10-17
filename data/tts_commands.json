@@ -1,5 +1,70 @@
 [
   {
+    "id": "tts_cmd_1792119904253_b2uj",
+    "voiceId": "es_tiktok",
+    "name": "Voz TikTok",
+    "command": "!tiktok",
+    "permissions": [
+      "todos"
+    ],
+    "enabled": true,
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1
+  },
+  {
+    "id": "tts_cmd_1792119903778_7p9r",
+    "voiceId": "es_ar_messi",
+    "name": "Lionel Messi",
+    "command": "!messi",
+    "permissions": [
+      "todos"
+    ],
+    "enabled": true,
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1
+  },
+  {
+    "id": "tts_cmd_1792119902748_ifwz",
+    "voiceId": "es_ve_maduro",
+    "name": "Nicolás Maduro",
+    "command": "!maduro",
+    "permissions": [
+      "todos"
+    ],
+    "enabled": true,
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1
+  },
+  {
+    "id": "tts_cmd_1792119905614_l9hl",
+    "voiceId": "es_badbunny",
+    "name": "Bad Bunny",
+    "command": "!badbunny",
+    "permissions": [
+      "todos"
+    ],
+    "enabled": true,
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1
+  },
+  {
+    "id": "tts_cmd_1792119488897_0ky5",
+    "voiceId": "en_brian",
+    "name": "Brian (English UK Classic)",
+    "command": "!brian",
+    "permissions": [
+      "todos"
+    ],
+    "enabled": true,
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1
+  },
+  {
     "id": "tts_cmd_1790580393253_fgwc",
     "voiceId": "es_elrich",
     "name": "ElRichMC",
@@ -104,7 +169,7 @@
     "pitch": 0.85
   },
   {
-    "id": "tts_cmd_dross",
+    "id": "tts_cmd_1792119904903_otz8",
     "voiceId": "es_dross",
     "name": "Dross Rotzank",
     "command": "!dross",
@@ -113,8 +178,8 @@
     ],
     "enabled": true,
     "volume": 90,
-    "rate": 0.95,
-    "pitch": 0.7
+    "rate": 1,
+    "pitch": 1
   },
   {
     "id": "tts_cmd_rubius",

@@ -1,32 +1,125 @@
 {
-  "tts": {
-    "rate": 1,
-    "pitch": 0.8,
-    "voice": "es_tiktok",
-    "volume": 90,
-    "enabled": true,
-    "minBits": 50,
-    "maxLength": 10000,
-    "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI",
-    "bannedWords": [],
-    "chatCommand": "!tts",
-    "allowChatCommand": true
+  "security": {
+    "widgetToken": "sec_1405777fa9222aedbf12fd1139e30421"
   },
   "twitch": {
-    "userId": "226055830",
     "channel": "bersek___",
-    "clientId": "yw1vr664ichms8an2x5lhji58v7ozk",
-    "connected": true,
-    "oauthToken": "jutbd9jjk91qw965w4scfpx5a7ondj",
     "botUsername": "orbyxbot",
+    "oauthToken": "jutbd9jjk91qw965w4scfpx5a7ondj",
+    "clientId": "yw1vr664ichms8an2x5lhji58v7ozk",
+    "connected": false,
+    "userId": "226055830",
     "displayName": "Bersek___",
     "profileImage": "https://static-cdn.jtvnw.net/jtv_user_pictures/92a6561b-8e64-4f5f-a5fe-af7782347288-profile_image-300x300.jpeg"
+  },
+  "kick": {
+    "channel": "bersek3",
+    "username": "Bersek3",
+    "profile_picture": "https://files.kick.com/images/user/38301864/profile_image/conversion/b7e45631-9b6d-4939-aad0-d574e07423de-medium.webp",
+    "userId": "37228008",
+    "accessToken": "NDK5ZTA4ZGMTYJCWNY0ZYJGYLWEYM2YTNTEZM2Q4MDNJZJYZ",
+    "refreshToken": "NJI1ODK4ZJETYTHKZS01OWJJLWJJMGETMDMXYZBHMGUZY2I5",
+    "clientId": "01M0VT0JC58YQEVGRHM8JFXQX3",
+    "connected": true,
+    "chatroomId": 36939677
+  },
+  "chatPlatforms": {
+    "twitch": true,
+    "kick": true
   },
   "songRequest": {
     "prefix": "!sr",
     "enabled": true,
-    "userLevel": "all",
+    "maxDurationMinutes": 10,
     "maxPerUser": 5,
-    "maxDurationMinutes": 10
-  }
+    "userLevel": "all",
+    "volume": 75,
+    "autoplay": true
+  },
+  "tts": {
+    "enabled": true,
+    "engine": "streamelements",
+    "voice": "es_tiktok",
+    "volume": 90,
+    "rate": 1,
+    "pitch": 0.8,
+    "minBits": 50,
+    "allowChatCommand": true,
+    "chatCommand": "!tts",
+    "bannedWords": [],
+    "maxLength": 10000,
+    "channelPointsRewardName": "TTS",
+    "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI"
+  },
+  "roulette": {
+    "enabled": true,
+    "rewardName": "Girar Ruleta",
+    "rewardId": "",
+    "duration": 7,
+    "theme": "neon",
+    "soundEnabled": true,
+    "bannerDuration": 6,
+    "chatAnnouncement": true,
+    "chatMessageTemplate": "🎉 ¡@{user} giró la ruleta y ha ganado: {prize}! 🎡",
+    "prizes": [
+      {
+        "id": "p1",
+        "text": "VIP 1 Semana 👑",
+        "color": "#9146ff",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p2",
+        "text": "Cantar Canción 🎤",
+        "color": "#00f2fe",
+        "textColor": "#000000",
+        "weight": 1
+      },
+      {
+        "id": "p3",
+        "text": "Timeout 5 Min ⏳",
+        "color": "#ff3366",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p4",
+        "text": "1,000 Puntos ⭐",
+        "color": "#facc15",
+        "textColor": "#000000",
+        "weight": 1
+      },
+      {
+        "id": "p5",
+        "text": "Meme en Pantalla 🎭",
+        "color": "#10b981",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p6",
+        "text": "Ban a un Amigo 🔨",
+        "color": "#f97316",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p7",
+        "text": "Seguir en Redes 📱",
+        "color": "#8b5cf6",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p8",
+        "text": "Premio Misterioso 🎁",
+        "color": "#ec4899",
+        "textColor": "#ffffff",
+        "weight": 1
+      }
+    ]
+  },
+  "goals": [],
+  "widgetStyles": {}
 }

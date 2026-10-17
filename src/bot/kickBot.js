@@ -1,4 +1,5 @@
 const WebSocket = require('ws');
+const crypto = require('crypto');
 const storage = require('../services/storage');
 const ttsService = require('../services/ttsService');
 const songRequest = require('../services/songRequest');
@@ -140,61 +141,127 @@ class KickBot {
     this.chatroomId = kickCfg.chatroomId || await this.getChatroomId(channelName);
     const targetRoom = this.chatroomId || kickCfg.userId || channelName;
 
-    const pusherUrl = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false';
-
     try {
-      this.ws = new WebSocket(pusherUrl);
+      // 2. Obtener WebSocket URL y Token JWT de Centrifugo Kick
+      const clientId = crypto.randomUUID();
+      const kickHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+        'x-app-platform': 'web',
+        'Referer': `https://kick.com/${channelName}`,
+        'Origin': 'https://kick.com'
+      };
+
+      let wsUrl = 'wss://realtime.us-west-2.platform.kick.com/connection/websocket';
+      try {
+        const connRes = await fetch('https://web.kick.com/api/v1/realtime/connection', {
+          method: 'POST',
+          headers: kickHeaders,
+          body: JSON.stringify({
+            client: { id: clientId, type: 'web' },
+            capabilities: { accepted_providers: [{ provider: 'centrifugo' }] }
+          })
+        });
+        if (connRes.ok) {
+          const connData = await connRes.json();
+          const endpoint = connData.data?.connections?.[0]?.credentials?.url || connData.data?.endpoint;
+          if (endpoint) wsUrl = endpoint;
+        }
+      } catch (errConn) {
+        console.warn('[KickBot] Aviso al consultar connection endpoint:', errConn.message);
+      }
+
+      const authRes = await fetch('https://web.kick.com/api/v1/realtime/auth/connection', {
+        method: 'POST',
+        headers: kickHeaders,
+        body: JSON.stringify({ client_id: clientId })
+      });
+
+      if (!authRes.ok) {
+        throw new Error(`Kick realtime auth falló con status ${authRes.status}`);
+      }
+
+      const authData = await authRes.json();
+      const token = authData.data?.token;
+      if (!token) {
+        throw new Error('Kick no devolvió un token de conexión realtime válido');
+      }
+
+      console.log(`[KickBot] Token Centrifugo obtenido exitosamente. Conectando a ${wsUrl}...`);
+
+      this.ws = new WebSocket(wsUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+          'Origin': 'https://kick.com'
+        }
+      });
 
       this.ws.on('open', () => {
-        this.status = 'connected';
-        this.statusMessage = `Conectado al chat de Kick @${channelName}`;
-        this.isConnecting = false;
-        console.log(`🟢 [KickBot] Conectado exitosamente al chat de Kick @${channelName} (Room: ${targetRoom})`);
-        this.broadcast('bot_status', { status: this.status, message: this.statusMessage, channel: channelName, platform: 'kick' });
+        // Enviar frame connect con JWT token
+        this.ws.send(JSON.stringify({
+          connect: { token, name: 'js' },
+          id: 1
+        }));
 
-        // Suscribirse al canal del chatroom v2
-        const subPayload = JSON.stringify({
-          event: 'pusher:subscribe',
-          data: {
-            auth: '',
-            channel: `chatrooms.${targetRoom}.v2`
-          }
-        });
-        this.ws.send(subPayload);
-
-        // Suscribirse al canal de eventos del streamer (subs, gifts, follows, raids)
-        const channelSubPayload = JSON.stringify({
-          event: 'pusher:subscribe',
-          data: {
-            auth: '',
-            channel: `channel.${targetRoom}`
-          }
-        });
-        this.ws.send(channelSubPayload);
-
-        // Suscripción de compatibilidad para chatroom legacy
-        if (this.chatroomId && this.chatroomId !== targetRoom) {
-          try {
-            this.ws.send(JSON.stringify({
-              event: 'pusher:subscribe',
-              data: { auth: '', channel: `chatrooms.${this.chatroomId}.v2` }
-            }));
-          } catch(e) {}
-        }
-
-        // Keep-alive ping cada 20s
+        // Keep-alive ping Centrifugo cada 25s (frame vacío {})
         if (this.pingInterval) clearInterval(this.pingInterval);
         this.pingInterval = setInterval(() => {
           if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-            this.ws.send(JSON.stringify({ event: 'pusher:ping', data: {} }));
+            this.ws.send(JSON.stringify({}));
           }
-        }, 20000);
+        }, 25000);
       });
 
       this.ws.on('message', (rawData) => {
         try {
-          const packet = JSON.parse(rawData.toString());
-          this.handlePusherPacket(packet);
+          const text = rawData.toString();
+          if (text === '{}') {
+            // Pong keep-alive
+            return;
+          }
+          const packet = JSON.parse(text);
+
+          // Si el connect fue exitoso
+          if (packet.id === 1 && packet.connect) {
+            this.status = 'connected';
+            this.statusMessage = `Conectado al chat de Kick @${channelName}`;
+            this.isConnecting = false;
+            console.log(`🟢 [KickBot] Conectado exitosamente al chat de Kick @${channelName} (Room: ${targetRoom}) vía Centrifugo`);
+            this.broadcast('bot_status', { status: this.status, message: this.statusMessage, channel: channelName, platform: 'kick' });
+
+            // Suscribirse a canales de Kick en Centrifugo
+            let subId = 2;
+            this.ws.send(JSON.stringify({
+              subscribe: { channel: `chatrooms.${targetRoom}.v2`, flag: 1 },
+              id: subId++
+            }));
+            this.ws.send(JSON.stringify({
+              subscribe: { channel: `channel.${targetRoom}`, flag: 1 },
+              id: subId++
+            }));
+            if (this.chatroomId && String(this.chatroomId) !== String(targetRoom)) {
+              this.ws.send(JSON.stringify({
+                subscribe: { channel: `chatrooms.${this.chatroomId}.v2`, flag: 1 },
+                id: subId++
+              }));
+            }
+            return;
+          }
+
+          // Si viene un push de publicación (mensaje, evento, etc.)
+          if (packet.push && packet.push.pub) {
+            const pubData = packet.push.pub.data;
+            if (pubData) {
+              this.handlePusherPacket(pubData);
+            }
+            return;
+          }
+
+          // Compatibilidad si packet viene en formato directo
+          if (packet.event) {
+            this.handlePusherPacket(packet);
+          }
         } catch (err) {
           console.error('[KickBot] Error parsing packet:', err);
         }
@@ -506,7 +573,7 @@ class KickBot {
           if (matchedVoiceCmd && ttsService.hasPermission(matchedVoiceCmd, userBadges)) {
             const voiceText = trimmed.slice(matchedVoiceCmd.command.length).trim();
             if (voiceText) {
-              const targetChan = storage.getStreamerId() || this.currentChannel;
+              const targetChan = this.currentChannel;
               console.log(`[KickBot TTS] 🗣️ Comando de voz "${firstWord}" recibido de @${username} (Voz: ${matchedVoiceCmd.voiceId}, Canal: ${targetChan}): "${voiceText}"`);
               ttsService.processRequest({
                 user: username,
@@ -522,7 +589,7 @@ class KickBot {
           } else if (ttsConfig.allowChatCommand !== false && trimmed.toLowerCase().startsWith(ttsCmd)) {
             const ttsText = trimmed.slice(ttsCmd.length).trim();
             if (ttsText) {
-              const targetChan = storage.getStreamerId() || this.currentChannel;
+              const targetChan = this.currentChannel;
               console.log(`[KickBot TTS] 🗣️ Comando TTS genérico "${ttsCmd}" de @${username} (Canal: ${targetChan}): "${ttsText}"`);
               ttsService.processRequest({
                 user: username,

@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head><title>Test Pusher</title></head>
+<body>
+<pre id="log"></pre>
+<script>
+  const logEl = document.getElementById('log');
+  function log(msg) {
+    logEl.innerText += msg + '\n';
+    console.log(msg);
+  }
+
+  const url = 'wss://ws-us2.pusher.com/app/32cbd69e4b950bf97679?protocol=7&client=js&version=8.4.0-rc2&flash=false';
+  log('Connecting to: ' + url);
+  try {
+    const ws = new WebSocket(url);
+    ws.onopen = () => {
+      log('OPEN!');
+      ws.send(JSON.stringify({
+        event: 'pusher:subscribe',
+        data: { auth: '', channel: 'chatrooms.36939677.v2' }
+      }));
+    };
+    ws.onmessage = (e) => {
+      log('MSG: ' + e.data);
+    };
+    ws.onerror = (e) => {
+      log('ERROR');
+    };
+    ws.onclose = (e) => {
+      log('CLOSE: ' + e.code + ' ' + e.reason);
+    };
+  } catch(err) {
+    log('EXC: ' + err.message);
+  }
+</script>
+</body>
+</html>

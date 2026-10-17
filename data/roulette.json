@@ -1,1 +1,62 @@
-null
+{
+  "enabled": true,
+  "rewardName": "Girar Ruleta",
+  "rewardId": "39136a83-2b3d-48c9-8e16-32e01de9d454",
+  "duration": 7,
+  "theme": "neon",
+  "soundEnabled": true,
+  "bannerDuration": 10,
+  "chatAnnouncement": true,
+  "chatMessageTemplate": "🎉 ¡@{user} giró la ruleta y ha ganado: {prize}! 🎡",
+  "prizes": [
+    {
+      "id": "p1",
+      "text": "VIP 1 Semana 👑",
+      "color": "#9146ff",
+      "weight": 1,
+      "textColor": "#ffffff"
+    },
+    {
+      "id": "p2",
+      "text": "Cantar Canción 🎤",
+      "color": "#00f2fe",
+      "weight": 1,
+      "textColor": "#000000"
+    },
+    {
+      "id": "p3",
+      "text": "Timeout 5 Min ⏳",
+      "color": "#ff3366",
+      "weight": 1,
+      "textColor": "#ffffff"
+    },
+    {
+      "id": "p4",
+      "text": "1,000 Puntos ⭐",
+      "color": "#facc15",
+      "weight": 1,
+      "textColor": "#000000"
+    },
+    {
+      "id": "p5",
+      "text": "Meme en Pantalla 🎭",
+      "color": "#10b981",
+      "weight": 1,
+      "textColor": "#ffffff"
+    },
+    {
+      "id": "p6",
+      "text": "Ban a un Amigo 🔨",
+      "color": "#f97316",
+      "weight": 1,
+      "textColor": "#ffffff"
+    },
+    {
+      "id": "p7",
+      "text": "Seguir en Redes 📱",
+      "color": "#8b5cf6",
+      "weight": 1,
+      "textColor": "#ffffff"
+    }
+  ]
+}
