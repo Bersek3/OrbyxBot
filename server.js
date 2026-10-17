@@ -915,24 +915,31 @@ app.post('/api/kick/chatroom/:channel', (req, res) => {
     if (chatroomId) {
       console.log(`[Server] ChatroomId recibido del cliente para @${channel}: ${chatroomId}`);
       kickBot.chatroomId = chatroomId;
-      
-      // Solo guardar en config local si coincide con el streamer o canal de Kick configurado
+
+      // Solo actualizar config si Kick está habilitado (connected !== false).
+      // Si el usuario desvinculó Kick, NO forzar connected:true ni reconectar.
       const currentStreamer = (storage.getStreamerId() || '').toLowerCase();
       const cfg = storage.getConfig();
       const kickConfigChan = (cfg.kick?.channel || cfg.kick?.username || '').toLowerCase();
-      if (channel === currentStreamer || channel === kickConfigChan || !currentStreamer || currentStreamer === 'default') {
-        storage.saveConfig({ kick: { channel, chatroomId, userId: channelId ? String(channelId) : undefined, connected: true } });
+      const kickIsDisconnected = cfg.kick?.connected === false;
+
+      if (!kickIsDisconnected && (channel === currentStreamer || channel === kickConfigChan || !currentStreamer || currentStreamer === 'default')) {
+        // Solo actualizar chatroomId/userId — nunca sobreescribir connected
+        storage.saveConfig({ kick: { chatroomId, userId: channelId ? String(channelId) : undefined } });
       }
 
-      if (kickBot.ws && kickBot.ws.readyState === 1) {
-        try {
-          kickBot.ws.send(JSON.stringify({
-            event: 'pusher:subscribe',
-            data: { auth: '', channel: `chatrooms.${chatroomId}.v2` }
-          }));
-        } catch(e) {}
-      } else {
-        kickBot.connect().catch(() => {});
+      // Solo conectar/suscribir si Kick está habilitado y no fue desvinculado
+      if (!kickIsDisconnected && !kickBot.isExplicitDisconnect) {
+        if (kickBot.ws && kickBot.ws.readyState === 1) {
+          try {
+            kickBot.ws.send(JSON.stringify({
+              subscribe: { channel: `chatrooms.${chatroomId}.v2`, flag: 1 },
+              id: 99
+            }));
+          } catch(e) {}
+        } else {
+          kickBot.connect().catch(() => {});
+        }
       }
     }
     res.json({ success: true, channel, chatroomId });
