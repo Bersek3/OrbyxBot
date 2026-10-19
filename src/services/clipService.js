@@ -44,7 +44,8 @@ class ClipService {
       }
 
       // Si no tenemos broadcasterId para este canal específico, lo resolvemos con el login del canal
-      if (!broadcasterId && clientId && token) {
+      if (clientId && token) {
+        broadcasterId = null;
         try {
           const userRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(channelName)}`, {
             headers: {
@@ -245,12 +246,12 @@ class ClipService {
     const config = storage.getConfig();
 
     // Determinar canales exactos de la sesión solicitada
-    const twitchChannel = (options.twitchChannel !== undefined ? options.twitchChannel : (config.twitch?.channel || '')).toLowerCase().replace(/^#/, '').trim();
-    const kickChannel = (options.kickChannel !== undefined ? options.kickChannel : (config.kick?.channel || config.kick?.username || '')).toLowerCase().replace(/^@/, '').trim();
+    const twitchChannel = (options.twitchChannel || '').toLowerCase().replace(/^#/, '').trim();
+    const kickChannel = (options.kickChannel || '').toLowerCase().replace(/^@/, '').trim();
     const streamerId = (options.streamerId || twitchChannel || kickChannel || '').toLowerCase().trim();
 
     // Si la sesión no tiene ningún canal vinculado, no retornar clips de otro streamer
-    if (!twitchChannel && !kickChannel && !streamerId) {
+    if (!twitchChannel && !kickChannel) {
       return {
         success: true,
         channel: { twitch: '', kick: '' },

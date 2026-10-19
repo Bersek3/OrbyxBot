@@ -12733,6 +12733,7 @@ function loadAdminStreamersList(force) {
 
 // ================= 🎬 SISTEMA DE CLIPS DEL CANAL Y CHAT =================
 
+let clipLoadRequestId = 0;
 let clipsData = [];
 let allClipsStore = {
   all: [],
@@ -12814,10 +12815,6 @@ function getSessionClipChannels() {
     }
   } catch (e) {}
 
-  if (!tw && appConfig?.twitch?.channel && (appConfig?.twitch?.connected || appConfig?.twitch?.botUsername || localStorage.getItem('orbibot_twitch_auth'))) {
-    tw = (appConfig.twitch.channel || '').toLowerCase().replace(/^#/, '').trim();
-  }
-
   // 3. Canal de Kick explícito
   try {
     const kickAuth = localStorage.getItem('orbibot_kick_auth');
@@ -12827,18 +12824,9 @@ function getSessionClipChannels() {
     }
   } catch (e) {}
 
-  if (!kick) {
-    const storedKick = localStorage.getItem('orbibot_kick_channel');
-    if (storedKick) {
-      kick = storedKick.toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
-    } else if (appConfig?.kick?.channel || appConfig?.kick?.username) {
-      kick = (appConfig?.kick?.channel || appConfig?.kick?.username || '').toLowerCase().replace(/^@/, '').replace(/^#/, '').trim();
-    }
-  }
-
   // 4. Streamer ID
   if (typeof getActiveStreamerRoom === 'function') {
-    streamerId = getActiveStreamerRoom();
+    streamerId = tw || kick || '';
   }
 
   // Comprobar si el usuario es administrador sin canales propios configurados
@@ -12858,6 +12846,9 @@ async function loadClips(forceRefresh = false) {
   const syncBtn = document.getElementById('btnSyncChannelClips');
   const emptyState = document.getElementById('clipsEmptyState');
   const sessionChannels = getSessionClipChannels();
+  const requestId = ++clipLoadRequestId;
+  allClipsStore = { all: [], twitch: [], kick: [], chat: [], channel: {} };
+  renderClips([]);
 
   // Actualizar nombres de canal en la interfaz
   const twNameEl = document.getElementById('clipTwitchName');
@@ -12915,15 +12906,15 @@ async function loadClips(forceRefresh = false) {
   }
 
   try {
-    const cacheKey = `orbibot_clips_cache_${sessionChannels.twitch}_${sessionChannels.kick}_${sessionChannels.streamerId}`;
+    const cacheKey = `orbibot_clips_v2_cache_${sessionChannels.twitch}_${sessionChannels.kick}_${sessionChannels.streamerId}`;
     let data = null;
 
     // 1. Intentar consultar el servidor backend si está disponible
     try {
       const BASE = (typeof getApiBase === 'function') ? getApiBase() : (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' ? `http://${window.location.hostname}:3000` : '');
       const params = new URLSearchParams();
-      if (sessionChannels.twitch) params.set('twitch', sessionChannels.twitch);
-      if (sessionChannels.kick) params.set('kick', sessionChannels.kick);
+      params.set('twitch', sessionChannels.twitch);
+      params.set('kick', sessionChannels.kick);
       if (sessionChannels.streamerId) params.set('streamer', sessionChannels.streamerId);
       params.set('refresh', forceRefresh ? '1' : '0');
 
@@ -12953,7 +12944,7 @@ async function loadClips(forceRefresh = false) {
       if (sessionChannels.twitch) {
         try {
           const twitchChannel = sessionChannels.twitch;
-          let broadcasterId = appConfig?.twitch?.userId || '';
+          let broadcasterId = ''; // Resolve the requested login, never reuse another account's ID.
           let clientId = appConfig?.twitch?.clientId || 'yw1vr664ichms8an2x5lhji58v7ozk';
           let token = (appConfig?.twitch?.oauthToken || '').replace(/^oauth:/i, '').trim();
 
@@ -12973,7 +12964,7 @@ async function loadClips(forceRefresh = false) {
           // Buscar credenciales en Supabase para el streamer
           if ((!token || !broadcasterId) && supabaseClient) {
             try {
-              const targetScopes = [sessionChannels.streamerId, sessionChannels.twitch, 'plantasi'].filter(Boolean);
+              const targetScopes = [sessionChannels.streamerId, sessionChannels.twitch].filter(Boolean);
               const { data: supaAuth } = await supabaseClient
                 .from('orbibot_settings')
                 .select('value')
@@ -12990,7 +12981,8 @@ async function loadClips(forceRefresh = false) {
           }
 
           // Si falta broadcasterId pero tenemos token y clientId, resolver con Helix
-          if (!broadcasterId && clientId && token) {
+          if (clientId && token) {
+            broadcasterId = '';
             try {
               const uRes = await fetch(`https://api.twitch.tv/helix/users?login=${encodeURIComponent(twitchChannel)}`, {
                 headers: { 'Client-Id': clientId, 'Authorization': `Bearer ${token}` }
@@ -13112,6 +13104,7 @@ async function loadClips(forceRefresh = false) {
       };
     }
 
+    if (requestId !== clipLoadRequestId || JSON.stringify(sessionChannels) !== JSON.stringify(getSessionClipChannels())) return;
     if (data) {
       const sortDesc = (arr) => {
         return [...(arr || [])].sort((a, b) => getClipTimestamp(b) - getClipTimestamp(a));
@@ -13157,6 +13150,7 @@ async function loadClips(forceRefresh = false) {
       }
     }
   } catch (e) {
+    if (requestId !== clipLoadRequestId || JSON.stringify(sessionChannels) !== JSON.stringify(getSessionClipChannels())) return;
     console.warn('[Clips] Error al cargar clips:', e);
     // Fallback a caché local aislada por streamer
     try {
@@ -13707,19 +13701,10 @@ async function clearAllClips() {
 // Manejar eventos en tiempo real desde WebSocket con aislamiento por sesión
 function handleClipWsEvent(event, data) {
   const sessionChannels = getSessionClipChannels();
-  if (data && data.channel) {
-    const cleanDataChan = String(data.channel).toLowerCase().replace(/^[#@]/, '').trim();
-    const cleanTw = sessionChannels.twitch;
-    const cleanKick = sessionChannels.kick;
-    // Si el clip pertenece a otro canal/streamer distinto a esta sesión, ignorar para aislamiento
-    if (cleanTw && cleanDataChan !== cleanTw && cleanKick && cleanDataChan !== cleanKick && cleanDataChan !== sessionChannels.streamerId) {
-      return;
-    }
-    if (!cleanTw && !cleanKick && sessionChannels.isAdmin) {
-      // Admin sin canal vinculado: no mostrar clips de otros streamers
-      return;
-    }
-  }
+  if (!sessionChannels.isConfigured || !data) return;
+  const channel = String(data.channel || '').toLowerCase().replace(/^[#@]/, '').trim();
+  const linked = data.platform === 'twitch' ? [sessionChannels.twitch] : data.platform === 'kick' ? [sessionChannels.kick] : [sessionChannels.twitch, sessionChannels.kick];
+  if (!channel || !linked.filter(Boolean).includes(channel)) return;
 
   if (event === 'clip_added' && data) {
     allClipsStore.chat = [data, ...allClipsStore.chat.filter(c => c.id !== data.id)];
@@ -13795,7 +13780,7 @@ async function handleBrowserCreateLiveClip(channel, username) {
 
     if ((!token || !broadcasterId) && supabaseClient) {
       try {
-        const targetScopes = [streamerId, cleanChan, 'plantasi'].filter(Boolean);
+        const targetScopes = [streamerId, cleanChan].filter(Boolean);
         const { data: supaAuth } = await supabaseClient
           .from('orbibot_settings')
           .select('value')
