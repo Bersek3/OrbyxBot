@@ -3,3 +3,7 @@
 [id*="google" i], [class*="google" i], [onclick*="Google" i] { display: none !important; }
 option[value="twitch" i], option[value="google" i] { display: none; }
 .platform-link-card:has([id*="kick" i]) { grid-column: 1 / -1; }
+
+/* Applied synchronously by index.html after a successful Kick callback. */
+.kick-dashboard-forced #landingView { display: none !important; }
+.kick-dashboard-forced #dashboardAppView { display: flex !important; }
