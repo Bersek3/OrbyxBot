@@ -8,6 +8,9 @@
     document.title = 'OrbyxBot — Kick';
   };
   document.addEventListener('DOMContentLoaded', () => {
+    // Keep OAuth in this tab. A popup returning through 127.0.0.1 cannot
+    // share localStorage with a dashboard opened as localhost.
+    window.triggerKickOAuthLogin = () => window.location.assign('/api/auth/kick/login');
     const originalKickSuccess = window.handleKickAuthSuccess;
     if (typeof originalKickSuccess === 'function') {
       window.handleKickAuthSuccess = async (payload) => {
