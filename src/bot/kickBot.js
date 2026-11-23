@@ -48,6 +48,7 @@ class KickBot {
     this.reconnectTimeout = null;
     this.currentChannel = '';
     this.chatroomId = null;
+    this.channelId = null;
     this.commandCooldowns = new Map();
     this.isExplicitDisconnect = false;
     this.isConnecting = false;
@@ -113,9 +114,10 @@ class KickBot {
         const data = await res.json();
         const cid = data.chatroom?.id || data.id;
         if (cid) {
+          this.channelId = data.id || this.channelId;
           console.log(`[KickBot] Chatroom ID resuelto para @${clean}: ${cid}`);
           try {
-            storage.saveConfig({ kick: { chatroomId: cid, userId: data.user_id ? String(data.user_id) : undefined } });
+            storage.saveConfig({ kick: { chatroomId: cid, channelId: this.channelId, userId: data.user_id ? String(data.user_id) : undefined } });
           } catch(e) {}
           return cid;
         }
@@ -130,9 +132,10 @@ class KickBot {
         const data2 = await res2.json();
         const cid2 = data2.chatroom?.id || data2.id;
         if (cid2) {
+          this.channelId = data2.id || this.channelId;
           console.log(`[KickBot] Chatroom ID (v2) resuelto para @${clean}: ${cid2}`);
           try {
-            storage.saveConfig({ kick: { chatroomId: cid2 } });
+            storage.saveConfig({ kick: { chatroomId: cid2, channelId: this.channelId } });
           } catch(e) {}
           return cid2;
         }
@@ -171,7 +174,10 @@ class KickBot {
     this.broadcast('bot_status', { status: this.status, message: this.statusMessage, channel: channelName, platform: 'kick' });
 
     // 1. Resolver chatroom ID
-    this.chatroomId = kickCfg.chatroomId || await this.getChatroomId(channelName);
+    // Chatroom IDs can change and an old cached value subscribes successfully
+    // but receives no chat. Resolve it on every new socket connection.
+    this.channelId = kickCfg.channelId || null;
+    this.chatroomId = await this.getChatroomId(channelName) || kickCfg.chatroomId;
     const targetRoom = this.chatroomId || kickCfg.userId || channelName;
 
     try {
@@ -188,7 +194,10 @@ class KickBot {
 
       let wsUrl = 'wss://realtime.us-west-2.platform.kick.com/connection/websocket';
       try {
-        const connRes = await fetch('https://web.kick.com/api/v1/realtime/connection', {
+        const realtimePath = this.channelId
+          ? `https://web.kick.com/api/v1/realtime/channels/${this.channelId}/chat/connection`
+          : 'https://web.kick.com/api/v1/realtime/connection';
+        const connRes = await fetch(realtimePath, {
           method: 'POST',
           headers: kickHeaders,
           body: JSON.stringify({
@@ -280,7 +289,7 @@ class KickBot {
               id: subId++
             }));
             this.safeSend(JSON.stringify({
-              subscribe: { channel: `channel.${targetRoom}`, flag: 1 },
+              subscribe: { channel: `channel.${this.channelId || targetRoom}`, flag: 1 },
               id: subId++
             }));
             if (this.chatroomId && String(this.chatroomId) !== String(targetRoom)) {
