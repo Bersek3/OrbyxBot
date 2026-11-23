@@ -30,9 +30,14 @@
         const state = await response.json();
         const live = state.kickBot?.status === 'connected';
         const chatNotice = document.getElementById('chatStatusNotice');
+        const chatMessages = document.getElementById('liveChatMessages');
         if (statusText) statusText.textContent = live ? `Chat en vivo: @${channel}` : (channel ? 'Reconectando al chat…' : 'Inicia sesión con Kick');
         if (badge) { badge.textContent = live ? '● Conectado' : '● Conectando'; badge.style.color = live ? '#53fc18' : '#facc15'; }
         if (chatNotice) chatNotice.textContent = live ? `● En vivo en Kick @${channel}` : 'Conectando con el chat de Kick…';
+        // Only replace the initial marker. Actual messages are appended by the WebSocket handler.
+        if (live && channel && chatMessages?.querySelector('.chat-msg-row em')) {
+          chatMessages.innerHTML = `<div class="chat-msg-row" style="color: #53fc18;"><em>🟢 Conectado al chat de Kick @${channel}. Esperando mensajes...</em></div>`;
+        }
       } catch (_) {}
     };
     // Keep OAuth in this tab. A popup returning through 127.0.0.1 cannot
