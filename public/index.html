@@ -19,7 +19,9 @@
     // landing page while the rest of the dashboard initialises.
     (function () {
       const params = new URLSearchParams(window.location.search);
-      if (params.get('kick') !== 'connected') return;
+      let existingSession = null;
+      try { existingSession = JSON.parse(localStorage.getItem('orbibot_user_session') || 'null'); } catch (_) {}
+      if (params.get('kick') !== 'connected' && existingSession?.provider !== 'kick') return;
       try {
         const kick = JSON.parse(localStorage.getItem('orbibot_kick_auth') || '{}');
         const channel = (kick.channel || kick.username || '').toLowerCase();

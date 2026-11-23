@@ -715,6 +715,36 @@ app.get('/api/auth/kick/login', (req, res) => {
   res.redirect(authUrl);
 });
 
+// A same-origin completion bridge. It restores the browser session from the
+// Kick profile saved by the callback before opening the dashboard.
+app.get('/auth/kick/complete', (_req, res) => {
+  const kick = storage.getConfig()?.kick || {};
+  const channel = String(kick.channel || kick.username || '').toLowerCase().replace(/^@/, '').trim();
+  if (!channel) return res.redirect('/?kick=failed');
+  const publicKick = {
+    channel,
+    username: kick.username || channel,
+    profile_picture: kick.profile_picture || '',
+    userId: kick.userId || '',
+    connected: true
+  };
+  const session = {
+    id: `kick:${publicKick.userId || channel}`,
+    email: `kick:${channel}`,
+    username: publicKick.username,
+    avatar: publicKick.profile_picture,
+    provider: 'kick',
+    loggedInAt: Date.now()
+  };
+  const safe = (value) => JSON.stringify(value).replace(/</g, '\\u003c');
+  res.type('html').send(`<!doctype html><title>Abriendo dashboard…</title><script>
+    localStorage.setItem('orbibot_kick_auth', ${safe(publicKick)});
+    localStorage.setItem('orbibot_kick_channel', ${safe(channel)});
+    localStorage.setItem('orbibot_user_session', ${safe(session)});
+    location.replace('/#tab-dashboard');
+  </script>`);
+});
+
 // 2. Kick OAuth 2.0 Callback handler
 app.get('/api/auth/kick/callback', async (req, res) => {
   const { code, state, error, error_description } = req.query;
@@ -865,7 +895,7 @@ app.get('/api/auth/kick/callback', async (req, res) => {
             try { window.opener.focus(); } catch(e) {}
             setTimeout(() => window.close(), 600);
           } else {
-            window.location.replace('/?kick=connected');
+            window.location.replace('/auth/kick/complete');
           }
           if (typeof BroadcastChannel !== 'undefined') {
             new BroadcastChannel('orbibot_stream_channel').postMessage(payload);
