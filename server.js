@@ -760,7 +760,9 @@ app.get('/auth/kick/complete', (_req, res) => {
     localStorage.setItem('orbibot_kick_auth', ${safe(publicKick)});
     localStorage.setItem('orbibot_kick_channel', ${safe(channel)});
     localStorage.setItem('orbibot_user_session', ${safe(session)});
-    location.replace('/#tab-dashboard');
+    // The versioned URL prevents an old dashboard bundle from winning after
+    // Kick returns from OAuth in a browser that already had this app open.
+    location.replace('/?kick=connected&v=20261123.4#tab-dashboard');
   </script>`);
 });
 
