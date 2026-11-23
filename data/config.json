@@ -1,0 +1,125 @@
+{
+  "security": {
+    "widgetToken": "sec_98ab159c1f0e2a51ed71c56a2bf95fe7"
+  },
+  "twitch": {
+    "channel": "",
+    "botUsername": "",
+    "oauthToken": "",
+    "clientId": "yw1vr664ichms8an2x5lhji58v7ozk",
+    "connected": false
+  },
+  "kick": {
+    "channel": "",
+    "username": "",
+    "profile_picture": "",
+    "userId": "",
+    "accessToken": "",
+    "refreshToken": "",
+    "clientId": "01M0VT0JC58YQEVGRHM8JFXQX3",
+    "connected": false
+  },
+  "chatPlatforms": {
+    "twitch": true,
+    "kick": true
+  },
+  "songRequest": {
+    "prefix": "!sr",
+    "enabled": true,
+    "maxDurationMinutes": 8,
+    "maxPerUser": 5,
+    "userLevel": "all",
+    "volume": 75,
+    "autoplay": true
+  },
+  "tts": {
+    "enabled": true,
+    "engine": "streamelements",
+    "voice": "es_mx_mia",
+    "volume": 90,
+    "rate": 1,
+    "pitch": 1,
+    "minBits": 50,
+    "allowChatCommand": true,
+    "chatCommand": "!tts",
+    "bannedWords": [
+      "nazi",
+      "hitler",
+      "racismo",
+      "tonto"
+    ],
+    "maxLength": 250,
+    "channelPointsRewardName": "TTS",
+    "fishApiKey": "sk-fish-rOpXPwPZLXZAk5SPYaeSKBue6QfPM3l4i6Q3VG8ZbGI"
+  },
+  "roulette": {
+    "enabled": true,
+    "rewardName": "Girar Ruleta",
+    "rewardId": "",
+    "duration": 7,
+    "theme": "neon",
+    "soundEnabled": true,
+    "bannerDuration": 6,
+    "chatAnnouncement": true,
+    "chatMessageTemplate": "🎉 ¡@{user} giró la ruleta y ha ganado: {prize}! 🎡",
+    "prizes": [
+      {
+        "id": "p1",
+        "text": "VIP 1 Semana 👑",
+        "color": "#9146ff",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p2",
+        "text": "Cantar Canción 🎤",
+        "color": "#00f2fe",
+        "textColor": "#000000",
+        "weight": 1
+      },
+      {
+        "id": "p3",
+        "text": "Timeout 5 Min ⏳",
+        "color": "#ff3366",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p4",
+        "text": "1,000 Puntos ⭐",
+        "color": "#facc15",
+        "textColor": "#000000",
+        "weight": 1
+      },
+      {
+        "id": "p5",
+        "text": "Meme en Pantalla 🎭",
+        "color": "#10b981",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p6",
+        "text": "Ban a un Amigo 🔨",
+        "color": "#f97316",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p7",
+        "text": "Seguir en Redes 📱",
+        "color": "#8b5cf6",
+        "textColor": "#ffffff",
+        "weight": 1
+      },
+      {
+        "id": "p8",
+        "text": "Premio Misterioso 🎁",
+        "color": "#ec4899",
+        "textColor": "#ffffff",
+        "weight": 1
+      }
+    ]
+  },
+  "goals": []
+}

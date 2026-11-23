@@ -1,0 +1,5 @@
+/* Runtime policy for the full dashboard: Kick is the only supported platform. */
+[id*="twitch" i], [class*="twitch" i], [onclick*="Twitch" i],
+[id*="google" i], [class*="google" i], [onclick*="Google" i] { display: none !important; }
+option[value="twitch" i], option[value="google" i] { display: none; }
+.platform-link-card:has([id*="kick" i]) { grid-column: 1 / -1; }
