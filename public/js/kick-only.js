@@ -7,7 +7,7 @@
     });
     document.title = 'OrbyxBot — Kick';
   };
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
     const refreshKickPanel = async () => {
       const saved = localStorage.getItem('orbibot_kick_auth');
       let kick = null;
@@ -76,7 +76,21 @@
     const chatPlaceholder = document.querySelector('#liveChatMessages .chat-msg-row em');
     if (chatPlaceholder) chatPlaceholder.textContent = 'Inicia sesión con Kick para recibir mensajes en tiempo real.';
     document.querySelector('#authModal')?.remove();
-    const savedKick = localStorage.getItem('orbibot_kick_auth');
+    let savedKick = localStorage.getItem('orbibot_kick_auth');
+    // Kick can return OAuth through localhost even when the panel was opened
+    // on 127.0.0.1 (or vice versa). Recover the public channel profile from
+    // this local server so the dashboard is not sent back to the landing page.
+    if (!savedKick) {
+      try {
+        const response = await fetch('/api/auth/kick/session', { cache: 'no-store' });
+        const session = await response.json();
+        if (session.connected && session.kick?.channel) {
+          savedKick = JSON.stringify(session.kick);
+          localStorage.setItem('orbibot_kick_auth', savedKick);
+          localStorage.setItem('orbibot_kick_channel', session.kick.channel);
+        }
+      } catch (_) {}
+    }
     if (savedKick) {
       try {
         const kick = JSON.parse(savedKick);

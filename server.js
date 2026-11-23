@@ -668,6 +668,25 @@ app.post('/api/auth/twitch-token', async (req, res) => {
 // ================= KICK OAUTH 2.0 INTEGRATION =================
 const kickAuthStates = new Map();
 
+// The browser can return from Kick as localhost or 127.0.0.1. Those are
+// separate localStorage origins, so expose only the non-sensitive profile
+// needed to restore the dashboard session after a successful OAuth callback.
+app.get('/api/auth/kick/session', (_req, res) => {
+  const kick = storage.getConfig()?.kick || {};
+  const channel = String(kick.channel || kick.username || '').toLowerCase().replace(/^@/, '').trim();
+  if (!kick.connected || !channel) return res.json({ connected: false });
+  return res.json({
+    connected: true,
+    kick: {
+      channel,
+      username: kick.username || channel,
+      profile_picture: kick.profile_picture || '',
+      userId: kick.userId || '',
+      connected: true
+    }
+  });
+});
+
 function generateCodeVerifier() {
   return crypto.randomBytes(32).toString('base64url');
 }
