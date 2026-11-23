@@ -8,6 +8,33 @@
     document.title = 'OrbyxBot — Kick';
   };
   document.addEventListener('DOMContentLoaded', () => {
+    const refreshKickPanel = async () => {
+      const saved = localStorage.getItem('orbibot_kick_auth');
+      let kick = null;
+      try { kick = saved ? JSON.parse(saved) : null; } catch (_) {}
+      const channel = (kick?.channel || kick?.username || '').replace(/^@/, '');
+      const connectedView = document.getElementById('dashKickConnectedView');
+      const disconnectedView = document.getElementById('dashKickDisconnectedView');
+      const name = document.getElementById('dashKickChannelName');
+      const avatar = document.getElementById('dashKickAvatar');
+      const statusText = document.getElementById('dashKickStatusText');
+      const badge = document.getElementById('dashKickStatusBadge');
+      if (channel) {
+        if (connectedView) connectedView.style.display = 'flex';
+        if (disconnectedView) disconnectedView.style.display = 'none';
+        if (name) name.textContent = `@${channel}`;
+        if (avatar && kick?.profile_picture) { avatar.src = kick.profile_picture; avatar.style.display = 'block'; }
+      }
+      try {
+        const response = await fetch('/api/status');
+        const state = await response.json();
+        const live = state.kickBot?.status === 'connected';
+        const chatNotice = document.getElementById('chatStatusNotice');
+        if (statusText) statusText.textContent = live ? `Chat en vivo: @${channel}` : (channel ? 'Reconectando al chat…' : 'Inicia sesión con Kick');
+        if (badge) { badge.textContent = live ? '● Conectado' : '● Conectando'; badge.style.color = live ? '#53fc18' : '#facc15'; }
+        if (chatNotice) chatNotice.textContent = live ? `● En vivo en Kick @${channel}` : 'Conectando con el chat de Kick…';
+      } catch (_) {}
+    };
     // Keep OAuth in this tab. A popup returning through 127.0.0.1 cannot
     // share localStorage with a dashboard opened as localhost.
     window.triggerKickOAuthLogin = () => window.location.assign('/api/auth/kick/login');
@@ -39,6 +66,15 @@
     }
     const heroPlatform = document.querySelector('.hero-title-gradient');
     if (heroPlatform) heroPlatform.textContent = 'de Kick';
+    document.querySelector('.platform-linking-container h3 span:last-child')?.replaceChildren('Canal de Kick');
+    const linkingDescription = document.querySelector('.platform-linking-container p');
+    if (linkingDescription) linkingDescription.textContent = 'Tu cuenta de Kick controla el chat, alertas, TTS y widgets de OBS.';
+    const multiChatText = document.getElementById('multiChatText');
+    if (multiChatText) multiChatText.textContent = 'Chat de Kick activo';
+    const chatTitle = document.querySelector('#liveChatMessages')?.closest('.card')?.querySelector('.card-title');
+    if (chatTitle) chatTitle.textContent = '💬 Chat de Kick en vivo';
+    const chatPlaceholder = document.querySelector('#liveChatMessages .chat-msg-row em');
+    if (chatPlaceholder) chatPlaceholder.textContent = 'Inicia sesión con Kick para recibir mensajes en tiempo real.';
     document.querySelector('#authModal')?.remove();
     const savedKick = localStorage.getItem('orbibot_kick_auth');
     if (savedKick) {
@@ -59,6 +95,8 @@
       window.showDashboardView?.('tab-dashboard');
       window.switchTab?.('tab-dashboard');
     }
+    refreshKickPanel();
+    setInterval(refreshKickPanel, 8000);
     removeBlockedEntries();
     new MutationObserver(removeBlockedEntries).observe(document.body, { childList: true, subtree: true });
     window.signInWithGoogle = startKickLogin;
