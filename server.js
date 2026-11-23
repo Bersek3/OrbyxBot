@@ -859,11 +859,13 @@ app.get('/api/auth/kick/callback', async (req, res) => {
           if (window.opener) {
             try { window.opener.postMessage(payload, '*'); } catch(e) {}
             try { window.opener.focus(); } catch(e) {}
+            setTimeout(() => window.close(), 600);
+          } else {
+            window.location.replace('/?kick=connected');
           }
           if (typeof BroadcastChannel !== 'undefined') {
             new BroadcastChannel('orbibot_stream_channel').postMessage(payload);
           }
-          setTimeout(() => window.close(), 600);
         </script>
       </body>
       </html>

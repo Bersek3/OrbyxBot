@@ -8,6 +8,14 @@
     document.title = 'OrbyxBot — Kick';
   };
   document.addEventListener('DOMContentLoaded', () => {
+    const originalKickSuccess = window.handleKickAuthSuccess;
+    if (typeof originalKickSuccess === 'function') {
+      window.handleKickAuthSuccess = async (payload) => {
+        await originalKickSuccess(payload);
+        window.showDashboardView?.('tab-dashboard');
+        window.switchTab?.('tab-dashboard');
+      };
+    }
     const startKickLogin = () => {
       if (typeof window.triggerKickOAuthLogin === 'function') {
         window.triggerKickOAuthLogin();
@@ -29,6 +37,10 @@
     const heroPlatform = document.querySelector('.hero-title-gradient');
     if (heroPlatform) heroPlatform.textContent = 'de Kick';
     document.querySelector('#authModal')?.remove();
+    if (localStorage.getItem('orbibot_kick_auth')) {
+      window.showDashboardView?.('tab-dashboard');
+      window.switchTab?.('tab-dashboard');
+    }
     removeBlockedEntries();
     new MutationObserver(removeBlockedEntries).observe(document.body, { childList: true, subtree: true });
     window.signInWithGoogle = startKickLogin;
