@@ -40,7 +40,22 @@
     const heroPlatform = document.querySelector('.hero-title-gradient');
     if (heroPlatform) heroPlatform.textContent = 'de Kick';
     document.querySelector('#authModal')?.remove();
-    if (localStorage.getItem('orbibot_kick_auth')) {
+    const savedKick = localStorage.getItem('orbibot_kick_auth');
+    if (savedKick) {
+      try {
+        const kick = JSON.parse(savedKick);
+        const channel = (kick.channel || kick.username || '').toLowerCase();
+        if (channel && !localStorage.getItem('orbibot_user_session')) {
+          window.setUserSession?.({
+            id: `kick:${kick.userId || channel}`,
+            email: `kick:${channel}`,
+            username: kick.username || channel,
+            avatar: kick.profile_picture || '',
+            provider: 'kick',
+            loggedInAt: Date.now()
+          });
+        }
+      } catch (_) {}
       window.showDashboardView?.('tab-dashboard');
       window.switchTab?.('tab-dashboard');
     }

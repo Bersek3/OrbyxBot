@@ -1436,6 +1436,17 @@ async function handleKickAuthSuccess(payload) {
 
   localStorage.setItem('orbibot_kick_auth', JSON.stringify(appConfig.kick));
   localStorage.setItem('orbibot_kick_channel', channel);
+  // Kick is the only identity provider in this build. The dashboard's
+  // access guard expects a local session, so establish one from the
+  // authenticated Kick profile rather than requiring a separate email login.
+  setUserSession({
+    id: `kick:${kick.userId || channel}`,
+    email: `kick:${channel}`,
+    username: displayName || channel,
+    avatar: profilePicture,
+    provider: 'kick',
+    loggedInAt: Date.now()
+  });
 
   // Sincronizar en la nube con Supabase
   if (typeof saveToAllSupabaseScopes === 'function') {
