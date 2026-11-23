@@ -240,8 +240,10 @@ class KickBot {
           'Origin': 'https://kick.com'
         }
       });
+      const socket = this.ws;
 
-      this.ws.on('open', () => {
+      socket.on('open', () => {
+        if (this.ws !== socket) return;
         // Helper to safely send data only when WebSocket is open
         this.safeSend = (data) => {
           if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -263,7 +265,8 @@ class KickBot {
         }, 25000);
       });
 
-      this.ws.on('message', (rawData) => {
+      socket.on('message', (rawData) => {
+        if (this.ws !== socket) return;
         try {
           const text = rawData.toString();
           if (text === '{}') {
@@ -322,7 +325,9 @@ class KickBot {
         }
       });
 
-      this.ws.on('error', (err) => {
+      socket.on('error', (err) => {
+        // A replaced socket can still emit an error while its replacement is healthy.
+        if (this.ws !== socket) return;
         console.warn('[KickBot] WebSocket error:', err.message);
         this.status = 'error';
         this.statusMessage = err.message;
@@ -330,7 +335,10 @@ class KickBot {
         this.broadcast('bot_status', { status: this.status, message: this.statusMessage, channel: channelName, platform: 'kick' });
       });
 
-      this.ws.on('close', (code, reason) => {
+      socket.on('close', (code, reason) => {
+        // Ignore the close event of a socket deliberately replaced by connect().
+        // Otherwise it schedules a delayed reconnect that tears down the new socket.
+        if (this.ws !== socket) return;
         console.log(`🟡 [KickBot] Desconectado (${code}): ${reason || 'Cierre de conexión'}`);
         this.isConnecting = false;
         if (!this.isExplicitDisconnect) {
