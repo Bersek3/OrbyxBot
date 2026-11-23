@@ -1084,6 +1084,15 @@ async function handleAuthLoginSubmit(event) {
 
 // Handle Logout
 async function handleAuthLogout() {
+  const session = getUserSession();
+  const isKickSession = session?.provider === 'kick' || Boolean(localStorage.getItem('orbibot_kick_auth'));
+
+  // Kick sessions are restored from the local server after OAuth. Clearing
+  // only localStorage immediately signs the user back in, so disconnect the
+  // server-side Kick integration first.
+  if (isKickSession) {
+    await disconnectKickAccount();
+  }
   if (supabaseClient) {
     try {
       await supabaseClient.auth.signOut();
