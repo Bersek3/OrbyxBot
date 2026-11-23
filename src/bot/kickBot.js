@@ -5,6 +5,39 @@ const ttsService = require('../services/ttsService');
 const songRequest = require('../services/songRequest');
 const clipService = require('../services/clipService');
 
+// Centrifugo may concatenate several JSON commands in one WebSocket message
+// (for example a ping followed by a publication). JSON.parse only accepts one
+// value, so split complete top-level JSON objects without breaking strings.
+function parseCentrifugoFrames(raw) {
+  const text = String(raw || '').trim();
+  if (!text) return [];
+  try { return [JSON.parse(text)]; } catch (_) {}
+
+  const frames = [];
+  let start = -1, depth = 0, quote = false, escaped = false;
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') quote = false;
+      continue;
+    }
+    if (ch === '"') { quote = true; continue; }
+    if (ch === '{' || ch === '[') {
+      if (depth === 0) start = i;
+      depth += 1;
+    } else if ((ch === '}' || ch === ']') && depth > 0) {
+      depth -= 1;
+      if (depth === 0 && start >= 0) {
+        try { frames.push(JSON.parse(text.slice(start, i + 1))); } catch (_) {}
+        start = -1;
+      }
+    }
+  }
+  return frames;
+}
+
 class KickBot {
   constructor() {
     this.ws = null;
@@ -226,26 +259,12 @@ class KickBot {
             // Pong keep-alive
             return;
           }
-          // Attempt robust JSON parsing
-          let packet;
-          try {
-            packet = JSON.parse(text);
-          } catch (parseErr) {
-            // Try to extract a JSON substring if extra characters are present
-            const jsonMatch = text.match(/\{.*\}/s);
-            if (jsonMatch) {
-              try {
-                packet = JSON.parse(jsonMatch[0]);
-              } catch (_) {
-                console.error('[KickBot] Unable to parse packet after fallback:', parseErr);
-                return;
-              }
-            } else {
-              console.error('[KickBot] Error parsing packet:', parseErr);
-              return;
-            }
+          const packets = parseCentrifugoFrames(text);
+          if (!packets.length) {
+            console.error('[KickBot] No pude interpretar un paquete de Centrifugo.');
+            return;
           }
-
+          for (const packet of packets) {
           // Si el connect fue exitoso
           if (packet.id === 1 && packet.connect) {
             this.status = 'connected';
@@ -270,7 +289,7 @@ class KickBot {
                 id: subId++
               }));
             }
-            return;
+            continue;
           }
 
           // Si viene un push de publicación (mensaje, evento, etc.)
@@ -279,12 +298,13 @@ class KickBot {
             if (pubData) {
               this.handlePusherPacket(pubData);
             }
-            return;
+            continue;
           }
 
           // Compatibilidad si packet viene en formato directo
           if (packet.event) {
             this.handlePusherPacket(packet);
+          }
           }
         } catch (err) {
           console.error('[KickBot] Error parsing packet:', err);
