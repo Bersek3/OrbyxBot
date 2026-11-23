@@ -706,7 +706,11 @@ app.get('/api/auth/kick/login', (req, res) => {
   }
 
   const scopes = encodeURIComponent('user:read channel:read chat:write events:subscribe');
-  const authUrl = `https://id.kick.com/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopes}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
+  // Kick's OAuth frontend may rewrite the first 127.0.0.1 it sees to
+  // localhost. This sacrificial parameter keeps the registered callback URI
+  // intact; see Kick's documented localhost development workaround.
+  const localRedirectWorkaround = redirectUri.includes('127.0.0.1') ? '&redirect=127.0.0.1' : '';
+  const authUrl = `https://id.kick.com/oauth/authorize?client_id=${clientId}${localRedirectWorkaround}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${scopes}&state=${state}&code_challenge=${codeChallenge}&code_challenge_method=S256`;
 
   res.redirect(authUrl);
 });
