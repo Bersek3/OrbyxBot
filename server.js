@@ -678,14 +678,18 @@ function generateCodeChallenge(verifier) {
 
 // 1. Initiate Kick OAuth 2.0 flow
 app.get('/api/auth/kick/login', (req, res) => {
-  const clientId = process.env.KICK_CLIENT_ID || '01M0VT0JC58YQEVGRHM8JFXQX3';
+  const clientId = process.env.KICK_CLIENT_ID;
+  const clientSecret = process.env.KICK_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return res.status(503).send('Configura KICK_CLIENT_ID y KICK_CLIENT_SECRET en .env antes de iniciar sesión con Kick.');
+  }
   const state = crypto.randomBytes(16).toString('hex');
   const codeVerifier = generateCodeVerifier();
   const codeChallenge = generateCodeChallenge(codeVerifier);
 
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const host = req.headers['x-forwarded-host'] || req.get('host');
-  const redirectUri = `${protocol}://${host}/api/auth/kick/callback`;
+  const redirectUri = process.env.KICK_REDIRECT_URI || `${protocol}://${host}/api/auth/kick/callback`;
 
   // Store in memory (expires in 10 mins)
   kickAuthStates.set(state, {
@@ -743,12 +747,15 @@ app.get('/api/auth/kick/callback', async (req, res) => {
   }
 
   const stateData = kickAuthStates.get(state);
-  const clientId = process.env.KICK_CLIENT_ID || '01M0VT0JC58YQEVGRHM8JFXQX3';
-  const clientSecret = process.env.KICK_CLIENT_SECRET || 'ee10e46fccf83a105e86834973db23cabcad279f33acf48bd4f6b5749884bb20';
+  const clientId = process.env.KICK_CLIENT_ID;
+  const clientSecret = process.env.KICK_CLIENT_SECRET;
+  if (!clientId || !clientSecret) {
+    return res.status(503).send('Faltan las credenciales OAuth de Kick en .env.');
+  }
 
   const protocol = req.headers['x-forwarded-proto'] || req.protocol;
   const host = req.headers['x-forwarded-host'] || req.get('host');
-  const redirectUri = stateData?.redirectUri || `${protocol}://${host}/api/auth/kick/callback`;
+  const redirectUri = stateData?.redirectUri || process.env.KICK_REDIRECT_URI || `${protocol}://${host}/api/auth/kick/callback`;
 
   try {
     // Exchange Code for Access Token
