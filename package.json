@@ -1,32 +1,22 @@
 {
-  "name": "orbyxbot",
+  "name": "orbyxbot-kick-only",
   "version": "1.0.0",
-  "description": "OrbyxBot - Streamer Bot Suite & OBS Overlays for Kick and Twitch",
-  "main": "server.js",
+  "description": "Panel local exclusivo para el chat de Kick.",
+  "main": "kick-server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "db:setup": "node database/mongo_schema_setup.js",
-    "db:health": "node scripts/maintain_databases.js"
+    "start": "node kick-server.js",
+    "dev": "node --watch kick-server.js"
   },
   "engines": {
-    "node": "20.x"
+    "node": ">=20"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
-    "@supabase/supabase-js": "^2.115.0",
-    "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "mongodb": "^7.6.0",
-    "tmi.js": "^1.8.5",
     "ws": "^8.21.3"
-  },
-  "devDependencies": {
-    "puppeteer-core": "^25.14.0",
-    "pusher-js": "^8.6.0"
   }
 }
